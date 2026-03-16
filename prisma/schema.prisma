@@ -1,13 +1,233 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ShareAccessLevel {
+  VIEW
+  EDIT
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum PetType {
+  TAMAGOTCHI
+}
+
+model User {
+  id              String    @id @default(cuid())
+  clerkId         String    @unique
+  email           String    @unique
+  fullName        String
+  age             Int?
+  joinedAt        DateTime  @default(now())
+  profilePhotoUrl String?
+  phoneNumber     String?
+  lastDayMissed   DateTime?
+
+  schoolId        String?
+  school          School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  // denormalized counters for fast reads
+  notesOwnedCount   Int @default(0)
+  foldersOwnedCount Int @default(0)
+
+  // ownership
+  notes           Note[]
+  folders         Folder[]
+  comments        Comment[]
+  pets            Pet[]
+
+  // interactions
+  noteLikes       NoteLike[]
+  noteShares      NoteShare[]
+  folderShares    FolderShare[]
+
+  // friendship self-relations
+  sentFriendships     Friendship[] @relation("FriendshipRequester")
+  receivedFriendships Friendship[] @relation("FriendshipAddressee")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId])
+  @@index([fullName])
+  @@index([createdAt])
+}
+
+model Note {
+  id            String    @id @default(cuid())
+  name          String
+  content       String    @db.Text
+
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  folderId      String?
+  folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  likeCount     Int       @default(0)
+  commentCount  Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  comments      Comment[]
+  likes         NoteLike[]
+  shares        NoteShare[]
+
+  @@index([ownerId, createdAt])
+  @@index([folderId])
+  @@index([deletedAt])
+  @@index([name])
+}
+
+model Folder {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?   @db.Text
+
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  notes         Note[]
+  shares        FolderShare[]
+
+  @@index([ownerId, createdAt])
+  @@index([deletedAt])
+  @@index([name])
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  noteId      String
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([authorId, createdAt])
+  @@index([noteId, createdAt])
+}
+
+model NoteLike {
+  userId      String
+  noteId      String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, noteId])
+  @@index([noteId])
+}
+
+model NoteShare {
+  noteId       String
+  userId       String
+  accessLevel  ShareAccessLevel
+  createdAt    DateTime @default(now())
+
+  note         Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, userId])
+  @@index([userId])
+}
+
+model FolderShare {
+  folderId     String
+  userId       String
+  accessLevel  ShareAccessLevel
+  createdAt    DateTime @default(now())
+
+  folder       Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([folderId, userId])
+  @@index([userId])
+}
+
+model Friendship {
+  requesterId  String
+  addresseeId  String
+  status       FriendshipStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  requester    User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee    User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@id([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model School {
+  id            String   @id @default(cuid())
+  name          String
+  location      String?
+  studentCount  Int?
+  noteRanking   Int?
+  primaryColor  String?
+  accentColor   String?
+
+  users         User[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name])
+  @@index([noteRanking])
+}
+
+model Pet {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  type          PetType
+  name          String
+  purchaseDate  DateTime?
+  happiness     Int      @default(0)
+
+  tamagotchi    TamagotchiPet?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerId, createdAt])
+}
+
+model TamagotchiPet {
+  petId                   String   @id
+  pet                     Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  modelName               String
+  purchaseThreshold       Int
+  startingHealth          Int
+  currentHealth           Int
+  healthUpgradeThreshold  Int?
+  healthUpgradeBump       Int?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }

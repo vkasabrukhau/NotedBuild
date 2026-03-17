@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
+import type { Editor as TiptapEditor } from "@tiptap/core"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
@@ -13,6 +15,7 @@ import { Highlight } from "@tiptap/extension-highlight"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import { Selection } from "@tiptap/extensions"
+import { CustomMathematics } from "@/components/tiptap-extension/custom-mathematics-extension"
 
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button"
@@ -74,6 +77,31 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
 import content from "@/components/tiptap-templates/simple/data/content.json"
+
+type MathEditorState = {
+  left: number
+  top: number
+  pos: number
+  latex: string
+}
+
+function sanitizeLatex(latex: string) {
+  return latex
+    .trim()
+    .replace(/^```(?:latex)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .replace(/^\$\$([\s\S]*)\$\$$/, "$1")
+    .replace(/^\$([\s\S]*)\$$/, "$1")
+    .replace(/^\\\(([\s\S]*)\\\)$/, "$1")
+    .replace(/^\\\[([\s\S]*)\\\]$/, "$1")
+    .trim()
+}
+
+function isMathNode(
+  node: ProseMirrorNode | null | undefined
+): node is ProseMirrorNode {
+  return node?.type.name === "inlineMath" || node?.type.name === "blockMath"
+}
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -189,7 +217,25 @@ export function SimpleEditor() {
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
     "main"
   )
+  const [mathEditor, setMathEditor] = useState<MathEditorState | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
+  const mathInputRef = useRef<HTMLInputElement | null>(null)
+  const editorRef = useRef<TiptapEditor | null>(null)
+
+  const openMathEditor = (pos: number, node: ProseMirrorNode) => {
+    const activeEditor = editorRef.current
+    if (!activeEditor) {
+      return
+    }
+
+    const coords = activeEditor.view.coordsAtPos(pos)
+    setMathEditor({
+      pos,
+      latex: node.attrs.latex ?? "",
+      left: coords.left,
+      top: coords.bottom + 8,
+    })
+  }
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -220,6 +266,12 @@ export function SimpleEditor() {
       Superscript,
       Subscript,
       Selection,
+      CustomMathematics.configure({
+        endpoint: "/api/math-latex",
+        katexOptions: {
+          throwOnError: false,
+        },
+      }),
       ImageUploadNode.configure({
         accept: "image/*",
         maxSize: MAX_FILE_SIZE,
@@ -237,10 +289,131 @@ export function SimpleEditor() {
   })
 
   useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) {
+      return
+    }
+
+    const handleMathClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      const wrapper = target?.closest(
+        "[data-type=\"inline-math\"], [data-type=\"block-math\"]"
+      ) as HTMLElement | null
+
+      if (!wrapper) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      let pos = -1
+
+      try {
+        pos = editor.view.posAtDOM(wrapper, 0)
+      } catch {
+        pos = -1
+      }
+
+      const candidatePositions = [pos, pos - 1, pos + 1].filter(
+        (value) => value >= 0
+      )
+
+      for (const candidatePos of candidatePositions) {
+        const node = editor.state.doc.nodeAt(candidatePos)
+        if (isMathNode(node)) {
+          openMathEditor(candidatePos, node)
+          return
+        }
+      }
+    }
+
+    const dom = editor.view.dom
+    dom.addEventListener("click", handleMathClick, true)
+
+    return () => {
+      dom.removeEventListener("click", handleMathClick, true)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    if (!mathEditor) {
+      return
+    }
+
+    mathInputRef.current?.focus()
+    mathInputRef.current?.setSelectionRange(
+      mathInputRef.current.value.length,
+      mathInputRef.current.value.length
+    )
+  }, [mathEditor])
+
+  useEffect(() => {
     if (!isMobile && mobileView !== "main") {
       setMobileView("main")
     }
   }, [isMobile, mobileView])
+
+  useEffect(() => {
+    if (!editor) {
+      return
+    }
+
+    const handleSelectionChange = () => {
+      setMathEditor((current) => {
+        if (!current) {
+          return current
+        }
+
+        const node = editor.state.doc.nodeAt(current.pos)
+        if (!isMathNode(node)) {
+          return null
+        }
+
+        return current
+      })
+    }
+    editor.on("selectionUpdate", handleSelectionChange)
+
+    return () => {
+      editor.off("selectionUpdate", handleSelectionChange)
+    }
+  }, [editor])
+
+  const closeMathEditor = () => {
+    setMathEditor(null)
+  }
+
+  const saveMathEditor = () => {
+    if (!editor || !mathEditor) {
+      return
+    }
+
+    const node = editor.state.doc.nodeAt(mathEditor.pos)
+    if (!isMathNode(node)) {
+      setMathEditor(null)
+      return
+    }
+
+    const latex = sanitizeLatex(mathEditor.latex)
+    const tr = editor.state.tr
+
+    if (!latex) {
+      tr.delete(mathEditor.pos, mathEditor.pos + node.nodeSize)
+    } else if (latex !== node.attrs.latex) {
+      tr.setNodeMarkup(mathEditor.pos, node.type, {
+        ...node.attrs,
+        latex,
+      })
+    }
+
+    editor.view.dispatch(tr)
+    editor.view.focus()
+    setMathEditor(null)
+  }
 
   return (
     <div className="simple-editor-wrapper">
@@ -274,6 +447,47 @@ export function SimpleEditor() {
           role="presentation"
           className="simple-editor-content"
         />
+        {mathEditor ? (
+          <div
+            className="tiptap-math-popover"
+            style={{
+              left: mathEditor.left,
+              top: mathEditor.top,
+              position: "fixed",
+            }}
+          >
+            <input
+              ref={mathInputRef}
+              value={mathEditor.latex}
+              onChange={(event) =>
+                setMathEditor((current) =>
+                  current
+                    ? {
+                        ...current,
+                        latex: event.target.value,
+                      }
+                    : current
+                )
+              }
+              onBlur={saveMathEditor}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  closeMathEditor()
+                  editor?.view.focus()
+                }
+
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  saveMathEditor()
+                }
+              }}
+              className="tiptap-math-editor-input"
+              aria-label="Edit LaTeX math"
+              spellCheck={false}
+            />
+          </div>
+        ) : null}
       </EditorContext.Provider>
     </div>
   )

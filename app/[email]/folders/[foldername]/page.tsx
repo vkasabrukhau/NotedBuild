@@ -57,9 +57,17 @@ export default async function FolderPage({
     notFound();
   }
 
+  const noteUsageCount = await prisma.note.count({
+    where: {
+      ownerId: folder.ownerId,
+      deletedAt: null,
+    },
+  });
+
   return (
     <RootHomeShell
       initialView="folder"
+      initialNoteUsageCount={noteUsageCount}
       initialFolder={{
         id: folder.id,
         name: folder.name,

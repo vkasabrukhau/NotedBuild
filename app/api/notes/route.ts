@@ -40,6 +40,49 @@ async function getOrCreateDbUser() {
   });
 }
 
+export async function GET() {
+  try {
+    const dbUser = await getOrCreateDbUser();
+
+    if (!dbUser) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const notes = await prisma.note.findMany({
+      where: {
+        ownerId: dbUser.id,
+        deletedAt: null,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        owner: {
+          select: {
+            email: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      notes: notes.map((note) => ({
+        id: note.id,
+        name: note.name,
+        content: note.content,
+        createdAt: note.createdAt.toISOString(),
+        ownerEmail: note.owner.email,
+        folderId: note.folderId,
+      })),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load notes.";
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const dbUser = await getOrCreateDbUser();
@@ -62,7 +105,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const note = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       if (body.noteId) {
         const existingNote = await tx.note.findFirst({
           where: {
@@ -91,7 +134,7 @@ export async function POST(request: Request) {
           throw new Error("A note with that title already exists.");
         }
 
-        return tx.note.update({
+        const note = await tx.note.update({
           where: {
             id: body.noteId,
           },
@@ -107,6 +150,15 @@ export async function POST(request: Request) {
             },
           },
         });
+
+        const noteUsageCount = await tx.note.count({
+          where: {
+            ownerId: dbUser.id,
+            deletedAt: null,
+          },
+        });
+
+        return { note, noteUsageCount };
       }
 
       const existingNote = await tx.note.findFirst({
@@ -125,7 +177,7 @@ export async function POST(request: Request) {
       });
 
       if (existingNote) {
-        return tx.note.update({
+        const note = await tx.note.update({
           where: {
             id: existingNote.id,
           },
@@ -140,6 +192,15 @@ export async function POST(request: Request) {
             },
           },
         });
+
+        const noteUsageCount = await tx.note.count({
+          where: {
+            ownerId: dbUser.id,
+            deletedAt: null,
+          },
+        });
+
+        return { note, noteUsageCount };
       }
 
       const createdNote = await tx.note.create({
@@ -170,16 +231,24 @@ export async function POST(request: Request) {
         },
       });
 
-      return createdNote;
+      const noteUsageCount = await tx.note.count({
+        where: {
+          ownerId: dbUser.id,
+          deletedAt: null,
+        },
+      });
+
+      return { note: createdNote, noteUsageCount };
     });
 
     return NextResponse.json({
       note: {
-        id: note.id,
-        name: note.name,
-        content: note.content,
-        ownerEmail: note.owner.email,
+        id: result.note.id,
+        name: result.note.name,
+        content: result.note.content,
+        ownerEmail: result.note.owner.email,
       },
+      noteUsageCount: result.noteUsageCount,
     });
   } catch (error) {
     const message =

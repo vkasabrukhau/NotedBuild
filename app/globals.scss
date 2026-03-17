@@ -47,6 +47,36 @@ body {
   animation: typewriter-cursor-blink 1s steps(1, end) infinite;
 }
 
+@keyframes valtest-menu-overlay-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes valtest-menu-panel-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-1.5rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.valtest-menu-overlay {
+  animation: valtest-menu-overlay-fade 180ms ease-out;
+}
+
+.valtest-menu-panel {
+  animation: valtest-menu-panel-slide 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .tiptap-math-editor-input {
   min-width: 8rem;
   border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);

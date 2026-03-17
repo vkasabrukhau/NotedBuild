@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SimpleEditor } from "@/components/tiptap-templates/simple/simple-editor";
 
 function HomeComponent() {
   return (
@@ -12,8 +13,8 @@ function HomeComponent() {
 
 function NoteComponent() {
   return (
-    <div className="min-h-screen w-full bg-white flex items-center justify-center">
-      <div className="text-black text-4xl font-bold">note</div>
+    <div className="min-h-screen w-full bg-white">
+      <SimpleEditor />
     </div>
   );
 }

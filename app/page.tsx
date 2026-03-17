@@ -1,3 +1,5 @@
+import { auth } from "@clerk/nextjs/server";
+import RootHomeShell from "@/components/root-home-shell";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import SignInView from "@/components/sing-in/sign-in";
@@ -7,63 +9,26 @@ import { SignIn } from "@clerk/nextjs";
 import PersonalInfoView from "@/components/personal-info/personal-info";
 import { AuthenticateWithRedirectCallback } from "@clerk/nextjs";
 
-type DbStatus = {
-  ok: boolean;
-  totalUsers: number;
-  matchedUser: {
-    id: string;
-    email: string;
-    fullName: string;
-  } | null;
-  error: string | null;
-};
+export default async function HomePage() {
+  const { userId } = await auth();
 
-async function getDbStatus(clerkId: string | null): Promise<DbStatus> {
-  try {
-    const [totalUsers, matchedUser] = await Promise.all([
-      prisma.user.count(),
-      clerkId
-        ? prisma.user.findUnique({
-            where: { clerkId },
-            select: {
-              id: true,
-              email: true,
-              fullName: true,
-            },
-          })
-        : Promise.resolve(null),
-    ]);
-
-    return {
-      ok: true,
-      totalUsers,
-      matchedUser,
-      error: null,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      totalUsers: 0,
-      matchedUser: null,
-      error: error instanceof Error ? error.message : "Unknown database error",
-    };
+  if (userId) {
+    return <RootHomeShell />;
   }
-}
-
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "good" | "bad" | "neutral";
-}) {
-  const tones = {
-    good: "border-emerald-200 bg-emerald-100 text-emerald-700",
-    bad: "border-rose-200 bg-rose-100 text-rose-700",
-    neutral: "border-slate-200 bg-slate-100 text-slate-700",
-  };
 
   return (
+    <main className="min-h-screen bg-white px-6 py-16 text-black">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+        <h1 className="text-[40px] font-bold leading-none">
+          Sign in to start noting.
+        </h1>
+        <p className="max-w-2xl text-[24px] leading-[1.4] text-gray-500">
+          Your signed-in home view now lives on root. Use the controls in the
+          header to sign in or create an account.
+        </p>
+      </div>
+    </main>
+  );
     <span
       className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${tones[tone]}`}
     >

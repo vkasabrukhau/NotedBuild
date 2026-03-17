@@ -5,6 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
+import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
@@ -15,6 +16,20 @@ const PLACEHOLDERS = [
   "Thoughts, notes, reminders...",
   "Start typing your genius here...",
 ];
+const HOME_SHORTCUTS = [
+  { key: "H", label: "home" },
+  { key: "N", label: "new note" },
+  { key: "F", label: "new folder" },
+  { key: "S", label: "save" },
+  { key: "L", label: "look" },
+  { key: "D", label: "delete" },
+  { key: "T", label: "trash" },
+] as const;
+const HOME_ACTIONS = [
+  { keys: "Escape", action: "close" },
+  { keys: "Enter", action: "select" },
+  { keys: "Arrows", action: "navigate" },
+] as const;
 
 type MathEditorState = {
   pos: number;
@@ -91,6 +106,15 @@ function HomeComponent() {
     shift: false,
     letter: null,
   });
+  const [headingPrefix, setHeadingPrefix] = useState("");
+  const [headingNoting, setHeadingNoting] = useState("");
+  const [modifierText, setModifierText] = useState("");
+  const [typedShortcuts, setTypedShortcuts] = useState<string[]>(
+    HOME_SHORTCUTS.map(() => ""),
+  );
+  const [typedActions, setTypedActions] = useState<string[]>(
+    HOME_ACTIONS.map(() => ""),
+  );
 
   useEffect(() => {
     const validLetters = new Set(["H", "N", "F", "S", "L", "D", "T"]);
@@ -139,61 +163,120 @@ function HomeComponent() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const typingDelay = 32;
+
+    const sleep = (ms: number) =>
+      new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    const typeInto = async (
+      text: string,
+      setter: Dispatch<SetStateAction<string>>,
+    ) => {
+      for (let index = 0; index < text.length; index += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        setter((prev) => prev + text.charAt(index));
+        await sleep(typingDelay);
+      }
+    };
+
+    const typeListItem = async (
+      text: string,
+      setter: Dispatch<SetStateAction<string[]>>,
+      index: number,
+    ) => {
+      for (let charIndex = 0; charIndex < text.length; charIndex += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        setter((current) =>
+          current.map((value, itemIndex) =>
+            itemIndex === index ? value + text.charAt(charIndex) : value,
+          ),
+        );
+        await sleep(typingDelay);
+      }
+    };
+
+    const run = async () => {
+      await sleep(150);
+      await typeInto("Good morning, let's get ", setHeadingPrefix);
+      await typeInto("noting", setHeadingNoting);
+      await sleep(120);
+      await typeInto("^ + Shift +", setModifierText);
+
+      for (let index = 0; index < HOME_SHORTCUTS.length; index += 1) {
+        const item = HOME_SHORTCUTS[index];
+        await typeListItem(`${item.key} - ${item.label}`, setTypedShortcuts, index);
+      }
+
+      for (let index = 0; index < HOME_ACTIONS.length; index += 1) {
+        const item = HOME_ACTIONS[index];
+        await typeListItem(
+          `${item.keys} - ${item.action}`,
+          setTypedActions,
+          index,
+        );
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen w-full bg-white px-6 py-8">
       <h1 className="text-[40px] font-normal leading-none text-black">
-        Good morning, let&apos;s get{" "}
-        <span className="font-bold italic">noting</span>
+        {headingPrefix}
+        <span className="font-bold italic">{headingNoting}</span>
+        <span className="typewriter-cursor" aria-hidden="true">
+          |
+        </span>
       </h1>
 
       <div className="mt-10 grid min-h-[calc(100vh-120px)] gap-10 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <div className="grid grid-cols-[180px_1fr] gap-x-8">
             <div className="flex items-center justify-center text-[26px] leading-none text-black">
-              <span
-                className={`transition-all duration-150 ${
-                  pressedKeys.ctrl ? "scale-105 font-bold" : "font-medium"
-                }`}
-              >
-                ^
-              </span>
-              <span
-                className={`mx-2 transition-all duration-150 ${
-                  pressedKeys.ctrl ? "font-bold" : "font-medium"
-                }`}
-              >
-                +
-              </span>
-              <span
-                className={`transition-all duration-150 ${
-                  pressedKeys.shift ? "scale-105 font-bold" : "font-medium"
-                }`}
-              >
-                Shift
-              </span>
-              <span
-                className={`ml-2 transition-all duration-150 ${
-                  pressedKeys.shift ? "font-bold" : "font-medium"
-                }`}
-              >
-                +
+              <span className="inline-flex">
+                {modifierText.split("").map((character, index) => {
+                  const isCtrlToken = index === 0 || index === 2;
+                  const isShiftToken = index >= 4 && index <= 10;
+                  const isActive =
+                    (isCtrlToken && pressedKeys.ctrl) ||
+                    (isShiftToken && pressedKeys.shift);
+
+                  return (
+                    <span
+                      key={`${character}-${index}`}
+                      className={`whitespace-pre transition-all duration-150 ${
+                        isActive ? "scale-105 font-bold" : "font-medium"
+                      }`}
+                    >
+                      {character}
+                    </span>
+                  );
+                })}
               </span>
             </div>
 
             <div className="space-y-8 text-[26px] leading-none text-black">
-              {[
-                { key: "H", label: "home" },
-                { key: "N", label: "new note" },
-                { key: "F", label: "new folder" },
-                { key: "S", label: "save" },
-                { key: "L", label: "look" },
-                { key: "D", label: "delete" },
-                { key: "T", label: "trash" },
-              ].map(({ key, label }) => {
+              {HOME_SHORTCUTS.map(({ key }, index) => {
                 const isActive =
                   pressedKeys.ctrl &&
                   pressedKeys.shift &&
                   pressedKeys.letter === key;
+                const shortcutText = typedShortcuts[index];
+                const keyLabel = shortcutText.slice(0, 1);
+                const actionLabel = shortcutText.length > 1 ? shortcutText.slice(1) : "";
 
                 return (
                   <div key={key} className="grid grid-cols-[40px_1fr] gap-x-4">
@@ -202,14 +285,14 @@ function HomeComponent() {
                         isActive ? "scale-110 font-bold" : "font-medium"
                       }`}
                     >
-                      {key}
+                      {keyLabel}
                     </span>
                     <span
                       className={`transition-all duration-150 ${
                         isActive ? "translate-x-1 font-bold" : "font-medium"
                       }`}
                     >
-                      - {label}
+                      {actionLabel}
                     </span>
                   </div>
                 );
@@ -218,12 +301,24 @@ function HomeComponent() {
           </div>
 
           <div className="mt-12 ml-[188px] grid grid-cols-[140px_1fr] gap-x-4 gap-y-6 text-[24px] leading-none text-black">
-            <div className="font-medium">Escape</div>
-            <div className="font-medium">- close</div>
-            <div className="font-medium">Enter</div>
-            <div className="font-medium">- select</div>
-            <div className="font-medium">Arrows</div>
-            <div className="font-medium">- navigate</div>
+            {HOME_ACTIONS.map(({ keys }, index) => {
+              const actionText = typedActions[index];
+              const separatorIndex = actionText.indexOf(" - ");
+              const keyLabel =
+                separatorIndex === -1 ? actionText : actionText.slice(0, separatorIndex);
+              const actionLabel =
+                separatorIndex === -1 ? "" : actionText.slice(separatorIndex);
+
+              return (
+                <div
+                  key={keys}
+                  className="contents"
+                >
+                  <div className="font-medium">{keyLabel}</div>
+                  <div className="font-medium">{actionLabel}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

@@ -18,6 +18,18 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Environment Variables
+
+Create a `.env` file from `.env.example` and set:
+
+```bash
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+# optional
+OPENROUTER_MODEL=google/gemma-3-27b-it:free
+```
+
+This is required for the `/math[...]` to LaTeX conversion in the note editor.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Quicksand } from "next/font/google";
 
 type SchoolOption = {
   id: string;
@@ -9,9 +10,16 @@ type SchoolOption = {
 };
 
 type SignUpViewProps = {
+  age?: number | null;
+  email?: string;
   fullName?: string;
   schools?: SchoolOption[];
 };
+
+const quicksand = Quicksand({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 const usageReasons = [
   "Journaling",
@@ -21,90 +29,264 @@ const usageReasons = [
 ];
 
 export default function SignUpView({
+  age = null,
+  email = "",
   fullName = "there",
   schools = [],
 }: SignUpViewProps) {
+  const [openPanel, setOpenPanel] = useState<"reason" | "school" | null>(
+    "reason",
+  );
+  const [schoolQuery, setSchoolQuery] = useState("");
   const [selectedReason, setSelectedReason] = useState("");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const selectedSchool =
+    schools.find((school) => school.id === selectedSchoolId) ?? null;
+  const filteredSchools = schools
+    .filter((school) => {
+      const haystack = `${school.name} ${school.location ?? ""}`.toLowerCase();
+      return haystack.includes(schoolQuery.toLowerCase());
+    });
+  const initials = fullName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  function handleReasonSelect(reason: string) {
+    setSelectedReason(reason);
+    setOpenPanel("school");
+  }
+
+  function handleSchoolSelect(schoolId: string) {
+    setSelectedSchoolId(schoolId);
+    setOpenPanel(null);
+  }
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-[linear-gradient(180deg,#f7f4ff_0%,#eef2ff_50%,#f8fafc_100%)] px-6 py-16 text-slate-950">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.10)]">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-400">
-            Step 2
+    <main
+      className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-12 text-[#2f2b28] ${quicksand.className}`}
+    >
+      <div className="mx-auto grid w-full max-w-6xl gap-12 lg:grid-cols-[minmax(0,1.2fr)_22rem] lg:items-start">
+        <section>
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-black/15 text-xl font-semibold">
+              {initials || "N"}
+            </div>
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-black/35">
+                Step 2
+              </p>
+              <h1 className="mt-2 text-[2.4rem] leading-none tracking-[-0.04em] sm:text-[3.2rem]">
+                Nice, {fullName}. What are you using Noted for?
+              </h1>
+            </div>
+          </div>
+
+          <p className="mt-8 max-w-2xl text-lg leading-8 text-black/55">
+            Choose your reason, then pick your school. The details card updates
+            as you move through onboarding.
           </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Nice, {fullName}. What are using Noted for?
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            Choose a reason for using Notely and pick your school.
-          </p>
+
+          <div className="mt-12 space-y-10">
+            <div>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpenPanel((current) =>
+                    current === "reason" ? null : "reason",
+                  )
+                }
+                className="flex w-full items-center justify-between border-b border-black/15 pb-3 text-left"
+              >
+                <span className="text-sm uppercase tracking-[0.24em] text-black/40">
+                  Why are you here?
+                </span>
+                <span className="text-sm text-black/35">
+                  {selectedReason || "Open"}
+                </span>
+              </button>
+
+              {openPanel === "reason" ? (
+                <div className="mt-4 space-y-1">
+                  {usageReasons.map((reason, index) => {
+                    const isSelected = selectedReason === reason;
+
+                    return (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => handleReasonSelect(reason)}
+                        className="flex w-full items-center gap-5 border-b border-black/10 py-4 text-left transition hover:border-black/25"
+                      >
+                        <span className="w-8 text-sm text-black/25">
+                          0{index + 1}
+                        </span>
+                        <span
+                          className={`text-[1.6rem] leading-none tracking-[-0.03em] ${
+                            isSelected ? "font-semibold text-black" : "text-black/55"
+                          }`}
+                        >
+                          {reason}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : selectedReason ? (
+                <div className="mt-4 text-lg text-black/65">{selectedReason}</div>
+              ) : null}
+            </div>
+
+            <div className={`${selectedReason ? "opacity-100" : "opacity-45"}`}>
+              <button
+                type="button"
+                disabled={!selectedReason}
+                onClick={() =>
+                  selectedReason
+                    ? setOpenPanel((current) =>
+                        current === "school" ? null : "school",
+                      )
+                    : undefined
+                }
+                className="flex w-full items-center justify-between border-b border-black/15 pb-3 text-left disabled:cursor-not-allowed"
+              >
+                <span className="text-sm uppercase tracking-[0.24em] text-black/40">
+                  What school do you go to?
+                </span>
+                <span className="text-sm text-black/35">
+                  {selectedSchool?.name || (selectedReason ? "Open" : "Choose reason first")}
+                </span>
+              </button>
+
+              {openPanel === "school" && selectedReason ? (
+                <div className="mt-5">
+                  <input
+                    value={schoolQuery}
+                    onChange={(event) => setSchoolQuery(event.target.value)}
+                    placeholder="Look for your school"
+                    className="w-full border-b border-black/15 pb-3 text-[1.2rem] outline-none placeholder:text-black/25"
+                  />
+
+                  <div className="mt-4 max-h-[24rem] overflow-y-auto pr-2">
+                    {filteredSchools.map((school, index) => {
+                      const isSelected = selectedSchoolId === school.id;
+
+                      return (
+                        <button
+                          key={school.id}
+                          type="button"
+                          onClick={() => handleSchoolSelect(school.id)}
+                          className="flex w-full items-start gap-5 border-b border-black/10 py-4 text-left transition hover:border-black/25"
+                        >
+                          <span className="w-8 pt-1 text-sm text-black/25">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span>
+                            <span
+                              className={`block text-[1.35rem] leading-none tracking-[-0.03em] ${
+                                isSelected
+                                  ? "font-semibold text-black"
+                                  : "text-black/65"
+                              }`}
+                            >
+                              {school.name}
+                            </span>
+                            {school.location ? (
+                              <span className="mt-2 block text-sm text-black/35">
+                                {school.location}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {filteredSchools.length === 0 ? (
+                      <p className="py-6 text-sm text-black/40">
+                        No schools matched that search.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : selectedSchool ? (
+                <div className="mt-4">
+                  <p className="text-lg text-black/65">{selectedSchool.name}</p>
+                  {selectedSchool.location ? (
+                    <p className="mt-1 text-sm text-black/35">
+                      {selectedSchool.location}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </section>
 
-        <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
-          <article className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Why are you using Notely?
+        <aside className="lg:sticky lg:top-24">
+          <div className="rounded-[2rem] border border-black/10 bg-[linear-gradient(180deg,#fff_0%,#f7f4ef_100%)] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.06)]">
+            <p className="text-sm uppercase tracking-[0.24em] text-black/35">
+              Personal card
             </p>
-            <div className="mt-4 grid gap-3">
-              {usageReasons.map((reason) => {
-                const isSelected = selectedReason === reason;
-
-                return (
-                  <button
-                    key={reason}
-                    type="button"
-                    onClick={() => setSelectedReason(reason)}
-                    className={`rounded-2xl border px-4 py-4 text-left text-sm transition ${
-                      isSelected
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
-                    }`}
-                  >
-                    {reason}
-                  </button>
-                );
-              })}
+            <div className="mt-6 flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black text-lg font-semibold text-white">
+                {initials || "N"}
+              </div>
+              <div>
+                <p className="text-2xl leading-none tracking-[-0.03em]">
+                  {fullName}
+                </p>
+                <p className="mt-2 text-sm text-black/45">{email || "No email"}</p>
+              </div>
             </div>
-          </article>
 
-          <article className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <label
-              htmlFor="schoolId"
-              className="text-sm font-medium text-slate-500"
-            >
-              Pick your school
-            </label>
-            <select
-              id="schoolId"
-              value={selectedSchoolId}
-              onChange={(event) => setSelectedSchoolId(event.target.value)}
-              className="mt-4 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none focus:border-slate-400"
-            >
-              <option value="">Select a school</option>
-              {schools.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.location
-                    ? `${school.name} - ${school.location}`
-                    : school.name}
-                </option>
-              ))}
-            </select>
+            <div className="mt-8 space-y-5">
+              <div className="border-b border-black/10 pb-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-black/35">
+                  Age
+                </p>
+                <p className="mt-2 text-lg text-black/70">
+                  {age ?? "Still missing"}
+                </p>
+              </div>
 
-            <div className="mt-6 rounded-2xl bg-slate-100 p-4 text-sm leading-6 text-slate-600">
-              <p>
-                <strong>Selected reason:</strong>{" "}
-                {selectedReason || "Nothing chosen yet"}
-              </p>
-              <p className="mt-2">
-                <strong>Selected school:</strong>{" "}
-                {schools.find((school) => school.id === selectedSchoolId)?.name ??
-                  "No school chosen yet"}
-              </p>
+              <div className="border-b border-black/10 pb-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-black/35">
+                  Using Noted for
+                </p>
+                <p className="mt-2 text-lg text-black/70">
+                  {selectedReason || "Not chosen yet"}
+                </p>
+              </div>
+
+              <div className="border-b border-black/10 pb-4">
+                <p className="text-xs uppercase tracking-[0.22em] text-black/35">
+                  School
+                </p>
+                <p className="mt-2 text-lg text-black/70">
+                  {selectedSchool?.name || "Not chosen yet"}
+                </p>
+                {selectedSchool?.location ? (
+                  <p className="mt-1 text-sm text-black/35">
+                    {selectedSchool.location}
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-black/35">
+                  Onboarding
+                </p>
+                <p className="mt-2 text-lg text-black/70">
+                  {selectedReason && selectedSchool
+                    ? "Ready for the next step"
+                    : "Still in progress"}
+                </p>
+              </div>
             </div>
-          </article>
-        </section>
+          </div>
+        </aside>
       </div>
     </main>
   );

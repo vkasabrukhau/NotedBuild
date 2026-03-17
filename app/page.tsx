@@ -127,16 +127,22 @@ export default async function Home({ searchParams }: HomeProps) {
     dbStatus.matchedUser.schoolId === null
   ) {
     const schools = await prisma.school.findMany({
-      orderBy: [{ noteRanking: "asc" }, { name: "asc" }],
+      orderBy: [{ name: "asc" }],
       select: {
         id: true,
         location: true,
         name: true,
       },
-      take: 50,
     });
 
-    return <SignUpView fullName={fullName} schools={schools} />;
+    return (
+      <SignUpView
+        age={dbStatus.matchedUser.age}
+        email={email}
+        fullName={fullName}
+        schools={schools}
+      />
+    );
   }
 
   return <main>APPp</main>;

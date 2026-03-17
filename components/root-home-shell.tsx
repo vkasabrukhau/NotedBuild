@@ -6,7 +6,7 @@ import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const PLACEHOLDERS = [
@@ -47,6 +47,26 @@ type MathEditorState = {
   top: number;
   latex: string;
 };
+
+type InitialNote = {
+  id: string;
+  name: string;
+  content: string;
+  ownerEmail: string;
+};
+
+type RootHomeShellProps = {
+  initialView?: "home" | "note" | "folder";
+  initialNote?: InitialNote | null;
+};
+
+function createNoteSignature(noteId: string | null, title: string, content: string) {
+  return JSON.stringify({
+    noteId,
+    title: title.trim(),
+    content,
+  });
+}
 
 function sanitizeLatex(latex: string) {
   return latex
@@ -222,7 +242,11 @@ function HomeComponent() {
 
       for (let index = 0; index < HOME_SHORTCUTS.length; index += 1) {
         const item = HOME_SHORTCUTS[index];
-        await typeListItem(`${item.key} - ${item.label}`, setTypedShortcuts, index);
+        await typeListItem(
+          `${item.key} - ${item.label}`,
+          setTypedShortcuts,
+          index,
+        );
       }
 
       for (let index = 0; index < HOME_ACTIONS.length; index += 1) {
@@ -286,7 +310,8 @@ function HomeComponent() {
                   pressedKeys.letter === key;
                 const shortcutText = typedShortcuts[index];
                 const keyLabel = shortcutText.slice(0, 1);
-                const actionLabel = shortcutText.length > 1 ? shortcutText.slice(1) : "";
+                const actionLabel =
+                  shortcutText.length > 1 ? shortcutText.slice(1) : "";
 
                 return (
                   <div key={key} className="grid grid-cols-[40px_1fr] gap-x-4">
@@ -315,15 +340,14 @@ function HomeComponent() {
               const actionText = typedActions[index];
               const separatorIndex = actionText.indexOf(" - ");
               const keyLabel =
-                separatorIndex === -1 ? actionText : actionText.slice(0, separatorIndex);
+                separatorIndex === -1
+                  ? actionText
+                  : actionText.slice(0, separatorIndex);
               const actionLabel =
                 separatorIndex === -1 ? "" : actionText.slice(separatorIndex);
 
               return (
-                <div
-                  key={keys}
-                  className="contents"
-                >
+                <div key={keys} className="contents">
                   <div className="font-medium">{keyLabel}</div>
                   <div className="font-medium">{actionLabel}</div>
                 </div>
@@ -335,14 +359,14 @@ function HomeComponent() {
         <div className="lg:col-span-2">
           <div className="relative overflow-hidden rounded-[40px]">
             <div className="pointer-events-none absolute inset-0 z-10 bg-white/10" />
-          <Image
-            src="/mylittlecoffeeshop.gif"
-            alt="Coffee shop"
-            width={1200}
-            height={900}
-            className="h-auto w-full rounded-[40px] object-contain"
-            priority
-          />
+            <Image
+              src="/mylittlecoffeeshop.gif"
+              alt="Coffee shop"
+              width={1200}
+              height={900}
+              className="h-auto w-full rounded-[40px] object-contain"
+              priority
+            />
           </div>
         </div>
       </div>
@@ -366,7 +390,9 @@ function MenuOverlay({ onClose }: { onClose: () => void }) {
           aria-label="Menu"
         >
           <div>
-            <h2 className="text-[40px] font-bold leading-none text-black">Menu</h2>
+            <h2 className="text-[40px] font-bold leading-none text-black">
+              Menu
+            </h2>
 
             <div className="mt-10 space-y-6 text-[28px] leading-none text-black">
               {MENU_OPTIONS.map((option) => (
@@ -396,26 +422,40 @@ function MenuOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-function NoteComponent() {
+function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
   const isConvertingMathRef = useRef(false);
+  const isSavingRef = useRef(false);
+  const hideSavedTimerRef = useRef<number | null>(null);
   const [mathEditor, setMathEditor] = useState<MathEditorState | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initialNote?.name ?? "");
+  const [noteId, setNoteId] = useState<string | null>(initialNote?.id ?? null);
+  const [content, setContent] = useState(initialNote?.content ?? "<p></p>");
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [bodyPlaceholder, setBodyPlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const mathInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const shouldAnimatePlaceholders = title.trim().length === 0 && isEditorEmpty;
+  const lastSavedSignatureRef = useRef(
+    createNoteSignature(
+      initialNote?.id ?? null,
+      initialNote?.name ?? "",
+      initialNote?.content ?? "<p></p>",
+    ),
+  );
 
   const editor = useEditor({
     immediatelyRender: false,
     onCreate: ({ editor }) => {
       setIsEditorEmpty(editor.isEmpty);
+      setContent(editor.getHTML());
     },
     onUpdate: ({ editor }) => {
       setIsEditorEmpty(editor.isEmpty);
+      setContent(editor.getHTML());
     },
     onFocus: () => {
       setIsEditorFocused(true);
@@ -537,7 +577,7 @@ function NoteComponent() {
         },
       }),
     ],
-    content: "<p></p>",
+    content: initialNote?.content ?? "<p></p>",
   });
 
   useEffect(() => {
@@ -665,6 +705,118 @@ function NoteComponent() {
     );
   }, [mathEditor]);
 
+  useEffect(() => {
+    return () => {
+      if (hideSavedTimerRef.current) {
+        window.clearTimeout(hideSavedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerSavedToast = () => {
+    setShowSavedToast(true);
+    if (hideSavedTimerRef.current) {
+      window.clearTimeout(hideSavedTimerRef.current);
+    }
+    hideSavedTimerRef.current = window.setTimeout(() => {
+      setShowSavedToast(false);
+    }, 1800);
+  };
+
+  const saveNote = useEffectEvent(
+    async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle || isSavingRef.current) {
+      return;
+    }
+
+    const signature = createNoteSignature(noteId, trimmedTitle, content);
+    if (signature === lastSavedSignatureRef.current) {
+      if (showToastOnNoop) {
+        triggerSavedToast();
+      }
+      return;
+    }
+
+    isSavingRef.current = true;
+
+    try {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          noteId,
+          title: trimmedTitle,
+          content,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            note?: InitialNote;
+          }
+        | null;
+
+      if (!response.ok || !data?.note) {
+        throw new Error(data?.error || `Failed to save note with ${response.status}`);
+      }
+
+      setNoteId(data.note.id);
+      lastSavedSignatureRef.current = createNoteSignature(
+        data.note.id,
+        data.note.name,
+        data.note.content,
+      );
+
+      triggerSavedToast();
+    } catch (error) {
+      console.error("note save failed", error);
+    } finally {
+      isSavingRef.current = false;
+    }
+    },
+  );
+
+  useEffect(() => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      return;
+    }
+
+    const signature = createNoteSignature(noteId, trimmedTitle, content);
+    if (signature === lastSavedSignatureRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveNote();
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [noteId, title, content]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && (event.key === "S" || event.key === "s")) {
+        event.preventDefault();
+        if (!title.trim()) {
+          return;
+        }
+
+        void saveNote({ showToastOnNoop: true });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [title, noteId, content]);
+
   const saveMathEditor = () => {
     if (!editor || !mathEditor) {
       return;
@@ -779,6 +931,19 @@ function NoteComponent() {
           />
         </div>
       ) : null}
+      {showSavedToast ? (
+        <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+          <Image
+            src="/check.gif"
+            alt=""
+            width={28}
+            height={28}
+            unoptimized
+            className="grayscale"
+          />
+          <span className="text-[20px] font-medium leading-none">Saved</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -791,8 +956,13 @@ function FolderComponent() {
   );
 }
 
-export default function ValtestPage() {
-  const [view, setView] = useState<"home" | "note" | "folder">("home");
+export default function RootHomeShell({
+  initialView = "home",
+  initialNote = null,
+}: RootHomeShellProps) {
+  const [view, setView] = useState<"home" | "note" | "folder">(initialView);
+  const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
+  const [noteSessionKey, setNoteSessionKey] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -815,6 +985,8 @@ export default function ValtestPage() {
           setView("home");
         } else if (e.key === "N" || e.key === "n") {
           e.preventDefault();
+          setActiveNote(null);
+          setNoteSessionKey((current) => current + 1);
           setView("note");
         } else if (e.key === "F" || e.key === "f") {
           e.preventDefault();
@@ -833,7 +1005,12 @@ export default function ValtestPage() {
   return (
     <>
       {view === "home" ? <HomeComponent /> : null}
-      {view === "note" ? <NoteComponent /> : null}
+      {view === "note" ? (
+        <NoteComponent
+          key={activeNote?.id ?? `new-note-${noteSessionKey}`}
+          initialNote={activeNote}
+        />
+      ) : null}
       {view === "folder" ? <FolderComponent /> : null}
       {isMenuOpen ? <MenuOverlay onClose={() => setIsMenuOpen(false)} /> : null}
     </>

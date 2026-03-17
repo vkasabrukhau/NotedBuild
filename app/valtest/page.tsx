@@ -4,6 +4,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
@@ -81,9 +82,165 @@ async function convertMathPromptToLatex(
 }
 
 function HomeComponent() {
+  const [pressedKeys, setPressedKeys] = useState<{
+    ctrl: boolean;
+    shift: boolean;
+    letter: string | null;
+  }>({
+    ctrl: false,
+    shift: false,
+    letter: null,
+  });
+
+  useEffect(() => {
+    const validLetters = new Set(["H", "N", "F", "S", "L", "D", "T"]);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const letter = event.key.toUpperCase();
+
+      setPressedKeys({
+        ctrl: event.ctrlKey || event.metaKey || event.altKey,
+        shift: event.shiftKey,
+        letter: validLetters.has(letter) ? letter : null,
+      });
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const letter = event.key.toUpperCase();
+
+      setPressedKeys((current) => ({
+        ctrl: event.ctrlKey || event.metaKey || event.altKey,
+        shift: event.shiftKey,
+        letter:
+          current.letter === letter && validLetters.has(letter)
+            ? null
+            : validLetters.has(letter)
+              ? letter
+              : null,
+      }));
+    };
+
+    const clearPressedKeys = () => {
+      setPressedKeys({
+        ctrl: false,
+        shift: false,
+        letter: null,
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", clearPressedKeys);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", clearPressedKeys);
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen w-full bg-white flex items-center justify-center">
-      <div className="text-black text-4xl font-bold">home</div>
+    <div className="min-h-screen w-full bg-white px-6 py-8">
+      <h1 className="text-[40px] font-normal leading-none text-black">
+        Good morning, let&apos;s get{" "}
+        <span className="font-bold italic">noting</span>
+      </h1>
+
+      <div className="mt-10 grid min-h-[calc(100vh-120px)] gap-10 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <div className="grid grid-cols-[180px_1fr] gap-x-8">
+            <div className="flex items-center justify-center text-[26px] leading-none text-black">
+              <span
+                className={`transition-all duration-150 ${
+                  pressedKeys.ctrl ? "scale-105 font-bold" : "font-medium"
+                }`}
+              >
+                ^
+              </span>
+              <span
+                className={`mx-2 transition-all duration-150 ${
+                  pressedKeys.ctrl ? "font-bold" : "font-medium"
+                }`}
+              >
+                +
+              </span>
+              <span
+                className={`transition-all duration-150 ${
+                  pressedKeys.shift ? "scale-105 font-bold" : "font-medium"
+                }`}
+              >
+                Shift
+              </span>
+              <span
+                className={`ml-2 transition-all duration-150 ${
+                  pressedKeys.shift ? "font-bold" : "font-medium"
+                }`}
+              >
+                +
+              </span>
+            </div>
+
+            <div className="space-y-8 text-[26px] leading-none text-black">
+              {[
+                { key: "H", label: "home" },
+                { key: "N", label: "new note" },
+                { key: "F", label: "new folder" },
+                { key: "S", label: "save" },
+                { key: "L", label: "look" },
+                { key: "D", label: "delete" },
+                { key: "T", label: "trash" },
+              ].map(({ key, label }) => {
+                const isActive =
+                  pressedKeys.ctrl &&
+                  pressedKeys.shift &&
+                  pressedKeys.letter === key;
+
+                return (
+                  <div key={key} className="grid grid-cols-[40px_1fr] gap-x-4">
+                    <span
+                      className={`transition-all duration-150 ${
+                        isActive ? "scale-110 font-bold" : "font-medium"
+                      }`}
+                    >
+                      {key}
+                    </span>
+                    <span
+                      className={`transition-all duration-150 ${
+                        isActive ? "translate-x-1 font-bold" : "font-medium"
+                      }`}
+                    >
+                      - {label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-12 ml-[188px] grid grid-cols-[140px_1fr] gap-x-4 gap-y-6 text-[24px] leading-none text-black">
+            <div className="font-medium">Escape</div>
+            <div className="font-medium">- close</div>
+            <div className="font-medium">Enter</div>
+            <div className="font-medium">- select</div>
+            <div className="font-medium">Arrows</div>
+            <div className="font-medium">- navigate</div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2">
+          <div className="relative overflow-hidden rounded-[40px]">
+            <div className="pointer-events-none absolute inset-0 z-10 bg-white/10" />
+          <Image
+            src="/mylittlecoffeeshop.gif"
+            alt="Coffee shop"
+            width={1200}
+            height={900}
+            className="h-auto w-full rounded-[40px] object-contain"
+            priority
+          />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -484,10 +641,16 @@ function FolderComponent() {
 }
 
 export default function ValtestPage() {
-  const [view, setView] = useState<"home" | "note" | "folder" | null>(null);
+  const [view, setView] = useState<"home" | "note" | "folder">("home");
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setView("home");
+        return;
+      }
+
       if (e.ctrlKey && e.shiftKey) {
         if (e.key === "H" || e.key === "h") {
           e.preventDefault();
@@ -509,10 +672,4 @@ export default function ValtestPage() {
   if (view === "home") return <HomeComponent />;
   if (view === "note") return <NoteComponent />;
   if (view === "folder") return <FolderComponent />;
-
-  return (
-    <div className="min-h-screen bg-white">
-      {/* Test your components here */}
-    </div>
-  );
 }

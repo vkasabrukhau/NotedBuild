@@ -5,7 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, SetStateAction } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
@@ -55,9 +55,25 @@ type InitialNote = {
   ownerEmail: string;
 };
 
+type FolderNoteSummary = {
+  id: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  folderId: string | null;
+};
+
+type InitialFolder = {
+  id: string;
+  name: string;
+  ownerEmail: string;
+  selectedNoteIds: string[];
+};
+
 type RootHomeShellProps = {
   initialView?: "home" | "note" | "folder";
   initialNote?: InitialNote | null;
+  initialFolder?: InitialFolder | null;
 };
 
 function createNoteSignature(noteId: string | null, title: string, content: string) {
@@ -66,6 +82,34 @@ function createNoteSignature(noteId: string | null, title: string, content: stri
     title: title.trim(),
     content,
   });
+}
+
+function createFolderSignature(
+  folderId: string | null,
+  title: string,
+  selectedNoteIds: string[],
+) {
+  return JSON.stringify({
+    folderId,
+    title: title.trim(),
+    selectedNoteIds: [...selectedNoteIds].sort(),
+  });
+}
+
+function stripHtml(html: string) {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function getPreviewText(content: string, maxWords = 48) {
+  return stripHtml(content).split(" ").filter(Boolean).slice(0, maxWords).join(" ");
+}
+
+function formatAuthoredDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function sanitizeLatex(latex: string) {
@@ -138,13 +182,7 @@ function HomeComponent() {
   });
   const [headingPrefix, setHeadingPrefix] = useState("");
   const [headingNoting, setHeadingNoting] = useState("");
-  const [modifierText, setModifierText] = useState("");
-  const [typedShortcuts, setTypedShortcuts] = useState<string[]>(
-    HOME_SHORTCUTS.map(() => ""),
-  );
-  const [typedActions, setTypedActions] = useState<string[]>(
-    HOME_ACTIONS.map(() => ""),
-  );
+  const modifierText = "^ + Shift +";
 
   useEffect(() => {
     const validLetters = new Set(["H", "N", "F", "M", "S", "L", "D", "T"]);
@@ -214,49 +252,10 @@ function HomeComponent() {
       }
     };
 
-    const typeListItem = async (
-      text: string,
-      setter: Dispatch<SetStateAction<string[]>>,
-      index: number,
-    ) => {
-      for (let charIndex = 0; charIndex < text.length; charIndex += 1) {
-        if (cancelled) {
-          return;
-        }
-
-        setter((current) =>
-          current.map((value, itemIndex) =>
-            itemIndex === index ? value + text.charAt(charIndex) : value,
-          ),
-        );
-        await sleep(typingDelay);
-      }
-    };
-
     const run = async () => {
       await sleep(150);
       await typeInto("Good morning, let's get ", setHeadingPrefix);
       await typeInto("noting", setHeadingNoting);
-      await sleep(120);
-      await typeInto("^ + Shift +", setModifierText);
-
-      for (let index = 0; index < HOME_SHORTCUTS.length; index += 1) {
-        const item = HOME_SHORTCUTS[index];
-        await typeListItem(
-          `${item.key} - ${item.label}`,
-          setTypedShortcuts,
-          index,
-        );
-      }
-
-      for (let index = 0; index < HOME_ACTIONS.length; index += 1) {
-        const item = HOME_ACTIONS[index];
-        await typeListItem(
-          `${item.keys} - ${item.action}`,
-          setTypedActions,
-          index,
-        );
-      }
     };
 
     void run();
@@ -279,7 +278,10 @@ function HomeComponent() {
       <div className="mt-10 grid min-h-[calc(100vh-120px)] gap-10 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <div className="grid grid-cols-[180px_1fr] gap-x-8">
-            <div className="flex items-center justify-center text-[26px] leading-none text-black">
+            <div
+              className="home-shortcut-group flex items-center justify-center text-[26px] leading-none text-black"
+              style={{ animationDelay: "80ms" }}
+            >
               <span className="inline-flex">
                 {modifierText.split("").map((character, index) => {
                   const isCtrlToken = index === 0 || index === 2;
@@ -308,26 +310,26 @@ function HomeComponent() {
                   pressedKeys.ctrl &&
                   pressedKeys.shift &&
                   pressedKeys.letter === key;
-                const shortcutText = typedShortcuts[index];
-                const keyLabel = shortcutText.slice(0, 1);
-                const actionLabel =
-                  shortcutText.length > 1 ? shortcutText.slice(1) : "";
 
                 return (
-                  <div key={key} className="grid grid-cols-[40px_1fr] gap-x-4">
+                  <div
+                    key={key}
+                    className="home-shortcut-row grid grid-cols-[40px_1fr] gap-x-4"
+                    style={{ animationDelay: `${120 + index * 55}ms` }}
+                  >
                     <span
                       className={`transition-all duration-150 ${
                         isActive ? "scale-110 font-bold" : "font-medium"
                       }`}
                     >
-                      {keyLabel}
+                      {key}
                     </span>
                     <span
                       className={`transition-all duration-150 ${
                         isActive ? "translate-x-1 font-bold" : "font-medium"
                       }`}
                     >
-                      {actionLabel}
+                      - {HOME_SHORTCUTS[index].label}
                     </span>
                   </div>
                 );
@@ -337,19 +339,23 @@ function HomeComponent() {
 
           <div className="mt-12 ml-[188px] grid grid-cols-[140px_1fr] gap-x-4 gap-y-6 text-[24px] leading-none text-black">
             {HOME_ACTIONS.map(({ keys }, index) => {
-              const actionText = typedActions[index];
-              const separatorIndex = actionText.indexOf(" - ");
-              const keyLabel =
-                separatorIndex === -1
-                  ? actionText
-                  : actionText.slice(0, separatorIndex);
-              const actionLabel =
-                separatorIndex === -1 ? "" : actionText.slice(separatorIndex);
-
               return (
-                <div key={keys} className="contents">
-                  <div className="font-medium">{keyLabel}</div>
-                  <div className="font-medium">{actionLabel}</div>
+                <div
+                  key={keys}
+                  className="contents"
+                >
+                  <div
+                    className="home-shortcut-row font-medium"
+                    style={{ animationDelay: `${520 + index * 70}ms` }}
+                  >
+                    {keys}
+                  </div>
+                  <div
+                    className="home-shortcut-row font-medium"
+                    style={{ animationDelay: `${560 + index * 70}ms` }}
+                  >
+                    - {HOME_ACTIONS[index].action}
+                  </div>
                 </div>
               );
             })}
@@ -948,10 +954,425 @@ function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
   );
 }
 
-function FolderComponent() {
+function FolderComponent({
+  initialFolder,
+}: {
+  initialFolder?: InitialFolder | null;
+}) {
+  const isSavingRef = useRef(false);
+  const hideSavedTimerRef = useRef<number | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [title, setTitle] = useState(initialFolder?.name ?? "");
+  const [folderId, setFolderId] = useState<string | null>(initialFolder?.id ?? null);
+  const [titlePlaceholder, setTitlePlaceholder] = useState("");
+  const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
+  const [availableNotes, setAvailableNotes] = useState<FolderNoteSummary[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>(
+    initialFolder?.selectedNoteIds ?? [],
+  );
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const lastSavedSignatureRef = useRef(
+    createFolderSignature(
+      initialFolder?.id ?? null,
+      initialFolder?.name ?? "",
+      initialFolder?.selectedNoteIds ?? [],
+    ),
+  );
+
+  useEffect(() => {
+    titleInputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (title.trim().length > 0) {
+      setArePlaceholdersVisible(true);
+      setTitlePlaceholder("Name your folder…");
+      return;
+    }
+
+    setArePlaceholdersVisible(false);
+    setTitlePlaceholder("");
+
+    let cancelled = false;
+    const typingDelay = 55;
+    let startTimer = 0;
+
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+
+    const typeMessage = async (message: string) => {
+      await sleep(150);
+      setArePlaceholdersVisible(true);
+      for (let i = 0; i < message.length; i += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        setTitlePlaceholder((prev) => prev + message.charAt(i));
+        await sleep(typingDelay);
+      }
+    };
+
+    startTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        void typeMessage("Name your folder…");
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+    };
+  }, [title]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNotes = async () => {
+      setIsLoadingNotes(true);
+
+      try {
+        const response = await fetch("/api/folders");
+        const data = (await response.json().catch(() => null)) as
+          | {
+              notes?: FolderNoteSummary[];
+            }
+          | null;
+
+        if (!response.ok || !data?.notes || cancelled) {
+          return;
+        }
+
+        const selectedSet = new Set(initialFolder?.selectedNoteIds ?? []);
+        const sortedNotes = [...data.notes].sort((left, right) => {
+          const leftSelected = selectedSet.has(left.id);
+          const rightSelected = selectedSet.has(right.id);
+
+          if (leftSelected !== rightSelected) {
+            return leftSelected ? -1 : 1;
+          }
+
+          return (
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+          );
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setAvailableNotes(sortedNotes);
+        setActiveIndex(sortedNotes.length > 0 ? 0 : -1);
+      } catch (error) {
+        console.error("failed to load notes for folder selection", error);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingNotes(false);
+        }
+      }
+    };
+
+    void loadNotes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialFolder?.selectedNoteIds]);
+
+  useEffect(() => {
+    return () => {
+      if (hideSavedTimerRef.current) {
+        window.clearTimeout(hideSavedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const toggleSelectedNote = (noteId: string) => {
+    setSelectedNoteIds((current) =>
+      current.includes(noteId)
+        ? current.filter((id) => id !== noteId)
+        : [...current, noteId],
+    );
+  };
+
+  const triggerSavedToast = () => {
+    setShowSavedToast(true);
+    if (hideSavedTimerRef.current) {
+      window.clearTimeout(hideSavedTimerRef.current);
+    }
+    hideSavedTimerRef.current = window.setTimeout(() => {
+      setShowSavedToast(false);
+    }, 1800);
+  };
+
+  const saveFolder = useEffectEvent(
+    async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
+      const trimmedTitle = title.trim();
+
+      if (!trimmedTitle || isSavingRef.current) {
+        return;
+      }
+
+      const signature = createFolderSignature(folderId, trimmedTitle, selectedNoteIds);
+      if (signature === lastSavedSignatureRef.current) {
+        if (showToastOnNoop) {
+          triggerSavedToast();
+        }
+        return;
+      }
+
+      isSavingRef.current = true;
+
+      try {
+        const response = await fetch("/api/folders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            folderId,
+            title: trimmedTitle,
+            selectedNoteIds,
+          }),
+        });
+
+        const data = (await response.json().catch(() => null)) as
+          | {
+              error?: string;
+              folder?: InitialFolder;
+            }
+          | null;
+
+        if (!response.ok || !data?.folder) {
+          throw new Error(
+            data?.error || `Failed to save folder with ${response.status}`,
+          );
+        }
+
+        setFolderId(data.folder.id);
+        setSelectedNoteIds(data.folder.selectedNoteIds);
+        lastSavedSignatureRef.current = createFolderSignature(
+          data.folder.id,
+          data.folder.name,
+          data.folder.selectedNoteIds,
+        );
+        triggerSavedToast();
+      } catch (error) {
+        console.error("folder save failed", error);
+      } finally {
+        isSavingRef.current = false;
+      }
+    },
+  );
+
+  useEffect(() => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      return;
+    }
+
+    const signature = createFolderSignature(folderId, trimmedTitle, selectedNoteIds);
+    if (signature === lastSavedSignatureRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void saveFolder();
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [folderId, title, selectedNoteIds]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && (event.key === "S" || event.key === "s")) {
+        event.preventDefault();
+        if (!title.trim()) {
+          return;
+        }
+
+        void saveFolder({ showToastOnNoop: true });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [title, folderId, selectedNoteIds]);
+
+  const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (availableNotes.length === 0) {
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        titleInputRef.current?.focus();
+      }
+      return;
+    }
+
+    const columnCount = 4;
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      const note = availableNotes[activeIndex];
+      if (note) {
+        toggleSelectedNote(note.id);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setActiveIndex((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setActiveIndex((current) => Math.min(availableNotes.length - 1, current + 1));
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) =>
+        Math.min(availableNotes.length - 1, current + columnCount),
+      );
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (activeIndex < columnCount) {
+        titleInputRef.current?.focus();
+        return;
+      }
+
+      setActiveIndex((current) => Math.max(0, current - columnCount));
+    }
+  };
+
   return (
-    <div className="min-h-screen w-full bg-white flex items-center justify-center">
-      <div className="text-black text-4xl font-bold">folder</div>
+    <div className="min-h-screen w-full bg-white px-6 py-8">
+      <div className="w-full mb-8">
+        <div className="relative">
+          {title.length === 0 && arePlaceholdersVisible ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center text-[40px] font-bold leading-none text-gray-400">
+              <span>{titlePlaceholder}</span>
+              <span className="typewriter-cursor" aria-hidden="true">
+                |
+              </span>
+            </div>
+          ) : null}
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={title}
+            className="w-full text-[40px] font-bold text-black bg-transparent border-0 outline-none"
+            aria-label="Folder title"
+            onChange={(event) => {
+              setTitle(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "Enter") {
+                event.preventDefault();
+                gridRef.current?.focus();
+              }
+            }}
+          />
+        </div>
+      </div>
+
+      <div
+        ref={gridRef}
+        tabIndex={0}
+        role="grid"
+        aria-label="Folder note selection"
+        className="grid grid-cols-1 gap-5 outline-none sm:grid-cols-2 xl:grid-cols-4"
+        onKeyDown={handleGridKeyDown}
+      >
+        {isLoadingNotes
+          ? Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={`folder-skeleton-${index}`}
+                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[#f4f4f4] p-5"
+              >
+                <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
+                <div className="mt-5 space-y-3">
+                  <div className="h-4 rounded-full bg-black/[0.08]" />
+                  <div className="h-4 rounded-full bg-black/[0.08]" />
+                  <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
+                </div>
+                <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
+              </div>
+            ))
+          : availableNotes.map((note, index) => {
+          const isSelected = selectedNoteIds.includes(note.id);
+          const isActive = index === activeIndex;
+
+          return (
+            <button
+              key={note.id}
+              type="button"
+              role="gridcell"
+              className={`folder-grid-card rounded-[28px] border p-5 text-left ${
+                isSelected
+                  ? "border-black bg-black text-white"
+                  : "border-black/10 bg-[#f7f7f7] text-black"
+              } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
+                isSelected ? "folder-grid-card--selected" : ""
+              }`}
+              style={{
+                animationDelay: `${Math.min(index, 11) * 45}ms`,
+              }}
+              onClick={() => {
+                setActiveIndex(index);
+                gridRef.current?.focus();
+                toggleSelectedNote(note.id);
+              }}
+            >
+              <div className="text-[24px] font-bold leading-tight">{note.name}</div>
+              <div
+                className={`mt-4 text-[18px] leading-[1.45] ${
+                  isSelected ? "text-white/82" : "text-black/70"
+                }`}
+              >
+                {getPreviewText(note.content)}
+              </div>
+              <div
+                className={`mt-5 text-[16px] font-medium leading-none ${
+                  isSelected ? "text-white/70" : "text-black/55"
+                }`}
+              >
+                {formatAuthoredDate(note.createdAt)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {!isLoadingNotes && availableNotes.length === 0 ? (
+        <div className="mt-10 text-[22px] font-medium text-black/45">
+          No notes yet. Create a note first, then add it to a folder here.
+        </div>
+      ) : null}
+
+      {showSavedToast ? (
+        <div className="folder-saved-toast fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+          <Image
+            src="/check.gif"
+            alt=""
+            width={28}
+            height={28}
+            unoptimized
+            className="grayscale"
+          />
+          <span className="text-[20px] font-medium leading-none">Saved</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -959,10 +1380,13 @@ function FolderComponent() {
 export default function RootHomeShell({
   initialView = "home",
   initialNote = null,
+  initialFolder = null,
 }: RootHomeShellProps) {
   const [view, setView] = useState<"home" | "note" | "folder">(initialView);
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
+  const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(initialFolder);
   const [noteSessionKey, setNoteSessionKey] = useState(0);
+  const [folderSessionKey, setFolderSessionKey] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -990,6 +1414,8 @@ export default function RootHomeShell({
           setView("note");
         } else if (e.key === "F" || e.key === "f") {
           e.preventDefault();
+          setActiveFolder(null);
+          setFolderSessionKey((current) => current + 1);
           setView("folder");
         } else if (e.key === "M" || e.key === "m") {
           e.preventDefault();
@@ -1011,7 +1437,12 @@ export default function RootHomeShell({
           initialNote={activeNote}
         />
       ) : null}
-      {view === "folder" ? <FolderComponent /> : null}
+      {view === "folder" ? (
+        <FolderComponent
+          key={activeFolder?.id ?? `new-folder-${folderSessionKey}`}
+          initialFolder={activeFolder}
+        />
+      ) : null}
       {isMenuOpen ? <MenuOverlay onClose={() => setIsMenuOpen(false)} /> : null}
     </>
   );

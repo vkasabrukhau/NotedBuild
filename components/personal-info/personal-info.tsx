@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
-import { flushAllTraces } from "next/dist/trace";
-
+import { completeOnboarding } from "@/app/actions/complete-onboarding";
 
 type PersonalInfoViewProps = {
-    clerkId: string;
-    email: string;
-    fullName: string;
+  clerkId: string;
+  email: string;
+  fullName: string;
 };
-
 
 export default function PersonalInfoView({
   clerkId,
@@ -19,9 +14,11 @@ export default function PersonalInfoView({
   fullName,
 }: PersonalInfoViewProps) {
   return (
-    <form className="flex flex-col gap-4">
-      <input value={fullName} readOnly />
-      <input value={email} readOnly />
+    <form action={completeOnboarding} className="flex flex-col gap-4">
+      <input type="hidden" name="clerkId" value={clerkId} />
+
+      <input name="fullName" value={fullName} readOnly />
+      <input name="email" value={email} readOnly />
 
       <label htmlFor="age">Age</label>
       <input
@@ -34,8 +31,7 @@ export default function PersonalInfoView({
         required
       />
 
-      <button type="submit">Let's Go</button>
+      <button type="submit">Let&apos;s Go</button>
     </form>
-    
   );
 }

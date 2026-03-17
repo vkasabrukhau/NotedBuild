@@ -4,50 +4,11 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
-type OnboardingState = {
-  error: string | null;
-};
-
-function getAgeFromBirthday(rawBirthday: string) {
-  const birthday = new Date(rawBirthday);
-
-  if (Number.isNaN(birthday.getTime())) {
-    return null;
-  }
-
-  const today = new Date();
-
-  if (birthday > today) {
-    return null;
-  }
-
-  let age = today.getFullYear() - birthday.getFullYear();
-  const monthDelta = today.getMonth() - birthday.getMonth();
-
-  if (
-    monthDelta < 0 ||
-    (monthDelta === 0 && today.getDate() < birthday.getDate())
-  ) {
-    age -= 1;
-  }
-
-  if (age < 1 || age > 120) {
-    return null;
-  }
-
-  return age;
-}
-
-export async function completeOnboarding(
-  _prevState: OnboardingState,
-  formData: FormData,
-): Promise<OnboardingState> {
+export async function completeOnboarding(formData: FormData) {
   const { userId } = await auth();
 
   if (!userId) {
-    return {
-      error: "Sign in again before finishing your profile.",
-    };
+    redirect("/");
   }
 
   const clerkUser = await currentUser();
@@ -56,47 +17,34 @@ export async function completeOnboarding(
     clerkUser?.emailAddresses[0]?.emailAddress ??
     "";
   const fullName = String(formData.get("fullName") ?? "").trim();
-  const rawBirthday = String(formData.get("birthday") ?? "").trim();
-  const age = getAgeFromBirthday(rawBirthday);
+  const age = Number.parseInt(String(formData.get("age") ?? ""), 10);
 
   if (!email) {
-    return {
-      error: "We could not read your email from Clerk.",
-    };
+    throw new Error("We could not read your email from Clerk.");
   }
 
   if (!fullName) {
-    return {
-      error: "Please enter your full name.",
-    };
+    throw new Error("Please enter your full name.");
   }
 
-  if (age === null) {
-    return {
-      error: "Please enter a valid birthday.",
-    };
+  if (!Number.isInteger(age) || age < 1 || age > 120) {
+    throw new Error("Please enter a valid age.");
   }
 
-  try {
-    await prisma.user.upsert({
-      where: { clerkId: userId },
-      update: {
-        age,
-        email,
-        fullName,
-      },
-      create: {
-        age,
-        clerkId: userId,
-        email,
-        fullName,
-      },
-    });
-  } catch {
-    return {
-      error: "Something went wrong while saving your profile.",
-    };
-  }
+  await prisma.user.upsert({
+    where: { clerkId: userId },
+    update: {
+      age,
+      email,
+      fullName,
+    },
+    create: {
+      age,
+      clerkId: userId,
+      email,
+      fullName,
+    },
+  });
 
-  redirect("/");
+  redirect("/?step=school");
 }

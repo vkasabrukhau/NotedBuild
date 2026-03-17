@@ -2,6 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import PersonalInfoView from "@/components/personal-info/personal-info";
 import SignInView from "@/components/sing-in/sign-in";
+import SignUpView from "@/components/sign-up/sign-up";
 
 type DbStatus = {
   ok: boolean;
@@ -68,7 +69,14 @@ function StatusPill({
   );
 }
 
-export default async function Home() {
+type HomeProps = {
+  searchParams?: Promise<{
+    step?: string;
+  }>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const { userId } = await auth();
 
   if (!userId) {
@@ -114,8 +122,28 @@ export default async function Home() {
 
     return (
       <PersonalInfoView
-        defaultEmail={defaultEmail}
-        defaultFullName={defaultFullName}
+        clerkId={userId}
+        email={defaultEmail}
+        fullName={defaultFullName}
+      />
+    );
+  }
+
+  if (resolvedSearchParams.step === "school") {
+    const schools = await prisma.school.findMany({
+      orderBy: [{ noteRanking: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        location: true,
+        name: true,
+      },
+      take: 50,
+    });
+
+    return (
+      <SignUpView
+        fullName={dbStatus.matchedUser.fullName}
+        schools={schools}
       />
     );
   }

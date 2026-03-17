@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import SignInView from "@/components/sing-in/sign-in";
 import SignUpView from "@/components/sign-up/sign-up";
@@ -76,16 +76,39 @@ function StatusPill({
 
 export default async function Home() {
   const { userId } = await auth();
-  const dbStatus = await getDbStatus(userId);
-
 
   if (!userId){
     return <SignInView />;
   }
-  if (!dbStatus.matchedUser) {
-    return <PersonalInfoView />;
 
+  const [dbStatus, clerkUser] = await Promise.all([
+    getDbStatus(userId),
+    currentUser(),
+  ]);
+
+  if (!dbStatus.ok) {
+    return <main>{dbStatus.error}</main>;
   }
 
-  return <MainApp />;
+  
+  if (!dbStatus.matchedUser) {
+    const email =
+      clerkUser?.primaryEmailAddress?.emailAddress ??
+      clerkUser?.emailAddresses[0]?.emailAddress ??
+      "";
+
+    const fullName =
+      clerkUser?.fullName ??
+      [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ");
+
+    return (
+      <PersonalInfoView
+        clerkId={userId}
+        email={email}
+        fullName={fullName}
+      />
+    );
+  }
+
+  return <main> APPp</main>;
 }

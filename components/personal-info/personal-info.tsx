@@ -14,7 +14,9 @@ export default function PersonalInfoView({
   fullName,
 }: PersonalInfoViewProps) {
   return (
-    <form action={completeOnboarding} className="flex flex-col gap-4">
+    <main className="min-h-[calc(100vh-4rem)] grid place-items-center px-6">
+        
+        <form action={completeOnboarding} className="flex flex-col gap-4">
       <input type="hidden" name="clerkId" value={clerkId} />
 
       <input name="fullName" value={fullName} readOnly />
@@ -32,6 +34,7 @@ export default function PersonalInfoView({
       />
 
       <button type="submit">Let&apos;s Go</button>
-    </form>
+        </form>
+    </main>
   );
 }

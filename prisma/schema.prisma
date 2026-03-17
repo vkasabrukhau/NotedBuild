@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum ShareAccessLevel {
@@ -66,7 +65,7 @@ model User {
 model Note {
   id            String    @id @default(cuid())
   name          String
-  content       String    @db.Text
+  content       String
 
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -94,7 +93,7 @@ model Note {
 model Folder {
   id            String    @id @default(cuid())
   name          String
-  description   String?   @db.Text
+  description   String?
 
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -113,7 +112,7 @@ model Folder {
 
 model Comment {
   id          String   @id @default(cuid())
-  content     String   @db.Text
+  content     String
 
   authorId    String
   author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)

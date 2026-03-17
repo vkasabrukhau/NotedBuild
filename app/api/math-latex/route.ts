@@ -36,6 +36,24 @@ type OpenRouterResponse = {
   }
 }
 
+function extractProviderErrorDetails(data: OpenRouterResponse | null) {
+  const message = data?.error?.message?.trim() ?? ""
+  const raw = data?.error?.metadata?.raw?.trim() ?? ""
+  const providerName = data?.error?.metadata?.provider_name?.trim() ?? ""
+
+  const detailParts = [message]
+
+  if (raw && !message.includes(raw)) {
+    detailParts.push(raw)
+  }
+
+  if (providerName && !detailParts.some((part) => part.includes(providerName))) {
+    detailParts.push(`provider=${providerName}`)
+  }
+
+  return detailParts.filter(Boolean).join(": ")
+}
+
 function sanitizeLatex(output: string) {
   return output
     .trim()
@@ -65,6 +83,15 @@ function isPromptEcho(latex: string, prompt: string) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableProviderFailure(status: number, error: string) {
+  return (
+    RETRYABLE_STATUS_CODES.has(status) ||
+    /provider returned error|upstream|timed out|timeout|temporar|unavailable|overloaded|capacity|no endpoints|connection reset|econnreset|gateway/i.test(
+      error
+    )
+  )
 }
 
 function extractContent(choice: OpenRouterChoice | undefined) {
@@ -141,7 +168,7 @@ async function requestOpenRouter(prompt: string, systemInstruction: string) {
 
   if (!response.ok) {
     const message =
-      data?.error?.message ||
+      extractProviderErrorDetails(data) ||
       `OpenRouter request failed with status ${response.status}.`
 
     return {
@@ -184,10 +211,22 @@ async function generateLatex(prompt: string) {
             ? "OpenRouter returned low-quality LaTeX for this prompt."
             : fallback.error,
       }
+
+      if (
+        !fallback.ok &&
+        isRetryableProviderFailure(fallback.status, fallback.error) &&
+        attempt < MAX_RETRIES
+      ) {
+        await sleep(250 * (attempt + 1))
+        continue
+      }
     } else {
       lastFailure = { status: result.status, error: result.error }
 
-      if (RETRYABLE_STATUS_CODES.has(result.status) && attempt < MAX_RETRIES) {
+      if (
+        isRetryableProviderFailure(result.status, result.error) &&
+        attempt < MAX_RETRIES
+      ) {
         await sleep(250 * (attempt + 1))
         continue
       }
@@ -216,7 +255,8 @@ export async function POST(request: Request) {
       const status =
         result.status === 429 || result.status === 503
           ? result.status
-          : result.status >= 500
+          : isRetryableProviderFailure(result.status, result.error) ||
+              result.status >= 500
             ? 502
             : 422
 

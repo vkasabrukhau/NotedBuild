@@ -18,6 +18,7 @@ const PLACEHOLDERS = [
 ];
 const HOME_SHORTCUTS = [
   { key: "H", label: "home" },
+  { key: "A", label: "all notes" },
   { key: "N", label: "new note" },
   { key: "F", label: "new folder" },
   { key: "M", label: "menu" },
@@ -55,11 +56,12 @@ type InitialNote = {
   ownerEmail: string;
 };
 
-type FolderNoteSummary = {
+type NoteSummary = {
   id: string;
   name: string;
   content: string;
   createdAt: string;
+  ownerEmail: string;
   folderId: string | null;
 };
 
@@ -71,9 +73,10 @@ type InitialFolder = {
 };
 
 type RootHomeShellProps = {
-  initialView?: "home" | "note" | "folder";
+  initialView?: "home" | "all-notes" | "note" | "folder";
   initialNote?: InitialNote | null;
   initialFolder?: InitialFolder | null;
+  initialNoteUsageCount?: number;
 };
 
 function createNoteSignature(noteId: string | null, title: string, content: string) {
@@ -185,7 +188,7 @@ function HomeComponent() {
   const modifierText = "^ + Shift +";
 
   useEffect(() => {
-    const validLetters = new Set(["H", "N", "F", "M", "S", "L", "D", "T"]);
+    const validLetters = new Set(["H", "A", "N", "F", "M", "S", "L", "D", "T"]);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const letter = event.key.toUpperCase();
@@ -380,7 +383,20 @@ function HomeComponent() {
   );
 }
 
-function MenuOverlay({ onClose }: { onClose: () => void }) {
+function MenuOverlay({
+  onClose,
+  noteUsageCount,
+}: {
+  onClose: () => void;
+  noteUsageCount: number;
+}) {
+  const storageLimit = 250;
+  const normalizedNoteUsageCount = Math.max(0, noteUsageCount);
+  const storageProgress = Math.min(
+    100,
+    (normalizedNoteUsageCount / storageLimit) * 100,
+  );
+
   return (
     <div
       className="valtest-menu-overlay fixed inset-0 z-50 bg-black/20"
@@ -416,10 +432,13 @@ function MenuOverlay({ onClose }: { onClose: () => void }) {
           <div className="mt-auto px-2 pb-2 pt-8">
             <div className="mb-4 flex items-center justify-between text-[22px] font-medium leading-none text-black">
               <span>Cloud Storage</span>
-              <span>n/250</span>
+              <span>{normalizedNoteUsageCount}/250</span>
             </div>
             <div className="h-4 overflow-hidden rounded-full bg-black/10">
-              <div className="h-full w-[42%] rounded-full bg-black" />
+              <div
+                className="h-full rounded-full bg-black transition-[width] duration-300 ease-out"
+                style={{ width: `${storageProgress}%` }}
+              />
             </div>
           </div>
         </div>
@@ -428,7 +447,323 @@ function MenuOverlay({ onClose }: { onClose: () => void }) {
   );
 }
 
-function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
+function NoteGridCard({
+  note,
+  isSelected = false,
+  isActive = false,
+  animationDelayMs = 0,
+  onClick,
+  onFocus,
+}: {
+  note: NoteSummary;
+  isSelected?: boolean;
+  isActive?: boolean;
+  animationDelayMs?: number;
+  onClick: () => void;
+  onFocus?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="gridcell"
+      className={`folder-grid-card rounded-[28px] border p-5 text-left ${
+        isSelected
+          ? "border-black bg-black text-white"
+          : "border-black/10 bg-[#f7f7f7] text-black"
+      } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
+        isSelected ? "folder-grid-card--selected" : ""
+      }`}
+      style={{
+        animationDelay: `${animationDelayMs}ms`,
+      }}
+      onClick={onClick}
+      onFocus={onFocus}
+    >
+      <div className="text-[24px] font-bold leading-tight">{note.name}</div>
+      <div
+        className={`mt-4 text-[18px] leading-[1.45] ${
+          isSelected ? "text-white/82" : "text-black/70"
+        }`}
+      >
+        {getPreviewText(note.content)}
+      </div>
+      <div
+        className={`mt-5 text-[16px] font-medium leading-none ${
+          isSelected ? "text-white/70" : "text-black/55"
+        }`}
+      >
+        {formatAuthoredDate(note.createdAt)}
+      </div>
+    </button>
+  );
+}
+
+function AllNotesComponent({
+  refreshToken,
+  onOpenNote,
+}: {
+  refreshToken: number;
+  onOpenNote: (note: InitialNote) => void;
+}) {
+  const [headingText, setHeadingText] = useState("");
+  const [sortMode, setSortMode] = useState<
+    "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc"
+  >("date-desc");
+  const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const typingDelay = 38;
+    setHeadingText("");
+
+    const run = async () => {
+      for (let index = 0; index < "All Notes".length; index += 1) {
+        if (cancelled) {
+          return;
+        }
+
+        setHeadingText((prev) => prev + "All Notes".charAt(index));
+        await new Promise((resolve) => window.setTimeout(resolve, typingDelay));
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNotes = async () => {
+      setIsLoadingNotes(true);
+
+      try {
+        const response = await fetch("/api/notes");
+        const data = (await response.json().catch(() => null)) as
+          | {
+              notes?: NoteSummary[];
+            }
+          | null;
+
+        if (!response.ok || !data?.notes || cancelled) {
+          return;
+        }
+
+        setNotes(data.notes);
+        setActiveIndex(data.notes.length > 0 ? 0 : -1);
+      } catch (error) {
+        console.error("failed to load notes", error);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingNotes(false);
+        }
+      }
+    };
+
+    void loadNotes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshToken]);
+
+  const sortedNotes = [...notes].sort((left, right) => {
+    if (sortMode === "date-desc") {
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    }
+
+    if (sortMode === "date-asc") {
+      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    }
+
+    if (sortMode === "alpha-asc") {
+      return left.name.localeCompare(right.name);
+    }
+
+    if (sortMode === "alpha-desc") {
+      return right.name.localeCompare(left.name);
+    }
+
+    return stripHtml(right.content).length - stripHtml(left.content).length;
+  });
+
+  useEffect(() => {
+    if (notes.length === 0) {
+      setActiveIndex(-1);
+      return;
+    }
+
+    setActiveIndex((current) =>
+      current < 0 ? 0 : Math.min(current, notes.length - 1),
+    );
+  }, [sortMode, notes.length]);
+
+  useEffect(() => {
+    if (!isLoadingNotes && sortedNotes.length > 0) {
+      gridRef.current?.focus();
+    }
+  }, [isLoadingNotes, sortedNotes.length]);
+
+  const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (sortedNotes.length === 0) {
+      return;
+    }
+
+    const columnCount = 4;
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const note = sortedNotes[activeIndex];
+      if (note) {
+        onOpenNote({
+          id: note.id,
+          name: note.name,
+          content: note.content,
+          ownerEmail: note.ownerEmail,
+        });
+      }
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setActiveIndex((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setActiveIndex((current) => Math.min(sortedNotes.length - 1, current + 1));
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((current) =>
+        Math.min(sortedNotes.length - 1, current + columnCount),
+      );
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((current) => Math.max(0, current - columnCount));
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-white px-6 py-8">
+      <div className="flex items-start justify-between gap-6">
+        <h1 className="text-[40px] font-bold leading-none text-black">
+          {headingText}
+          <span className="typewriter-cursor" aria-hidden="true">
+            |
+          </span>
+        </h1>
+
+        <div className="min-w-[260px]">
+          <label
+            htmlFor="notes-sort"
+            className="mb-2 block text-[16px] font-medium uppercase tracking-[0.12em] text-black/45"
+          >
+            Sort
+          </label>
+          <select
+            id="notes-sort"
+            value={sortMode}
+            onChange={(event) =>
+              setSortMode(
+                event.target.value as
+                  | "date-desc"
+                  | "date-asc"
+                  | "alpha-asc"
+                  | "alpha-desc"
+                  | "size-desc",
+              )
+            }
+            className="w-full rounded-[18px] border border-black/10 bg-[#f7f7f7] px-4 py-3 pr-12 text-[18px] font-medium text-black outline-none"
+          >
+            <option value="date-desc">Date: newest first</option>
+            <option value="date-asc">Date: oldest first</option>
+            <option value="alpha-asc">Alphabetical: A-Z</option>
+            <option value="alpha-desc">Alphabetical: Z-A</option>
+            <option value="size-desc">Note size</option>
+          </select>
+        </div>
+      </div>
+
+      <div
+        ref={gridRef}
+        tabIndex={0}
+        role="grid"
+        aria-label="All notes"
+        className="mt-10 grid grid-cols-1 gap-5 outline-none sm:grid-cols-2 xl:grid-cols-4"
+        onKeyDown={handleGridKeyDown}
+      >
+        {isLoadingNotes
+          ? Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={`all-notes-skeleton-${index}`}
+                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[#f4f4f4] p-5"
+              >
+                <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
+                <div className="mt-5 space-y-3">
+                  <div className="h-4 rounded-full bg-black/[0.08]" />
+                  <div className="h-4 rounded-full bg-black/[0.08]" />
+                  <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
+                </div>
+                <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
+              </div>
+            ))
+          : sortedNotes.map((note, index) => (
+              <NoteGridCard
+                key={note.id}
+                note={note}
+                isActive={index === activeIndex}
+                animationDelayMs={Math.min(index, 11) * 45}
+                onFocus={() => {
+                  setActiveIndex(index);
+                }}
+                onClick={() => {
+                  setActiveIndex(index);
+                  gridRef.current?.focus();
+                  onOpenNote({
+                    id: note.id,
+                    name: note.name,
+                    content: note.content,
+                    ownerEmail: note.ownerEmail,
+                  });
+                }}
+              />
+            ))}
+      </div>
+
+      {!isLoadingNotes && sortedNotes.length === 0 ? (
+        <div className="mt-10 text-[22px] font-medium text-black/45">
+          No notes yet.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function NoteComponent({
+  initialNote,
+  onNoteUsageCountChange,
+  onNoteSaved,
+  onRequestClose,
+}: {
+  initialNote?: InitialNote | null;
+  onNoteUsageCountChange?: (count: number) => void;
+  onNoteSaved?: (note: InitialNote) => void;
+  onRequestClose?: () => void;
+}) {
   const isConvertingMathRef = useRef(false);
   const isSavingRef = useRef(false);
   const hideSavedTimerRef = useRef<number | null>(null);
@@ -764,6 +1099,7 @@ function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
         | {
             error?: string;
             note?: InitialNote;
+            noteUsageCount?: number;
           }
         | null;
 
@@ -772,6 +1108,10 @@ function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
       }
 
       setNoteId(data.note.id);
+      if (typeof data.noteUsageCount === "number") {
+        onNoteUsageCountChange?.(data.noteUsageCount);
+      }
+      onNoteSaved?.(data.note);
       lastSavedSignatureRef.current = createNoteSignature(
         data.note.id,
         data.note.name,
@@ -809,6 +1149,21 @@ function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || mathEditor) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void (async () => {
+          if (title.trim()) {
+            await saveNote({ showToastOnNoop: true });
+          }
+          onRequestClose?.();
+        })();
+        return;
+      }
+
       if (event.ctrlKey && event.shiftKey && (event.key === "S" || event.key === "s")) {
         event.preventDefault();
         if (!title.trim()) {
@@ -821,7 +1176,7 @@ function NoteComponent({ initialNote }: { initialNote?: InitialNote | null }) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [title, noteId, content]);
+  }, [title, mathEditor, onRequestClose]);
 
   const saveMathEditor = () => {
     if (!editor || !mathEditor) {
@@ -967,7 +1322,7 @@ function FolderComponent({
   const [folderId, setFolderId] = useState<string | null>(initialFolder?.id ?? null);
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
-  const [availableNotes, setAvailableNotes] = useState<FolderNoteSummary[]>([]);
+  const [availableNotes, setAvailableNotes] = useState<NoteSummary[]>([]);
   const [isLoadingNotes, setIsLoadingNotes] = useState(true);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>(
     initialFolder?.selectedNoteIds ?? [],
@@ -1038,7 +1393,7 @@ function FolderComponent({
         const response = await fetch("/api/folders");
         const data = (await response.json().catch(() => null)) as
           | {
-              notes?: FolderNoteSummary[];
+              notes?: NoteSummary[];
             }
           | null;
 
@@ -1381,13 +1736,27 @@ export default function RootHomeShell({
   initialView = "home",
   initialNote = null,
   initialFolder = null,
+  initialNoteUsageCount = 0,
 }: RootHomeShellProps) {
-  const [view, setView] = useState<"home" | "note" | "folder">(initialView);
+  const [view, setView] = useState<"home" | "all-notes" | "note" | "folder">(initialView);
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
   const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(initialFolder);
   const [noteSessionKey, setNoteSessionKey] = useState(0);
   const [folderSessionKey, setFolderSessionKey] = useState(0);
+  const [noteReturnView, setNoteReturnView] = useState<"home" | "all-notes">("home");
+  const [allNotesRefreshToken, setAllNotesRefreshToken] = useState(0);
+  const [noteUsageCount, setNoteUsageCount] = useState(initialNoteUsageCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [noteViewAnimationClass, setNoteViewAnimationClass] = useState("");
+  const noteTransitionTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (noteTransitionTimerRef.current) {
+        window.clearTimeout(noteTransitionTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1397,9 +1766,11 @@ export default function RootHomeShell({
         return;
       }
 
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && view !== "note") {
         e.preventDefault();
-        setView("home");
+        if (view === "all-notes" || view === "folder") {
+          setView("home");
+        }
         return;
       }
 
@@ -1407,10 +1778,15 @@ export default function RootHomeShell({
         if (e.key === "H" || e.key === "h") {
           e.preventDefault();
           setView("home");
+        } else if (e.key === "A" || e.key === "a") {
+          e.preventDefault();
+          setView("all-notes");
         } else if (e.key === "N" || e.key === "n") {
           e.preventDefault();
           setActiveNote(null);
+          setNoteReturnView("home");
           setNoteSessionKey((current) => current + 1);
+          setNoteViewAnimationClass("note-view-shell--enter-default");
           setView("note");
         } else if (e.key === "F" || e.key === "f") {
           e.preventDefault();
@@ -1426,16 +1802,52 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen]);
+  }, [isMenuOpen, view]);
 
   return (
     <>
       {view === "home" ? <HomeComponent /> : null}
-      {view === "note" ? (
-        <NoteComponent
-          key={activeNote?.id ?? `new-note-${noteSessionKey}`}
-          initialNote={activeNote}
+      {view === "all-notes" ? (
+        <AllNotesComponent
+          refreshToken={allNotesRefreshToken}
+          onOpenNote={(note) => {
+            setActiveNote(note);
+            setNoteReturnView("all-notes");
+            setNoteViewAnimationClass("note-view-shell--enter-from-grid");
+            setView("note");
+          }}
         />
+      ) : null}
+      {view === "note" ? (
+        <div className={noteViewAnimationClass}>
+          <NoteComponent
+            key={activeNote?.id ?? `new-note-${noteSessionKey}`}
+            initialNote={activeNote}
+            onNoteUsageCountChange={setNoteUsageCount}
+            onNoteSaved={(note) => {
+              setActiveNote(note);
+              setAllNotesRefreshToken((current) => current + 1);
+            }}
+            onRequestClose={() => {
+              if (noteTransitionTimerRef.current) {
+                window.clearTimeout(noteTransitionTimerRef.current);
+              }
+
+              const nextAnimationClass =
+                noteReturnView === "all-notes"
+                  ? "note-view-shell--exit-to-grid"
+                  : "note-view-shell--exit-default";
+
+              setNoteViewAnimationClass(nextAnimationClass);
+
+              noteTransitionTimerRef.current = window.setTimeout(() => {
+                setView(noteReturnView);
+                setAllNotesRefreshToken((current) => current + 1);
+                setNoteViewAnimationClass("");
+              }, 220);
+            }}
+          />
+        </div>
       ) : null}
       {view === "folder" ? (
         <FolderComponent
@@ -1443,7 +1855,12 @@ export default function RootHomeShell({
           initialFolder={activeFolder}
         />
       ) : null}
-      {isMenuOpen ? <MenuOverlay onClose={() => setIsMenuOpen(false)} /> : null}
+      {isMenuOpen ? (
+        <MenuOverlay
+          onClose={() => setIsMenuOpen(false)}
+          noteUsageCount={noteUsageCount}
+        />
+      ) : null}
     </>
   );
 }

@@ -46,9 +46,17 @@ export default async function NotePage({
     notFound();
   }
 
+  const noteUsageCount = await prisma.note.count({
+    where: {
+      ownerId: note.ownerId,
+      deletedAt: null,
+    },
+  });
+
   return (
     <RootHomeShell
       initialView="note"
+      initialNoteUsageCount={noteUsageCount}
       initialNote={{
         id: note.id,
         name: note.name,

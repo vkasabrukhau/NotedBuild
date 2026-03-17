@@ -11,6 +11,15 @@ async function getMatchedUser(clerkId: string) {
     },
     select: {
       id: true,
+      _count: {
+        select: {
+          notes: {
+            where: {
+              deletedAt: null,
+            },
+          },
+        },
+      },
     },
   });
 }
@@ -46,5 +55,5 @@ export default async function HomePage() {
     );
   }
 
-  return <RootHomeShell />;
+  return <RootHomeShell initialNoteUsageCount={matchedUser._count.notes} />;
 }

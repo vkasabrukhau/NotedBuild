@@ -214,6 +214,8 @@ model Pet {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  
+
   @@index([ownerId, createdAt])
 }
 
@@ -223,8 +225,8 @@ model TamagotchiPet {
 
   modelName               String
   purchaseThreshold       Int
-  startingHealth          Int
-  currentHealth           Int
+  startingHealth          Int     @default(100)
+  currentHealth           Int     @default(100)
   healthUpgradeThreshold  Int?
   healthUpgradeBump       Int?
 

@@ -20,6 +20,7 @@ const HOME_SHORTCUTS = [
   { key: "H", label: "home" },
   { key: "N", label: "new note" },
   { key: "F", label: "new folder" },
+  { key: "M", label: "menu" },
   { key: "S", label: "save" },
   { key: "L", label: "look" },
   { key: "D", label: "delete" },
@@ -29,6 +30,15 @@ const HOME_ACTIONS = [
   { keys: "Escape", action: "close" },
   { keys: "Enter", action: "select" },
   { keys: "Arrows", action: "navigate" },
+] as const;
+const MENU_OPTIONS = [
+  "Account",
+  "Appearance",
+  "Font",
+  "Languages",
+  "Voices Library",
+  "STEM Preferences",
+  "たまごっち Preferences",
 ] as const;
 
 type MathEditorState = {
@@ -117,7 +127,7 @@ function HomeComponent() {
   );
 
   useEffect(() => {
-    const validLetters = new Set(["H", "N", "F", "S", "L", "D", "T"]);
+    const validLetters = new Set(["H", "N", "F", "M", "S", "L", "D", "T"]);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const letter = event.key.toUpperCase();
@@ -333,6 +343,52 @@ function HomeComponent() {
             className="h-auto w-full rounded-[40px] object-contain"
             priority
           />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="valtest-menu-overlay fixed inset-0 z-50 bg-black/20"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div className="flex h-full items-stretch justify-start p-6">
+        <div
+          className="valtest-menu-panel flex h-full w-full max-w-[420px] flex-col rounded-[40px] bg-white px-8 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+        >
+          <div>
+            <h2 className="text-[40px] font-bold leading-none text-black">Menu</h2>
+
+            <div className="mt-10 space-y-6 text-[28px] leading-none text-black">
+              {MENU_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className="block text-left font-medium transition-opacity duration-150 hover:opacity-65"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-auto px-2 pb-2 pt-8">
+            <div className="mb-4 flex items-center justify-between text-[22px] font-medium leading-none text-black">
+              <span>Cloud Storage</span>
+              <span>n/250</span>
+            </div>
+            <div className="h-4 overflow-hidden rounded-full bg-black/10">
+              <div className="h-full w-[42%] rounded-full bg-black" />
+            </div>
           </div>
         </div>
       </div>
@@ -737,9 +793,16 @@ function FolderComponent() {
 
 export default function ValtestPage() {
   const [view, setView] = useState<"home" | "note" | "folder">("home");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isMenuOpen) {
+        e.preventDefault();
+        setIsMenuOpen(false);
+        return;
+      }
+
       if (e.key === "Escape") {
         e.preventDefault();
         setView("home");
@@ -756,15 +819,23 @@ export default function ValtestPage() {
         } else if (e.key === "F" || e.key === "f") {
           e.preventDefault();
           setView("folder");
+        } else if (e.key === "M" || e.key === "m") {
+          e.preventDefault();
+          setIsMenuOpen(true);
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isMenuOpen]);
 
-  if (view === "home") return <HomeComponent />;
-  if (view === "note") return <NoteComponent />;
-  if (view === "folder") return <FolderComponent />;
+  return (
+    <>
+      {view === "home" ? <HomeComponent /> : null}
+      {view === "note" ? <NoteComponent /> : null}
+      {view === "folder" ? <FolderComponent /> : null}
+      {isMenuOpen ? <MenuOverlay onClose={() => setIsMenuOpen(false)} /> : null}
+    </>
+  );
 }

@@ -31,25 +31,29 @@ async function getDbStatus(clerkId: string | null): Promise<DbStatus> {
               email: true,
               fullName: true,
               schoolId: true,
-            },
-          })
-        : Promise.resolve(null),
-    ]);
+import PersonalInfoView from "@/components/personal-info/personal-info";
+import RootHomeShell from "@/components/root-home-shell";
+import SignInView from "@/components/sing-in/sign-in";
+import { prisma } from "@/lib/prisma";
 
-    return {
-      ok: true,
-      totalUsers,
-      matchedUser,
-      error: null,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      totalUsers: 0,
-      matchedUser: null,
-      error: error instanceof Error ? error.message : "Unknown database error",
-    };
-  }
+async function getMatchedUser(clerkId: string) {
+  return prisma.user.findUnique({
+    where: {
+      clerkId,
+    },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          notes: {
+            where: {
+              deletedAt: null,
+            },
+          },
+        },
+      },
+    },
+  });
 }
 
 type HomeProps = {
@@ -68,10 +72,15 @@ export default async function Home({ searchParams }: HomeProps) {
         <SignInView />
       </main>
     );
+export default async function HomePage() {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return <SignInView />;
   }
 
-  const [dbStatus, clerkUser] = await Promise.all([
-    getDbStatus(userId),
+  const [matchedUser, clerkUser] = await Promise.all([
+    getMatchedUser(userId),
     currentUser(),
   ]);
 
@@ -84,6 +93,11 @@ export default async function Home({ searchParams }: HomeProps) {
     clerkUser?.emailAddresses[0]?.emailAddress ??
     dbStatus.matchedUser?.email ??
     "";
+  if (!matchedUser) {
+    const email =
+      clerkUser?.primaryEmailAddress?.emailAddress ??
+      clerkUser?.emailAddresses[0]?.emailAddress ??
+      "";
 
   const fullName =
     clerkUser?.fullName ??
@@ -123,4 +137,5 @@ export default async function Home({ searchParams }: HomeProps) {
   }
 
   return <RootHomeShell />;
+  return <RootHomeShell initialNoteUsageCount={matchedUser._count.notes} />;
 }

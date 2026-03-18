@@ -47,6 +47,218 @@ body {
   animation: typewriter-cursor-blink 1s steps(1, end) infinite;
 }
 
+@keyframes home-shortcut-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-shortcut-group,
+.home-shortcut-row {
+  opacity: 0;
+  animation: home-shortcut-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes valtest-menu-overlay-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes valtest-menu-panel-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-1.5rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.valtest-menu-overlay {
+  animation: valtest-menu-overlay-fade 180ms ease-out;
+}
+
+.valtest-menu-panel {
+  animation: valtest-menu-panel-slide 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes folder-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes folder-card-select {
+  0% {
+    transform: scale(1);
+  }
+
+  45% {
+    transform: scale(1.02);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes folder-saved-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes folder-skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.folder-grid-card {
+  animation: folder-card-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+  will-change: transform;
+}
+
+.folder-grid-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 45px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.folder-grid-card--active {
+  transform: translateY(-2px);
+}
+
+.folder-grid-card--selected {
+  animation:
+    folder-card-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    folder-card-select 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.folder-saved-toast {
+  animation: folder-saved-toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes note-view-enter-from-grid {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes note-view-exit-to-grid {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(1rem) scale(0.985);
+  }
+}
+
+@keyframes note-view-enter-default {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes note-view-exit-default {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+.note-view-shell--enter-from-grid {
+  animation: note-view-enter-from-grid 280ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.note-view-shell--exit-to-grid {
+  animation: note-view-exit-to-grid 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: none;
+}
+
+.note-view-shell--enter-default {
+  animation: note-view-enter-default 220ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.note-view-shell--exit-default {
+  animation: note-view-exit-default 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: none;
+}
+
+.folder-skeleton-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.folder-skeleton-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
+    transparent 100%
+  );
+  animation: folder-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
 .tiptap-math-editor-input {
   min-width: 8rem;
   border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);

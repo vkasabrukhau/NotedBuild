@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import SignInView from "@/components/sing-in/sign-in";
 import SignUpView from "@/components/sign-up/sign-up";
 import PersonalInfoView from "@/components/personal-info/personal-info";
+import RootHomeShell from "@/components/root-home-shell";
 
 type DbStatus = {
   ok: boolean;
@@ -49,28 +50,6 @@ async function getDbStatus(clerkId: string | null): Promise<DbStatus> {
       error: error instanceof Error ? error.message : "Unknown database error",
     };
   }
-}
-
-function StatusPill({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: "good" | "bad" | "neutral";
-}) {
-  const tones = {
-    good: "border-emerald-200 bg-emerald-100 text-emerald-700",
-    bad: "border-rose-200 bg-rose-100 text-rose-700",
-    neutral: "border-slate-200 bg-slate-100 text-slate-700",
-  };
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${tones[tone]}`}
-    >
-      {label}
-    </span>
-  );
 }
 
 type HomeProps = {
@@ -137,13 +116,11 @@ export default async function Home({ searchParams }: HomeProps) {
 
     return (
       <SignUpView
-        age={dbStatus.matchedUser.age}
-        email={email}
         fullName={fullName}
         schools={schools}
       />
     );
   }
 
-  return <main>APPp</main>;
+  return <RootHomeShell />;
 }

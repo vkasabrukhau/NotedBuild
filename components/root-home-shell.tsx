@@ -5,8 +5,12 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
-import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, SetStateAction } from "react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type {
+  Dispatch,
+  KeyboardEvent as ReactKeyboardEvent,
+  SetStateAction,
+} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const PLACEHOLDERS = [
@@ -79,7 +83,11 @@ type RootHomeShellProps = {
   initialNoteUsageCount?: number;
 };
 
-function createNoteSignature(noteId: string | null, title: string, content: string) {
+function createNoteSignature(
+  noteId: string | null,
+  title: string,
+  content: string,
+) {
   return JSON.stringify({
     noteId,
     title: title.trim(),
@@ -100,11 +108,18 @@ function createFolderSignature(
 }
 
 function stripHtml(html: string) {
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getPreviewText(content: string, maxWords = 48) {
-  return stripHtml(content).split(" ").filter(Boolean).slice(0, maxWords).join(" ");
+  return stripHtml(content)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(" ");
 }
 
 function formatAuthoredDate(value: string) {
@@ -131,6 +146,50 @@ function isMathNode(
   node: ProseMirrorNode | null | undefined,
 ): node is ProseMirrorNode {
   return node?.type.name === "inlineMath" || node?.type.name === "blockMath";
+}
+
+function isSaveShortcut(event: {
+  key: string;
+  code?: string;
+  keyCode?: number;
+  which?: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
+}) {
+  const normalizedKey = event.key?.toLowerCase?.() ?? "";
+  const legacyCode = event.keyCode ?? event.which;
+  const isSKey =
+    event.code === "KeyS" || normalizedKey === "s" || legacyCode === 83;
+  return (
+    event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && isSKey
+  );
+}
+
+function useGlobalSaveShortcut(onSave: () => void) {
+  const onSaveRef = useRef(onSave);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isSaveShortcut(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      onSaveRef.current();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, []);
 }
 
 async function convertMathPromptToLatex(
@@ -343,10 +402,7 @@ function HomeComponent() {
           <div className="mt-12 ml-[188px] grid grid-cols-[140px_1fr] gap-x-4 gap-y-6 text-[24px] leading-none text-black">
             {HOME_ACTIONS.map(({ keys }, index) => {
               return (
-                <div
-                  key={keys}
-                  className="contents"
-                >
+                <div key={keys} className="contents">
                   <div
                     className="home-shortcut-row font-medium"
                     style={{ animationDelay: `${520 + index * 70}ms` }}
@@ -545,11 +601,9 @@ function AllNotesComponent({
 
       try {
         const response = await fetch("/api/notes");
-        const data = (await response.json().catch(() => null)) as
-          | {
-              notes?: NoteSummary[];
-            }
-          | null;
+        const data = (await response.json().catch(() => null)) as {
+          notes?: NoteSummary[];
+        } | null;
 
         if (!response.ok || !data?.notes || cancelled) {
           return;
@@ -575,11 +629,15 @@ function AllNotesComponent({
 
   const sortedNotes = [...notes].sort((left, right) => {
     if (sortMode === "date-desc") {
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      return (
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
     }
 
     if (sortMode === "date-asc") {
-      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      return (
+        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+      );
     }
 
     if (sortMode === "alpha-asc") {
@@ -639,7 +697,9 @@ function AllNotesComponent({
 
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      setActiveIndex((current) => Math.min(sortedNotes.length - 1, current + 1));
+      setActiveIndex((current) =>
+        Math.min(sortedNotes.length - 1, current + 1),
+      );
       return;
     }
 
@@ -777,6 +837,8 @@ function NoteComponent({
   const [bodyPlaceholder, setBodyPlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [savedToastKey, setSavedToastKey] = useState(0);
+  const [savedToastText, setSavedToastText] = useState("Saved");
   const mathInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const shouldAnimatePlaceholders = title.trim().length === 0 && isEditorEmpty;
@@ -787,6 +849,116 @@ function NoteComponent({
       initialNote?.content ?? "<p></p>",
     ),
   );
+
+  const triggerSavedToast = (text = "Saved") => {
+    setSavedToastText(text);
+    setSavedToastKey((current) => current + 1);
+    setShowSavedToast(true);
+    if (hideSavedTimerRef.current) {
+      window.clearTimeout(hideSavedTimerRef.current);
+    }
+    hideSavedTimerRef.current = window.setTimeout(() => {
+      setShowSavedToast(false);
+    }, 1800);
+  };
+
+  const saveNote = useCallback(
+    async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
+      const trimmedTitle = title.trim();
+
+      if (!trimmedTitle || isSavingRef.current) {
+        return;
+      }
+
+      const signature = createNoteSignature(noteId, trimmedTitle, content);
+      if (signature === lastSavedSignatureRef.current) {
+        if (showToastOnNoop) {
+          triggerSavedToast();
+        }
+        return;
+      }
+
+      isSavingRef.current = true;
+
+      try {
+        const response = await fetch("/api/notes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            noteId,
+            title: trimmedTitle,
+            content,
+          }),
+        });
+
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+          note?: InitialNote;
+          noteUsageCount?: number;
+        } | null;
+
+        if (!response.ok || !data?.note) {
+          throw new Error(
+            data?.error || `Failed to save note with ${response.status}`,
+          );
+        }
+
+        setNoteId(data.note.id);
+        if (typeof data.noteUsageCount === "number") {
+          onNoteUsageCountChange?.(data.noteUsageCount);
+        }
+        onNoteSaved?.(data.note);
+        lastSavedSignatureRef.current = createNoteSignature(
+          data.note.id,
+          data.note.name,
+          data.note.content,
+        );
+
+        triggerSavedToast();
+      } catch (error) {
+        console.error("note save failed", error);
+        triggerSavedToast("Save failed");
+      } finally {
+        isSavingRef.current = false;
+      }
+    },
+    [content, noteId, onNoteSaved, onNoteUsageCountChange, title],
+  );
+
+  const triggerManualSave = useCallback(() => {
+    triggerSavedToast("Saving...");
+
+    if (!title.trim()) {
+      triggerSavedToast("Add a title first");
+      return;
+    }
+
+    void saveNote({ showToastOnNoop: true });
+  }, [saveNote, title]);
+
+  const handleCloseNoteShortcut = useCallback(
+    (event: { preventDefault(): void }) => {
+      event.preventDefault();
+
+      void (async () => {
+        if (title.trim()) {
+          await saveNote({ showToastOnNoop: true });
+        }
+        onRequestClose?.();
+      })();
+    },
+    [onRequestClose, saveNote, title],
+  );
+
+  useGlobalSaveShortcut(() => {
+    if (mathEditor) {
+      return;
+    }
+
+    triggerManualSave();
+  });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -815,6 +987,11 @@ function NoteComponent({
       handleKeyDown: (view, event) => {
         const { state } = view;
         const { selection } = state;
+
+        if (event.key === "Escape") {
+          handleCloseNoteShortcut(event);
+          return true;
+        }
 
         if (
           event.key === "Backspace" &&
@@ -1054,79 +1231,6 @@ function NoteComponent({
     };
   }, []);
 
-  const triggerSavedToast = () => {
-    setShowSavedToast(true);
-    if (hideSavedTimerRef.current) {
-      window.clearTimeout(hideSavedTimerRef.current);
-    }
-    hideSavedTimerRef.current = window.setTimeout(() => {
-      setShowSavedToast(false);
-    }, 1800);
-  };
-
-  const saveNote = useEffectEvent(
-    async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
-    const trimmedTitle = title.trim();
-
-    if (!trimmedTitle || isSavingRef.current) {
-      return;
-    }
-
-    const signature = createNoteSignature(noteId, trimmedTitle, content);
-    if (signature === lastSavedSignatureRef.current) {
-      if (showToastOnNoop) {
-        triggerSavedToast();
-      }
-      return;
-    }
-
-    isSavingRef.current = true;
-
-    try {
-      const response = await fetch("/api/notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          noteId,
-          title: trimmedTitle,
-          content,
-        }),
-      });
-
-      const data = (await response.json().catch(() => null)) as
-        | {
-            error?: string;
-            note?: InitialNote;
-            noteUsageCount?: number;
-          }
-        | null;
-
-      if (!response.ok || !data?.note) {
-        throw new Error(data?.error || `Failed to save note with ${response.status}`);
-      }
-
-      setNoteId(data.note.id);
-      if (typeof data.noteUsageCount === "number") {
-        onNoteUsageCountChange?.(data.noteUsageCount);
-      }
-      onNoteSaved?.(data.note);
-      lastSavedSignatureRef.current = createNoteSignature(
-        data.note.id,
-        data.note.name,
-        data.note.content,
-      );
-
-      triggerSavedToast();
-    } catch (error) {
-      console.error("note save failed", error);
-    } finally {
-      isSavingRef.current = false;
-    }
-    },
-  );
-
   useEffect(() => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -1140,43 +1244,23 @@ function NoteComponent({
 
     const timeoutId = window.setTimeout(() => {
       void saveNote();
-    }, 5000);
+    }, 3000);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [noteId, title, content]);
+  }, [noteId, title, content, saveNote]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || mathEditor) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        void (async () => {
-          if (title.trim()) {
-            await saveNote({ showToastOnNoop: true });
-          }
-          onRequestClose?.();
-        })();
-        return;
-      }
-
-      if (event.ctrlKey && event.shiftKey && (event.key === "S" || event.key === "s")) {
-        event.preventDefault();
-        if (!title.trim()) {
-          return;
-        }
-
-        void saveNote({ showToastOnNoop: true });
+      if (event.key === "Escape" && !mathEditor) {
+        handleCloseNoteShortcut(event);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [title, mathEditor, onRequestClose]);
+  }, [handleCloseNoteShortcut, mathEditor]);
 
   const saveMathEditor = () => {
     if (!editor || !mathEditor) {
@@ -1228,6 +1312,11 @@ function NoteComponent({
               setTitle(event.target.value);
             }}
             onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                handleCloseNoteShortcut(event);
+                return;
+              }
+
               if (event.key === "ArrowDown" || event.key === "Enter") {
                 event.preventDefault();
                 editor?.chain().focus("start").run();
@@ -1293,16 +1382,23 @@ function NoteComponent({
         </div>
       ) : null}
       {showSavedToast ? (
-        <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
-          <Image
-            src="/check.gif"
+        <div
+          key={savedToastKey}
+          className="saved-toast fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={savedToastKey}
+            src={`/check.gif?toast=${savedToastKey}`}
             alt=""
             width={28}
             height={28}
-            unoptimized
-            className="grayscale"
+            className="saved-toast-check grayscale"
+            aria-hidden="true"
           />
-          <span className="text-[20px] font-medium leading-none">Saved</span>
+          <span className="text-[20px] font-medium leading-none">
+            {savedToastText}
+          </span>
         </div>
       ) : null}
     </div>
@@ -1319,7 +1415,9 @@ function FolderComponent({
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState(initialFolder?.name ?? "");
-  const [folderId, setFolderId] = useState<string | null>(initialFolder?.id ?? null);
+  const [folderId, setFolderId] = useState<string | null>(
+    initialFolder?.id ?? null,
+  );
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
   const [availableNotes, setAvailableNotes] = useState<NoteSummary[]>([]);
@@ -1329,6 +1427,8 @@ function FolderComponent({
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [savedToastKey, setSavedToastKey] = useState(0);
+  const [savedToastText, setSavedToastText] = useState("Saved");
   const lastSavedSignatureRef = useRef(
     createFolderSignature(
       initialFolder?.id ?? null,
@@ -1391,11 +1491,9 @@ function FolderComponent({
 
       try {
         const response = await fetch("/api/folders");
-        const data = (await response.json().catch(() => null)) as
-          | {
-              notes?: NoteSummary[];
-            }
-          | null;
+        const data = (await response.json().catch(() => null)) as {
+          notes?: NoteSummary[];
+        } | null;
 
         if (!response.ok || !data?.notes || cancelled) {
           return;
@@ -1411,7 +1509,8 @@ function FolderComponent({
           }
 
           return (
-            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+            new Date(right.createdAt).getTime() -
+            new Date(left.createdAt).getTime()
           );
         });
 
@@ -1453,7 +1552,9 @@ function FolderComponent({
     );
   };
 
-  const triggerSavedToast = () => {
+  const triggerSavedToast = (text = "Saved") => {
+    setSavedToastText(text);
+    setSavedToastKey((current) => current + 1);
     setShowSavedToast(true);
     if (hideSavedTimerRef.current) {
       window.clearTimeout(hideSavedTimerRef.current);
@@ -1463,7 +1564,7 @@ function FolderComponent({
     }, 1800);
   };
 
-  const saveFolder = useEffectEvent(
+  const saveFolder = useCallback(
     async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
       const trimmedTitle = title.trim();
 
@@ -1471,7 +1572,11 @@ function FolderComponent({
         return;
       }
 
-      const signature = createFolderSignature(folderId, trimmedTitle, selectedNoteIds);
+      const signature = createFolderSignature(
+        folderId,
+        trimmedTitle,
+        selectedNoteIds,
+      );
       if (signature === lastSavedSignatureRef.current) {
         if (showToastOnNoop) {
           triggerSavedToast();
@@ -1494,12 +1599,10 @@ function FolderComponent({
           }),
         });
 
-        const data = (await response.json().catch(() => null)) as
-          | {
-              error?: string;
-              folder?: InitialFolder;
-            }
-          | null;
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+          folder?: InitialFolder;
+        } | null;
 
         if (!response.ok || !data?.folder) {
           throw new Error(
@@ -1517,11 +1620,28 @@ function FolderComponent({
         triggerSavedToast();
       } catch (error) {
         console.error("folder save failed", error);
+        triggerSavedToast("Save failed");
       } finally {
         isSavingRef.current = false;
       }
     },
+    [folderId, selectedNoteIds, title],
   );
+
+  const triggerManualFolderSave = useCallback(() => {
+    triggerSavedToast("Saving...");
+
+    if (!title.trim()) {
+      triggerSavedToast("Add a title first");
+      return;
+    }
+
+    void saveFolder({ showToastOnNoop: true });
+  }, [saveFolder, title]);
+
+  useGlobalSaveShortcut(() => {
+    triggerManualFolderSave();
+  });
 
   useEffect(() => {
     const trimmedTitle = title.trim();
@@ -1529,35 +1649,23 @@ function FolderComponent({
       return;
     }
 
-    const signature = createFolderSignature(folderId, trimmedTitle, selectedNoteIds);
+    const signature = createFolderSignature(
+      folderId,
+      trimmedTitle,
+      selectedNoteIds,
+    );
     if (signature === lastSavedSignatureRef.current) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       void saveFolder();
-    }, 5000);
+    }, 3000);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [folderId, title, selectedNoteIds]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && (event.key === "S" || event.key === "s")) {
-        event.preventDefault();
-        if (!title.trim()) {
-          return;
-        }
-
-        void saveFolder({ showToastOnNoop: true });
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [title, folderId, selectedNoteIds]);
+  }, [folderId, saveFolder, selectedNoteIds, title]);
 
   const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (availableNotes.length === 0) {
@@ -1587,7 +1695,9 @@ function FolderComponent({
 
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      setActiveIndex((current) => Math.min(availableNotes.length - 1, current + 1));
+      setActiveIndex((current) =>
+        Math.min(availableNotes.length - 1, current + 1),
+      );
       return;
     }
 
@@ -1665,48 +1775,50 @@ function FolderComponent({
               </div>
             ))
           : availableNotes.map((note, index) => {
-          const isSelected = selectedNoteIds.includes(note.id);
-          const isActive = index === activeIndex;
+              const isSelected = selectedNoteIds.includes(note.id);
+              const isActive = index === activeIndex;
 
-          return (
-            <button
-              key={note.id}
-              type="button"
-              role="gridcell"
-              className={`folder-grid-card rounded-[28px] border p-5 text-left ${
-                isSelected
-                  ? "border-black bg-black text-white"
-                  : "border-black/10 bg-[#f7f7f7] text-black"
-              } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
-                isSelected ? "folder-grid-card--selected" : ""
-              }`}
-              style={{
-                animationDelay: `${Math.min(index, 11) * 45}ms`,
-              }}
-              onClick={() => {
-                setActiveIndex(index);
-                gridRef.current?.focus();
-                toggleSelectedNote(note.id);
-              }}
-            >
-              <div className="text-[24px] font-bold leading-tight">{note.name}</div>
-              <div
-                className={`mt-4 text-[18px] leading-[1.45] ${
-                  isSelected ? "text-white/82" : "text-black/70"
-                }`}
-              >
-                {getPreviewText(note.content)}
-              </div>
-              <div
-                className={`mt-5 text-[16px] font-medium leading-none ${
-                  isSelected ? "text-white/70" : "text-black/55"
-                }`}
-              >
-                {formatAuthoredDate(note.createdAt)}
-              </div>
-            </button>
-          );
-        })}
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  role="gridcell"
+                  className={`folder-grid-card rounded-[28px] border p-5 text-left ${
+                    isSelected
+                      ? "border-black bg-black text-white"
+                      : "border-black/10 bg-[#f7f7f7] text-black"
+                  } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
+                    isSelected ? "folder-grid-card--selected" : ""
+                  }`}
+                  style={{
+                    animationDelay: `${Math.min(index, 11) * 45}ms`,
+                  }}
+                  onClick={() => {
+                    setActiveIndex(index);
+                    gridRef.current?.focus();
+                    toggleSelectedNote(note.id);
+                  }}
+                >
+                  <div className="text-[24px] font-bold leading-tight">
+                    {note.name}
+                  </div>
+                  <div
+                    className={`mt-4 text-[18px] leading-[1.45] ${
+                      isSelected ? "text-white/82" : "text-black/70"
+                    }`}
+                  >
+                    {getPreviewText(note.content)}
+                  </div>
+                  <div
+                    className={`mt-5 text-[16px] font-medium leading-none ${
+                      isSelected ? "text-white/70" : "text-black/55"
+                    }`}
+                  >
+                    {formatAuthoredDate(note.createdAt)}
+                  </div>
+                </button>
+              );
+            })}
       </div>
 
       {!isLoadingNotes && availableNotes.length === 0 ? (
@@ -1716,16 +1828,23 @@ function FolderComponent({
       ) : null}
 
       {showSavedToast ? (
-        <div className="folder-saved-toast fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
-          <Image
-            src="/check.gif"
+        <div
+          key={savedToastKey}
+          className="saved-toast folder-saved-toast fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-[20px] bg-white px-4 py-3 text-black shadow-[0_18px_50px_rgba(0,0,0,0.12)]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={savedToastKey}
+            src={`/check.gif?toast=${savedToastKey}`}
             alt=""
             width={28}
             height={28}
-            unoptimized
-            className="grayscale"
+            className="saved-toast-check grayscale"
+            aria-hidden="true"
           />
-          <span className="text-[20px] font-medium leading-none">Saved</span>
+          <span className="text-[20px] font-medium leading-none">
+            {savedToastText}
+          </span>
         </div>
       ) : null}
     </div>
@@ -1738,12 +1857,18 @@ export default function RootHomeShell({
   initialFolder = null,
   initialNoteUsageCount = 0,
 }: RootHomeShellProps) {
-  const [view, setView] = useState<"home" | "all-notes" | "note" | "folder">(initialView);
+  const [view, setView] = useState<"home" | "all-notes" | "note" | "folder">(
+    initialView,
+  );
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
-  const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(initialFolder);
+  const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(
+    initialFolder,
+  );
   const [noteSessionKey, setNoteSessionKey] = useState(0);
   const [folderSessionKey, setFolderSessionKey] = useState(0);
-  const [noteReturnView, setNoteReturnView] = useState<"home" | "all-notes">("home");
+  const [noteReturnView, setNoteReturnView] = useState<"home" | "all-notes">(
+    "home",
+  );
   const [allNotesRefreshToken, setAllNotesRefreshToken] = useState(0);
   const [noteUsageCount, setNoteUsageCount] = useState(initialNoteUsageCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -1824,8 +1949,7 @@ export default function RootHomeShell({
             key={activeNote?.id ?? `new-note-${noteSessionKey}`}
             initialNote={activeNote}
             onNoteUsageCountChange={setNoteUsageCount}
-            onNoteSaved={(note) => {
-              setActiveNote(note);
+            onNoteSaved={() => {
               setAllNotesRefreshToken((current) => current + 1);
             }}
             onRequestClose={() => {

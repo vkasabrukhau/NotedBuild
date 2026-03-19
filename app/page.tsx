@@ -5,6 +5,9 @@ import SignInView from "@/components/sing-in/sign-in";
 import SignUpView from "@/components/sign-up/sign-up";
 import { prisma } from "@/lib/prisma";
 
+// Temporary test switch for iterating on onboarding UI without Clerk/Prisma.
+const TEST_ONBOARDING_MODE = true;
+
 type DbStatus = {
   ok: boolean;
   matchedUser: {
@@ -73,6 +76,41 @@ type HomeProps = {
 
 export default async function Home({ searchParams }: HomeProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
+
+  if (TEST_ONBOARDING_MODE) {
+    const mockFullName = "Sulaiman";
+    const mockEmail = "sulaiman@example.com";
+    const mockSchools = [
+      { id: "duke", name: "Duke University", location: "Durham, NC" },
+      { id: "nyu", name: "New York University", location: "New York, NY" },
+      { id: "columbia", name: "Columbia University", location: "New York, NY" },
+      { id: "ucla", name: "UCLA", location: "Los Angeles, CA" },
+    ];
+
+    if (resolvedSearchParams.step === "school") {
+      return (
+        <SignUpView
+          fullName={mockFullName}
+          schools={mockSchools}
+          testMode
+        />
+      );
+    }
+
+    if (resolvedSearchParams.step === "home") {
+      return <RootHomeShell initialNoteUsageCount={0} />;
+    }
+
+    return (
+      <PersonalInfoView
+        clerkId="test-user"
+        email={mockEmail}
+        fullName={mockFullName}
+        testMode
+      />
+    );
+  }
+
   const { userId } = await auth();
 
   if (!userId) {

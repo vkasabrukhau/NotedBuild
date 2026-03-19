@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Quicksand } from "next/font/google";
+import { useRouter } from "next/navigation";
 import { completeSchoolSelection } from "@/app/actions/complete-school-selection";
 
 type SchoolOption = {
@@ -13,6 +14,7 @@ type SchoolOption = {
 type SignUpViewProps = {
   fullName?: string;
   schools?: SchoolOption[];
+  testMode?: boolean;
 };
 
 const quicksand = Quicksand({
@@ -30,28 +32,13 @@ const reasonOptions = [
 export default function SignUpView({
   fullName = "there",
   schools = [],
+  testMode = false,
 }: SignUpViewProps) {
-  const [introVisible, setIntroVisible] = useState(true);
-  const [introFadingOut, setIntroFadingOut] = useState(false);
   const [schoolQuery, setSchoolQuery] = useState("");
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [view, setView] = useState<"reason" | "school">("reason");
   const [panelTransition, setPanelTransition] = useState(false);
-
-  useEffect(() => {
-    const fadeTimer = window.setTimeout(() => {
-      setIntroFadingOut(true);
-    }, 3000);
-
-    const hideTimer = window.setTimeout(() => {
-      setIntroVisible(false);
-    }, 4000);
-
-    return () => {
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(hideTimer);
-    };
-  }, []);
+  const router = useRouter();
 
   const filteredSchools = useMemo(() => {
     const query = schoolQuery.trim().toLowerCase();
@@ -96,11 +83,7 @@ export default function SignUpView({
       <div className="mx-auto flex w-full max-w-6xl flex-col">
         <div className="relative min-h-[34rem] sm:min-h-[38rem]">
           <section
-            className={`absolute inset-0 flex items-center justify-center px-2 text-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${introFadingOut ? "-translate-y-8 scale-[0.985]" : "translate-y-0 scale-100"}`}
+            className="sign-up-intro pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center"
           >
             <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
               Hi <span className="font-semibold">{firstName}</span>, we&apos;re{" "}
@@ -109,16 +92,16 @@ export default function SignUpView({
           </section>
 
           <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible && view === "reason"
+            className={`sign-up-reason-panel absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 sm:pt-24 ${
+              view === "reason"
                 ? "opacity-100 blur-0"
                 : "pointer-events-none opacity-0 blur-sm"
             } ${
-              !introVisible && view === "reason"
+              view === "reason"
                 ? "translate-x-0 scale-100"
-                : "-translate-x-10 scale-[0.985]"
+                : "-translate-x-8 opacity-0"
             } ${
-              !introVisible && view === "school" && panelTransition
+              view === "school" && panelTransition
                 ? "-translate-x-8 opacity-0"
                 : ""
             }`}
@@ -145,16 +128,16 @@ export default function SignUpView({
           </section>
 
           <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible && view === "school"
+            className={`sign-up-school-panel absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 sm:pt-24 ${
+              view === "school"
                 ? "opacity-100 blur-0"
                 : "pointer-events-none opacity-0 blur-sm"
             } ${
-              !introVisible && view === "school"
+              view === "school"
                 ? "translate-x-0 scale-100"
-                : "translate-x-10 scale-[0.985]"
+                : "translate-x-8 opacity-0"
             } ${
-              !introVisible && view === "reason" && panelTransition
+              view === "reason" && panelTransition
                 ? "translate-x-8 opacity-0"
                 : ""
             }`}
@@ -174,7 +157,17 @@ export default function SignUpView({
               Great. Choose your school.
             </h1>
 
-            <form action={completeSchoolSelection} className="mt-12">
+            <form
+              action={testMode ? undefined : completeSchoolSelection}
+              className="mt-12"
+              onSubmit={(event) => {
+                if (!testMode) {
+                  return;
+                }
+
+                event.preventDefault();
+              }}
+            >
               <input type="hidden" name="reason" value={selectedReason ?? ""} />
 
               <input
@@ -200,9 +193,16 @@ export default function SignUpView({
                 {filteredSchools.map((school) => (
                   <button
                     key={school.id}
-                    type="submit"
-                    name="schoolId"
-                    value={school.id}
+                    type={testMode ? "button" : "submit"}
+                    name={testMode ? undefined : "schoolId"}
+                    value={testMode ? undefined : school.id}
+                    onClick={() => {
+                      if (!testMode) {
+                        return;
+                      }
+
+                      router.push("/?step=home");
+                    }}
                     className="flex w-full items-start justify-between gap-6 border-b border-black/10 py-5 text-left transition hover:border-black/25"
                   >
                     <span>
@@ -225,6 +225,71 @@ export default function SignUpView({
           </section>
         </div>
       </div>
+      <style jsx>{`
+        @keyframes onboardingIntroFade {
+          0% {
+            opacity: 0;
+            filter: blur(10px);
+            transform: translateY(18px) scale(0.99);
+          }
+          18% {
+            opacity: 1;
+            filter: blur(0);
+            transform: translateY(0) scale(1);
+          }
+          62% {
+            opacity: 1;
+            filter: blur(0);
+            transform: translateY(0) scale(1);
+          }
+          100% {
+            opacity: 0;
+            filter: blur(8px);
+            transform: translateY(-28px) scale(0.975);
+          }
+        }
+
+        @keyframes onboardingPanelRise {
+          0% {
+            opacity: 0;
+            filter: blur(8px);
+            transform: translateY(24px) scale(0.99);
+          }
+          38% {
+            opacity: 0;
+            filter: blur(8px);
+            transform: translateY(24px) scale(0.99);
+          }
+          100% {
+            opacity: 1;
+            filter: blur(0);
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .sign-up-intro {
+          animation: onboardingIntroFade 1800ms cubic-bezier(0.22, 1, 0.36, 1)
+            forwards;
+        }
+
+        .sign-up-reason-panel {
+          animation: onboardingPanelRise 1800ms cubic-bezier(0.22, 1, 0.36, 1)
+            forwards;
+          transition:
+            opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            filter 520ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .sign-up-school-panel {
+          animation: onboardingPanelRise 1800ms cubic-bezier(0.22, 1, 0.36, 1)
+            forwards;
+          transition:
+            opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            filter 520ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+      `}</style>
     </main>
   );
 }

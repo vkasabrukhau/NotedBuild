@@ -1,92 +1,225 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Quicksand } from "next/font/google";
-import { completeSchoolSelection } from "@/app/actions/complete-school-selection";
-
-type SchoolOption = {
-  id: string;
-  name: string;
-  location?: string | null;
-};
-
-type SignUpViewProps = {
-  fullName?: string;
-  schools?: SchoolOption[];
-};
-
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const reasonOptions = [
-  { label: "Work", color: "bg-[#df7b5e]" },
-  { label: "School", color: "bg-[#4a4c71]" },
-  { label: "Socializing", color: "bg-[#88b49c]" },
-  { label: "Other", color: "bg-[#f3cf8b]" },
-];
+import { useEffect, useRef, useState } from "react";
+import CompletionOverlay from "@/components/sign-up/completion-overlay";
+import { quicksand } from "@/components/sign-up/fonts";
+import ReasonView from "@/components/sign-up/reason-view";
+import SchoolView from "@/components/sign-up/school-view";
+import SignUpStyles from "@/components/sign-up/sign-up-styles";
+import type {
+  CompletionPhase,
+  SignUpPanelPhase,
+  SignUpViewProps,
+  SuggestionDirection,
+} from "@/components/sign-up/types";
 
 export default function SignUpView({
   fullName = "there",
   schools = [],
 }: SignUpViewProps) {
-  const [introVisible, setIntroVisible] = useState(true);
-  const [introFadingOut, setIntroFadingOut] = useState(false);
   const [schoolQuery, setSchoolQuery] = useState("");
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [selectingSchoolId, setSelectingSchoolId] = useState<string | null>(null);
+  const [selectionFlashTick, setSelectionFlashTick] = useState(0);
+  const [completionPhase, setCompletionPhase] =
+    useState<CompletionPhase>("hidden");
+  const [completionReady, setCompletionReady] = useState(false);
+  const [activeSchoolIndex, setActiveSchoolIndex] = useState<number | null>(null);
   const [view, setView] = useState<"reason" | "school">("reason");
-  const [panelTransition, setPanelTransition] = useState(false);
+  const [panelPhase, setPanelPhase] = useState<SignUpPanelPhase>("enter");
+  const [suggestionDirection, setSuggestionDirection] =
+    useState<SuggestionDirection>("down");
+  const previousFirstSuggestionIdRef = useRef<string | null>(null);
+  const schoolFormRef = useRef<HTMLFormElement | null>(null);
+  const schoolIdInputRef = useRef<HTMLInputElement | null>(null);
+  const schoolInputRef = useRef<HTMLInputElement | null>(null);
+  const activeSchoolRowRef = useRef<HTMLButtonElement | null>(null);
+
+  const normalizedQuery = schoolQuery.trim().toLowerCase();
+  const matchingSchools =
+    normalizedQuery === ""
+      ? []
+      : schools.filter((school) => {
+          const haystack = `${school.name} ${school.location ?? ""}`.toLowerCase();
+          return haystack.includes(normalizedQuery);
+        });
+  const filteredSchools = matchingSchools.slice(0, 8);
+  const topSchool =
+    normalizedQuery === ""
+      ? null
+      : schools.find((school) =>
+          school.name.toLowerCase().startsWith(normalizedQuery),
+        ) ??
+        matchingSchools[0] ??
+        null;
+  const autocompleteSuffix =
+    normalizedQuery !== "" &&
+    topSchool?.name.toLowerCase().startsWith(schoolQuery.trim().toLowerCase())
+      ? topSchool.name.slice(schoolQuery.trim().length)
+      : "";
+  const visibleActiveSchoolIndex =
+    activeSchoolIndex === null || filteredSchools.length === 0
+      ? null
+      : Math.min(activeSchoolIndex, filteredSchools.length - 1);
 
   useEffect(() => {
-    const fadeTimer = window.setTimeout(() => {
-      setIntroFadingOut(true);
-    }, 3000);
-
-    const hideTimer = window.setTimeout(() => {
-      setIntroVisible(false);
-    }, 4000);
-
-    return () => {
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(hideTimer);
-    };
-  }, []);
-
-  const filteredSchools = useMemo(() => {
-    const query = schoolQuery.trim().toLowerCase();
-
-    if (!query) {
-      return [];
-    }
-
-    return schools.filter((school) => {
-      const haystack = `${school.name} ${school.location ?? ""}`.toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [schoolQuery, schools]);
-
-  useEffect(() => {
-    if (!panelTransition) {
+    if (panelPhase !== "enter") {
       return;
     }
 
     const timer = window.setTimeout(() => {
-      setPanelTransition(false);
-    }, 700);
+      setPanelPhase("idle");
+    }, 520);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [panelTransition]);
+  }, [panelPhase]);
+  useEffect(() => {
+    if (view !== "school") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      schoolInputRef.current?.focus();
+    }, panelPhase === "enter" ? 260 : 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [panelPhase, view]);
+  useEffect(() => {
+    if (!selectingSchoolId) {
+      return;
+    }
+
+    const flashDurations = [240, 170, 120, 80, 55];
+    const completionVisibleDelay = 50;
+    let cancelled = false;
+    const timeoutIds: number[] = [];
+
+    const runFlash = (index: number) => {
+      if (cancelled) {
+        return;
+      }
+
+      setSelectionFlashTick(index);
+
+      if (index >= flashDurations.length - 1) {
+        setCompletionPhase("enter");
+        timeoutIds.push(
+          window.setTimeout(() => {
+            if (!cancelled) {
+              setCompletionPhase("visible");
+            }
+          }, completionVisibleDelay),
+        );
+        return;
+      }
+
+      timeoutIds.push(window.setTimeout(() => {
+        runFlash(index + 1);
+      }, flashDurations[index]));
+    };
+
+    runFlash(0);
+
+    return () => {
+      cancelled = true;
+      for (const timeoutId of timeoutIds) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [selectingSchoolId]);
+  useEffect(() => {
+    if (completionPhase !== "visible" || !completionReady) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      setCompletionPhase("exit");
+
+      window.setTimeout(() => {
+        if (schoolIdInputRef.current && schoolFormRef.current && selectingSchoolId) {
+          schoolIdInputRef.current.value = selectingSchoolId;
+          schoolFormRef.current.requestSubmit();
+        }
+      }, 420);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [completionPhase, completionReady, selectingSchoolId]);
+  useEffect(() => {
+    if (
+      view !== "school" ||
+      filteredSchools.length === 0 ||
+      visibleActiveSchoolIndex === null
+    ) {
+      return;
+    }
+
+    activeSchoolRowRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [filteredSchools.length, view, visibleActiveSchoolIndex]);
 
   const firstName = fullName.split(" ").filter(Boolean)[0] ?? "there";
 
+  function handleSchoolQueryChange(value: string) {
+    const nextQuery = value.trim().toLowerCase();
+    const previousFirstId = previousFirstSuggestionIdRef.current;
+    const nextFirstId =
+      nextQuery === ""
+        ? null
+        : schools.find((school) => school.name.toLowerCase().startsWith(nextQuery))
+            ?.id ??
+          schools.find((school) => {
+            const haystack = `${school.name} ${school.location ?? ""}`.toLowerCase();
+            return haystack.includes(nextQuery);
+          })?.id ??
+          null;
+
+    if (previousFirstId && nextFirstId && previousFirstId !== nextFirstId) {
+      const previousSchool = schools.find((school) => school.id === previousFirstId);
+      const nextSchool = schools.find((school) => school.id === nextFirstId);
+
+      if (previousSchool && nextSchool) {
+        setSuggestionDirection(
+          previousSchool.name.localeCompare(nextSchool.name) < 0 ? "up" : "down",
+        );
+      }
+    }
+
+    previousFirstSuggestionIdRef.current = nextFirstId;
+    setActiveSchoolIndex(null);
+    setSchoolQuery(value);
+  }
+
+  function handleSchoolSelect(schoolId: string) {
+    if (selectingSchoolId) {
+      return;
+    }
+
+    setCompletionReady(false);
+    setSelectionFlashTick(0);
+    setSelectingSchoolId(schoolId);
+  }
+
   function switchView(nextView: "reason" | "school") {
-    setPanelTransition(true);
+    setPanelPhase("exit");
     window.setTimeout(() => {
       setView(nextView);
-    }, 220);
+      setPanelPhase("enter");
+    }, 260);
   }
 
   return (
@@ -94,137 +227,111 @@ export default function SignUpView({
       className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col">
-        <div className="relative min-h-[34rem] sm:min-h-[38rem]">
+        <div className="mx-auto min-h-[34rem] w-full max-w-5xl px-2 pt-16 sm:min-h-[38rem] sm:pt-24">
           <section
-            className={`absolute inset-0 flex items-center justify-center px-2 text-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${introFadingOut ? "-translate-y-8 scale-[0.985]" : "translate-y-0 scale-100"}`}
-          >
-            <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Hi <span className="font-semibold">{firstName}</span>, we&apos;re{" "}
-              <span className="font-semibold">thrilled</span> to have you!
-            </h1>
-          </section>
-
-          <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible && view === "reason"
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              !introVisible && view === "reason"
-                ? "translate-x-0 scale-100"
-                : "-translate-x-10 scale-[0.985]"
-            } ${
-              !introVisible && view === "school" && panelTransition
-                ? "-translate-x-8 opacity-0"
-                : ""
+            className={`sign-up-panel mx-auto flex w-full max-w-5xl flex-col ${
+              completionPhase !== "hidden"
+                ? "pointer-events-none opacity-0 blur-sm"
+                : panelPhase === "enter"
+                ? "opacity-0 blur-sm"
+                : panelPhase === "exit"
+                  ? "opacity-0 blur-sm"
+                  : "opacity-100 blur-0"
             }`}
           >
-            <h1 className="max-w-4xl text-center text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Tell us a little bit more about what you will Note
-            </h1>
-
-            <div className="mt-14 grid w-full gap-8 sm:grid-cols-2">
-              {reasonOptions.map((reason) => (
-                <button
-                  key={reason.label}
-                  type="button"
-                  onClick={() => {
-                    setSelectedReason(reason.label);
-                    switchView("school");
-                  }}
-                  className={`flex min-h-[10.5rem] items-center justify-center rounded-[1.2rem] px-8 text-[2rem] font-medium tracking-[-0.04em] text-white transition duration-500 ease-out hover:scale-[1.01] ${reason.color}`}
-                >
-                  {reason.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible && view === "school"
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              !introVisible && view === "school"
-                ? "translate-x-0 scale-100"
-                : "translate-x-10 scale-[0.985]"
-            } ${
-              !introVisible && view === "reason" && panelTransition
-                ? "translate-x-8 opacity-0"
-                : ""
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setSchoolQuery("");
-                switchView("reason");
-              }}
-              className="w-fit text-sm uppercase tracking-[0.22em] text-black/40 transition hover:text-black"
-            >
-              ← Back
-            </button>
-
-            <h1 className="mt-6 text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.3rem]">
-              Great. Choose your school.
-            </h1>
-
-            <form action={completeSchoolSelection} className="mt-12">
-              <input type="hidden" name="reason" value={selectedReason ?? ""} />
-
-              <input
-                value={schoolQuery}
-                onChange={(event) => setSchoolQuery(event.target.value)}
-                placeholder="Search for your school"
-                className="w-full border-b border-black/20 pb-4 text-[1.6rem] outline-none placeholder:text-black/25"
+            {view === "reason" ? (
+              <ReasonView
+                onSelectReason={(reason) => {
+                  setSelectedReason(reason);
+                  switchView("school");
+                }}
               />
+            ) : (
+              <SchoolView
+                activeSchoolIndex={visibleActiveSchoolIndex}
+                activeSchoolRowRef={activeSchoolRowRef}
+                autocompleteSuffix={autocompleteSuffix}
+                filteredSchools={filteredSchools}
+                firstName={firstName}
+                onHoverSchool={(index) => {
+                  if (!selectingSchoolId) {
+                    setActiveSchoolIndex(index);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (selectingSchoolId) {
+                    return;
+                  }
 
-              <div className="mt-8 max-h-[28rem] overflow-y-auto">
-                {schoolQuery.trim() === "" ? (
-                  <p className="text-base text-black/40">
-                    Start typing to search across all imported schools.
-                  </p>
-                ) : null}
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveSchoolIndex((current) => {
+                      if (filteredSchools.length === 0) {
+                        return null;
+                      }
 
-                {schoolQuery.trim() !== "" && filteredSchools.length === 0 ? (
-                  <p className="text-base text-black/40">
-                    No schools matched that search.
-                  </p>
-                ) : null}
+                      if (current === null) {
+                        return 0;
+                      }
 
-                {filteredSchools.map((school) => (
-                  <button
-                    key={school.id}
-                    type="submit"
-                    name="schoolId"
-                    value={school.id}
-                    className="flex w-full items-start justify-between gap-6 border-b border-black/10 py-5 text-left transition hover:border-black/25"
-                  >
-                    <span>
-                      <span className="block text-[1.45rem] leading-none tracking-[-0.03em] text-black">
-                        {school.name}
-                      </span>
-                      {school.location ? (
-                        <span className="mt-2 block text-sm text-black/40">
-                          {school.location}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="pt-1 text-sm uppercase tracking-[0.22em] text-black/30">
-                      Select
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </form>
+                      return Math.min(current + 1, filteredSchools.length - 1);
+                    });
+                    return;
+                  }
+
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveSchoolIndex((current) => {
+                      if (filteredSchools.length === 0) {
+                        return null;
+                      }
+
+                      if (current === null) {
+                        return filteredSchools.length - 1;
+                      }
+
+                      return Math.max(current - 1, 0);
+                    });
+                    return;
+                  }
+
+                  if (event.key !== "Enter") {
+                    return;
+                  }
+
+                  const activeSchool =
+                    (visibleActiveSchoolIndex === null
+                      ? null
+                      : filteredSchools[visibleActiveSchoolIndex]) ?? topSchool;
+
+                  if (!activeSchool) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  handleSchoolSelect(activeSchool.id);
+                }}
+                onSchoolQueryChange={handleSchoolQueryChange}
+                onSelectSchool={handleSchoolSelect}
+                schoolFormRef={schoolFormRef}
+                schoolIdInputRef={schoolIdInputRef}
+                schoolInputRef={schoolInputRef}
+                schoolQuery={schoolQuery}
+                schoolsCount={schools.length}
+                selectedReason={selectedReason}
+                selectingSchoolId={selectingSchoolId}
+                selectionFlashTick={selectionFlashTick}
+                suggestionDirection={suggestionDirection}
+              />
+            )}
           </section>
         </div>
       </div>
+      <CompletionOverlay
+        onTypingComplete={() => setCompletionReady(true)}
+        phase={completionPhase}
+      />
+      <SignUpStyles />
     </main>
   );
 }

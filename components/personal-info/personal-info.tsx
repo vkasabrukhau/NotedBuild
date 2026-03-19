@@ -21,60 +21,30 @@ export default function PersonalInfoView({
   fullName,
 }: PersonalInfoViewProps) {
   const [age, setAge] = useState("");
-  const [introVisible, setIntroVisible] = useState(true);
-  const [introFadingOut, setIntroFadingOut] = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
 
   useEffect(() => {
-    const fadeTimer = window.setTimeout(() => {
-      setIntroFadingOut(true);
-    }, 3000);
-
-    const hideTimer = window.setTimeout(() => {
-      setIntroVisible(false);
-    }, 4000);
+    const timer = window.setTimeout(() => {
+      setPanelVisible(true);
+    }, 40);
 
     return () => {
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(hideTimer);
+      window.clearTimeout(timer);
     };
   }, []);
-
-  const firstName = fullName.split(" ").filter(Boolean)[0] ?? "there";
 
   return (
     <main
       className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col">
-        <div className="relative min-h-[34rem] sm:min-h-[38rem]">
-          <section
-            className={`absolute inset-0 flex items-center justify-center px-2 text-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              introFadingOut
-                ? "-translate-y-8 scale-[0.985]"
-                : "translate-y-0 scale-100"
-            }`}
-          >
-            <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Hi <span className="font-semibold">{firstName}</span>, let&apos;s
-              set up the rest.
-            </h1>
-          </section>
-
-          <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              !introVisible
-                ? "translate-x-0 scale-100"
-                : "-translate-x-10 scale-[0.985]"
-            }`}
-          >
+        <div
+          className={`mx-auto min-h-[34rem] w-full max-w-5xl px-2 pt-16 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] sm:min-h-[38rem] sm:pt-24 ${
+            panelVisible
+              ? "translate-y-0 scale-100 opacity-100 blur-0"
+              : "translate-y-3 scale-[0.992] opacity-0 blur-sm"
+          }`}
+        >
             <h1 className="max-w-4xl text-center text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
               Tell us your age.
             </h1>
@@ -121,7 +91,6 @@ export default function PersonalInfoView({
                 Continue
               </button>
             </form>
-          </section>
         </div>
       </div>
     </main>

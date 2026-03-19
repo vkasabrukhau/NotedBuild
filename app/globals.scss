@@ -133,6 +133,23 @@ body {
   }
 }
 
+@keyframes saved-toast-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.72) rotate(-10deg);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.08) rotate(0deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes folder-skeleton-shimmer {
   from {
     transform: translateX(-100%);
@@ -171,6 +188,15 @@ body {
 
 .folder-saved-toast {
   animation: folder-saved-toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.saved-toast {
+  animation: folder-saved-toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.saved-toast-check {
+  display: block;
+  animation: saved-toast-check-pop 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes note-view-enter-from-grid {

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Quicksand } from "next/font/google";
+import { completeSchoolSelection } from "@/app/actions/complete-school-selection";
 
 type SchoolOption = {
   id: string;
@@ -13,98 +15,215 @@ type SignUpViewProps = {
   schools?: SchoolOption[];
 };
 
-const usageReasons = [
-  "Journaling",
-  "School notes",
-  "Task management",
-  "Creative writing",
+const quicksand = Quicksand({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const reasonOptions = [
+  { label: "Work", color: "bg-[#df7b5e]" },
+  { label: "School", color: "bg-[#4a4c71]" },
+  { label: "Socializing", color: "bg-[#88b49c]" },
+  { label: "Other", color: "bg-[#f3cf8b]" },
 ];
 
 export default function SignUpView({
   fullName = "there",
   schools = [],
 }: SignUpViewProps) {
-  const [selectedReason, setSelectedReason] = useState("");
-  const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [introVisible, setIntroVisible] = useState(true);
+  const [introFadingOut, setIntroFadingOut] = useState(false);
+  const [schoolQuery, setSchoolQuery] = useState("");
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [view, setView] = useState<"reason" | "school">("reason");
+  const [panelTransition, setPanelTransition] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = window.setTimeout(() => {
+      setIntroFadingOut(true);
+    }, 3000);
+
+    const hideTimer = window.setTimeout(() => {
+      setIntroVisible(false);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, []);
+
+  const filteredSchools = useMemo(() => {
+    const query = schoolQuery.trim().toLowerCase();
+
+    if (!query) {
+      return [];
+    }
+
+    return schools.filter((school) => {
+      const haystack = `${school.name} ${school.location ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [schoolQuery, schools]);
+
+  useEffect(() => {
+    if (!panelTransition) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setPanelTransition(false);
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [panelTransition]);
+
+  const firstName = fullName.split(" ").filter(Boolean)[0] ?? "there";
+
+  function switchView(nextView: "reason" | "school") {
+    setPanelTransition(true);
+    window.setTimeout(() => {
+      setView(nextView);
+    }, 220);
+  }
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-[linear-gradient(180deg,#f7f4ff_0%,#eef2ff_50%,#f8fafc_100%)] px-6 py-16 text-slate-950">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.10)]">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-400">
-            Step 2
-          </p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            Nice, {fullName}. What is Notely for?
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            Choose a reason for using Notely and pick your school.
-          </p>
-        </section>
+    <main
+      className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
+    >
+      <div className="mx-auto flex w-full max-w-6xl flex-col">
+        <div className="relative min-h-[34rem] sm:min-h-[38rem]">
+          <section
+            className={`absolute inset-0 flex items-center justify-center px-2 text-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              introVisible
+                ? "opacity-100 blur-0"
+                : "pointer-events-none opacity-0 blur-sm"
+            } ${introFadingOut ? "-translate-y-8 scale-[0.985]" : "translate-y-0 scale-100"}`}
+          >
+            <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
+              Hi <span className="font-semibold">{firstName}</span>, we&apos;re{" "}
+              <span className="font-semibold">thrilled</span> to have you!
+            </h1>
+          </section>
 
-        <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
-          <article className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              Why are you using Notely?
-            </p>
-            <div className="mt-4 grid gap-3">
-              {usageReasons.map((reason) => {
-                const isSelected = selectedReason === reason;
+          <section
+            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
+              !introVisible && view === "reason"
+                ? "opacity-100 blur-0"
+                : "pointer-events-none opacity-0 blur-sm"
+            } ${
+              !introVisible && view === "reason"
+                ? "translate-x-0 scale-100"
+                : "-translate-x-10 scale-[0.985]"
+            } ${
+              !introVisible && view === "school" && panelTransition
+                ? "-translate-x-8 opacity-0"
+                : ""
+            }`}
+          >
+            <h1 className="max-w-4xl text-center text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
+              Tell us a little bit more about what you will Note
+            </h1>
 
-                return (
-                  <button
-                    key={reason}
-                    type="button"
-                    onClick={() => setSelectedReason(reason)}
-                    className={`rounded-2xl border px-4 py-4 text-left text-sm transition ${
-                      isSelected
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
-                    }`}
-                  >
-                    {reason}
-                  </button>
-                );
-              })}
-            </div>
-          </article>
-
-          <article className="rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <label
-              htmlFor="schoolId"
-              className="text-sm font-medium text-slate-500"
-            >
-              Pick your school
-            </label>
-            <select
-              id="schoolId"
-              value={selectedSchoolId}
-              onChange={(event) => setSelectedSchoolId(event.target.value)}
-              className="mt-4 h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none focus:border-slate-400"
-            >
-              <option value="">Select a school</option>
-              {schools.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.location
-                    ? `${school.name} - ${school.location}`
-                    : school.name}
-                </option>
+            <div className="mt-14 grid w-full gap-8 sm:grid-cols-2">
+              {reasonOptions.map((reason) => (
+                <button
+                  key={reason.label}
+                  type="button"
+                  onClick={() => {
+                    setSelectedReason(reason.label);
+                    switchView("school");
+                  }}
+                  className={`flex min-h-[10.5rem] items-center justify-center rounded-[1.2rem] px-8 text-[2rem] font-medium tracking-[-0.04em] text-white transition duration-500 ease-out hover:scale-[1.01] ${reason.color}`}
+                >
+                  {reason.label}
+                </button>
               ))}
-            </select>
-
-            <div className="mt-6 rounded-2xl bg-slate-100 p-4 text-sm leading-6 text-slate-600">
-              <p>
-                <strong>Selected reason:</strong>{" "}
-                {selectedReason || "Nothing chosen yet"}
-              </p>
-              <p className="mt-2">
-                <strong>Selected school:</strong>{" "}
-                {schools.find((school) => school.id === selectedSchoolId)?.name ??
-                  "No school chosen yet"}
-              </p>
             </div>
-          </article>
-        </section>
+          </section>
+
+          <section
+            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
+              !introVisible && view === "school"
+                ? "opacity-100 blur-0"
+                : "pointer-events-none opacity-0 blur-sm"
+            } ${
+              !introVisible && view === "school"
+                ? "translate-x-0 scale-100"
+                : "translate-x-10 scale-[0.985]"
+            } ${
+              !introVisible && view === "reason" && panelTransition
+                ? "translate-x-8 opacity-0"
+                : ""
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setSchoolQuery("");
+                switchView("reason");
+              }}
+              className="w-fit text-sm uppercase tracking-[0.22em] text-black/40 transition hover:text-black"
+            >
+              ← Back
+            </button>
+
+            <h1 className="mt-6 text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.3rem]">
+              Great. Choose your school.
+            </h1>
+
+            <form action={completeSchoolSelection} className="mt-12">
+              <input type="hidden" name="reason" value={selectedReason ?? ""} />
+
+              <input
+                value={schoolQuery}
+                onChange={(event) => setSchoolQuery(event.target.value)}
+                placeholder="Search for your school"
+                className="w-full border-b border-black/20 pb-4 text-[1.6rem] outline-none placeholder:text-black/25"
+              />
+
+              <div className="mt-8 max-h-[28rem] overflow-y-auto">
+                {schoolQuery.trim() === "" ? (
+                  <p className="text-base text-black/40">
+                    Start typing to search across all imported schools.
+                  </p>
+                ) : null}
+
+                {schoolQuery.trim() !== "" && filteredSchools.length === 0 ? (
+                  <p className="text-base text-black/40">
+                    No schools matched that search.
+                  </p>
+                ) : null}
+
+                {filteredSchools.map((school) => (
+                  <button
+                    key={school.id}
+                    type="submit"
+                    name="schoolId"
+                    value={school.id}
+                    className="flex w-full items-start justify-between gap-6 border-b border-black/10 py-5 text-left transition hover:border-black/25"
+                  >
+                    <span>
+                      <span className="block text-[1.45rem] leading-none tracking-[-0.03em] text-black">
+                        {school.name}
+                      </span>
+                      {school.location ? (
+                        <span className="mt-2 block text-sm text-black/40">
+                          {school.location}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="pt-1 text-sm uppercase tracking-[0.22em] text-black/30">
+                      Select
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </form>
+          </section>
+        </div>
       </div>
     </main>
   );

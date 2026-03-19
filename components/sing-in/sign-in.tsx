@@ -9,3 +9,5 @@ export default function SignInView() {
     </main>
   );
 }
+  return <SignIn routing="hash" />;
+}

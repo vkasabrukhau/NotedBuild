@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import CompletionOverlay from "@/components/sign-up/completion-overlay";
 import ReasonView from "@/components/sign-up/reason-view";
 import SchoolView from "@/components/sign-up/school-view";
@@ -33,6 +34,7 @@ export default function SignUpView({
   const schoolIdInputRef = useRef<HTMLInputElement | null>(null);
   const schoolInputRef = useRef<HTMLInputElement | null>(null);
   const activeSchoolRowRef = useRef<HTMLButtonElement | null>(null);
+  const router = useRouter();
 
   const normalizedQuery = schoolQuery.trim().toLowerCase();
   const matchingSchools =
@@ -61,6 +63,9 @@ export default function SignUpView({
       ? null
       : Math.min(activeSchoolIndex, filteredSchools.length - 1);
 
+  useEffect(() => {
+    router.prefetch("/");
+  }, [router]);
   useEffect(() => {
     if (panelPhase !== "enter") {
       return;
@@ -148,7 +153,7 @@ export default function SignUpView({
           schoolIdInputRef.current.value = selectingSchoolId;
           schoolFormRef.current.requestSubmit();
         }
-      }, 420);
+      }, 60);
     };
 
     window.addEventListener("keydown", handleKeyDown);

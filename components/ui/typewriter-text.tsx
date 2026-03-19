@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type TypewriterTextProps = {
   as?: "h1" | "h2" | "h3" | "p" | "span";
@@ -24,10 +24,26 @@ export default function TypewriterText({
   text,
 }: TypewriterTextProps) {
   const [visibleLength, setVisibleLength] = useState(0);
+  const onCompleteRef = useRef(onComplete);
+  const hasCompletedRef = useRef(false);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     let cancelled = false;
     let timeoutId = 0;
+    hasCompletedRef.current = false;
+
+    const complete = () => {
+      if (hasCompletedRef.current) {
+        return;
+      }
+
+      hasCompletedRef.current = true;
+      onCompleteRef.current?.();
+    };
 
     const typeNext = (index: number) => {
       timeoutId = window.setTimeout(() => {
@@ -39,7 +55,7 @@ export default function TypewriterText({
         setVisibleLength(nextLength);
 
         if (nextLength >= text.length) {
-          onComplete?.();
+          complete();
           return;
         }
 
@@ -55,7 +71,7 @@ export default function TypewriterText({
       setVisibleLength(0);
 
       if (text.length === 0) {
-        onComplete?.();
+        complete();
         return;
       }
 
@@ -66,21 +82,27 @@ export default function TypewriterText({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [characterDelay, onComplete, startDelay, text]);
+  }, [characterDelay, startDelay, text]);
 
   const Component = as;
 
   return (
     <Component className={className}>
-      {text.slice(0, visibleLength)}
-      {showCursor ? (
-        <span
-          className={`typewriter-cursor ml-[0.08em] inline-block ${cursorClassName}`.trim()}
-          aria-hidden="true"
-        >
-          |
+      <span className="relative inline-grid text-left">
+        <span className="invisible col-start-1 row-start-1" aria-hidden="true">
+          {text}
+          <span className="ml-[0.08em] inline-block">|</span>
         </span>
-      ) : null}
+        <span className="col-start-1 row-start-1">
+          {text.slice(0, visibleLength)}
+          <span
+            className={`ml-[0.08em] inline-block ${showCursor ? "typewriter-cursor" : "invisible"} ${cursorClassName}`.trim()}
+            aria-hidden="true"
+          >
+            |
+          </span>
+        </span>
+      </span>
     </Component>
   );
 }

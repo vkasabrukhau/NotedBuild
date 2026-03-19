@@ -97,7 +97,7 @@ export default function SignUpStyles() {
 
       .school-results-scroll {
         overflow-y: auto;
-        padding: 1rem 1rem 1rem 1.25rem;
+        padding: 1rem 1.25rem;
         scrollbar-gutter: stable;
       }
 

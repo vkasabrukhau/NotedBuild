@@ -21,20 +21,20 @@ export function calculateAgeFromBirthdate(
     return null;
   }
 
-  const candidate = new Date(Date.UTC(year, month - 1, day));
+  const candidate = new Date(year, month - 1, day);
 
   if (
     Number.isNaN(candidate.getTime()) ||
-    candidate.getUTCFullYear() !== year ||
-    candidate.getUTCMonth() !== month - 1 ||
-    candidate.getUTCDate() !== day
+    candidate.getFullYear() !== year ||
+    candidate.getMonth() !== month - 1 ||
+    candidate.getDate() !== day
   ) {
     return null;
   }
 
-  const currentYear = now.getUTCFullYear();
-  const currentMonth = now.getUTCMonth() + 1;
-  const currentDay = now.getUTCDate();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentDay = now.getDate();
 
   let age = currentYear - year;
 

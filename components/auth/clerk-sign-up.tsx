@@ -47,6 +47,41 @@ function digitsOnly(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
 }
 
+function buildBirthdate(monthText: string, dayText: string, yearText: string) {
+  if (monthText.length !== 2 || dayText.length !== 2 || yearText.length !== 4) {
+    return null;
+  }
+
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+  const year = Number.parseInt(yearText, 10);
+
+  if (
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    !Number.isInteger(year)
+  ) {
+    return null;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || year < 1900) {
+    return null;
+  }
+
+  const candidate = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(candidate.getTime()) ||
+    candidate.getFullYear() !== year ||
+    candidate.getMonth() !== month - 1 ||
+    candidate.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return `${yearText}-${monthText}-${dayText}`;
+}
+
 export default function ClerkSignUpView() {
   const router = useRouter();
   const { isLoaded, setActive, signUp } = useSignUp();
@@ -61,6 +96,8 @@ export default function ClerkSignUpView() {
   const [verificationCode, setVerificationCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const detailsFormRef = useRef<HTMLFormElement | null>(null);
+  const verifyFormRef = useRef<HTMLFormElement | null>(null);
   const birthMonthRef = useRef<HTMLInputElement | null>(null);
   const birthDayRef = useRef<HTMLInputElement | null>(null);
   const birthYearRef = useRef<HTMLInputElement | null>(null);
@@ -96,10 +133,7 @@ export default function ClerkSignUpView() {
     enabled: verificationCode.trim() === "",
     phrases: VERIFICATION_PLACEHOLDERS,
   });
-  const birthdate =
-    birthMonth.length === 2 && birthDay.length === 2 && birthYear.length === 4
-      ? `${birthYear}-${birthMonth}-${birthDay}`
-      : "";
+  const birthdate = buildBirthdate(birthMonth, birthDay, birthYear) ?? "";
   const isDetailsComplete =
     firstName.trim() !== "" &&
     lastName.trim() !== "" &&
@@ -111,6 +145,31 @@ export default function ClerkSignUpView() {
     "auth-input-surface w-full rounded-[1.75rem] border border-black/10 bg-black/[0.03] px-5 py-4 text-[1.2rem] text-black outline-none sm:text-[1.35rem]";
   const birthInputClassName =
     "auth-input-surface w-full rounded-[1.75rem] border border-black/10 bg-black/[0.03] px-5 py-4 text-center text-[1.2rem] text-black outline-none sm:text-[1.35rem]";
+
+  function handleFormEnter(
+    event: React.KeyboardEvent<HTMLFormElement>,
+    isComplete: boolean,
+  ) {
+    if (event.key !== "Enter" || event.shiftKey || isSubmitting) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (
+      target instanceof HTMLElement &&
+      target.tagName === "TEXTAREA"
+    ) {
+      return;
+    }
+
+    if (!isComplete) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.requestSubmit();
+  }
 
   async function handleDetailsSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,7 +241,7 @@ export default function ClerkSignUpView() {
       }
 
       await setActive({ session: result.createdSessionId });
-      router.push("/?step=school");
+      router.replace("/");
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -201,7 +260,12 @@ export default function ClerkSignUpView() {
               text="Let's get to know you"
             />
 
-            <form className="mt-14 space-y-5" onSubmit={handleDetailsSubmit}>
+            <form
+              ref={detailsFormRef}
+              className="mt-14 space-y-5"
+              onKeyDown={(event) => handleFormEnter(event, isDetailsComplete)}
+              onSubmit={handleDetailsSubmit}
+            >
               <div className="grid gap-6 sm:grid-cols-2">
                 <input
                   required
@@ -328,6 +392,14 @@ export default function ClerkSignUpView() {
               ) : null}
 
               <div
+                id="clerk-captcha"
+                data-cl-theme="light"
+                data-cl-size="flexible"
+                className="auth-entry overflow-hidden rounded-[1.75rem]"
+                style={{ animationDelay: "355ms" }}
+              />
+
+              <div
                 className={`auth-entry auth-guidance mt-6 w-full ${
                   isDetailsComplete ? "auth-guidance--ready text-black" : "text-black/55"
                 }`}
@@ -371,7 +443,12 @@ export default function ClerkSignUpView() {
               text="Check your email"
             />
 
-            <form className="mt-14 space-y-6" onSubmit={handleVerifySubmit}>
+            <form
+              ref={verifyFormRef}
+              className="mt-14 space-y-6"
+              onKeyDown={(event) => handleFormEnter(event, isVerifyComplete)}
+              onSubmit={handleVerifySubmit}
+            >
               <input
                 required
                 aria-label="Verification code"

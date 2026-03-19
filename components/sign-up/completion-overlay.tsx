@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CompletionPhase } from "@/components/sign-up/types";
 import TypewriterText from "@/components/ui/typewriter-text";
 
@@ -7,6 +8,46 @@ type CompletionOverlayProps = {
   onTypingComplete: () => void;
   phase: CompletionPhase;
 };
+
+function CompletionLines({
+  onTypingComplete,
+}: {
+  onTypingComplete: () => void;
+}) {
+  const [showSecondLine, setShowSecondLine] = useState(false);
+
+  return (
+    <span className="relative inline-grid">
+      <span
+        className="invisible col-start-1 row-start-1 inline-flex flex-col items-center gap-2"
+        aria-hidden="true"
+      >
+        <span>{`You're all set and ready to go.|`}</span>
+        <span>{`Press Enter to start noting.|`}</span>
+      </span>
+      <span className="col-start-1 row-start-1 inline-flex flex-col items-center gap-2">
+        <TypewriterText
+          as="span"
+          className="inline-block"
+          text="You're all set and ready to go."
+          showCursor={!showSecondLine}
+          onComplete={() => setShowSecondLine(true)}
+        />
+        {showSecondLine ? (
+          <TypewriterText
+            as="span"
+            className="inline-block"
+            text="Press Enter to start noting."
+            startDelay={90}
+            onComplete={onTypingComplete}
+          />
+        ) : (
+          <span className="h-[1em]" aria-hidden="true" />
+        )}
+      </span>
+    </span>
+  );
+}
 
 export default function CompletionOverlay({
   onTypingComplete,
@@ -19,9 +60,7 @@ export default function CompletionOverlay({
           ? "pointer-events-none opacity-0"
           : phase === "enter"
             ? "opacity-0"
-            : phase === "exit"
-              ? "opacity-0"
-              : "opacity-100"
+            : "opacity-100"
       }`}
       >
         <p
@@ -34,12 +73,7 @@ export default function CompletionOverlay({
         }`}
       >
         {phase === "visible" ? (
-          <TypewriterText
-            as="span"
-            className="inline-block"
-            text="You're all set and ready to go. Press Enter to start noting."
-            onComplete={onTypingComplete}
-          />
+          <CompletionLines onTypingComplete={onTypingComplete} />
         ) : null}
         </p>
     </div>

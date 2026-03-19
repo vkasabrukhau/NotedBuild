@@ -42,7 +42,7 @@ export default function SchoolOptionRow({
       onClick={onSelect}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`auth-button flex w-full items-start justify-between gap-6 border-b py-4 text-left transition-[transform,opacity,border-color,background-color,color,box-shadow] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+      className={`auth-button mb-3 flex w-full items-start justify-between gap-6 rounded-[1.1rem] border px-5 py-4 text-left transition-[transform,opacity,border-color,background-color,color,box-shadow] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] last:mb-0 sm:px-6 ${
         isSelecting ? "cursor-wait" : "hover:border-black/25"
       } ${
         suggestionDirection === "up"

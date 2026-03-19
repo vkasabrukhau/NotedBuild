@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import CompletionOverlay from "@/components/sign-up/completion-overlay";
-import { quicksand } from "@/components/sign-up/fonts";
 import ReasonView from "@/components/sign-up/reason-view";
 import SchoolView from "@/components/sign-up/school-view";
 import SignUpStyles from "@/components/sign-up/sign-up-styles";
@@ -223,11 +222,9 @@ export default function SignUpView({
   }
 
   return (
-    <main
-      className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
-    >
-      <div className="mx-auto flex w-full max-w-6xl flex-col">
-        <div className="mx-auto min-h-[34rem] w-full max-w-5xl px-2 pt-16 sm:min-h-[38rem] sm:pt-24">
+    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-white px-6 py-8 text-[#2b2725]">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-center">
+        <div className="mx-auto w-full max-w-5xl px-2">
           <section
             className={`sign-up-panel mx-auto flex w-full max-w-5xl flex-col ${
               completionPhase !== "hidden"

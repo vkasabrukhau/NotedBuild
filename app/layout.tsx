@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import {
   ClerkProvider,
   Show,
-  SignInButton,
   UserButton,
 } from "@clerk/nextjs";
 import { Doto } from "next/font/google";
 import "./globals.scss";
 
 const doto = Doto({
-  weight: "400",
+  weight: ["400", "600", "700"],
   subsets: ["latin"],
   variable: "--font-doto",
 });
@@ -29,19 +27,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${doto.variable} antialiased`}>
         <ClerkProvider>
-          <header className="flex h-16 items-center justify-end gap-4 p-4">
-            <Show when="signed-out">
-              <SignInButton />
-              <Link href="/sign-up">
-                <span className="inline-flex items-center bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                  Sign Up
-                </span>
-              </Link>
-            </Show>
-            <Show when="signed-in">
+          <Show when="signed-in">
+            <header className="flex h-16 items-center justify-end gap-4 p-4">
               <UserButton />
-            </Show>
-          </header>
+            </header>
+          </Show>
           {children}
         </ClerkProvider>
       </body>

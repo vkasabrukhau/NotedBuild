@@ -1,16 +1,29 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import { Quicksand } from "next/font/google";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSignUp } from "@clerk/nextjs/legacy";
+import SignUpStyles from "@/components/sign-up/sign-up-styles";
+import TypewriterText from "@/components/ui/typewriter-text";
+import { useTypewriterPlaceholder } from "@/hooks/use-typewriter-placeholder";
 import { calculateAgeFromBirthdate } from "@/lib/birthdate";
 
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
+const FIRST_NAME_PLACEHOLDERS = ["First name", "Ada", "Maya", "Jordan"];
+const LAST_NAME_PLACEHOLDERS = ["Last name", "Lovelace", "Patel", "Kim"];
+const BIRTH_MONTH_PLACEHOLDERS = ["MM"];
+const BIRTH_DAY_PLACEHOLDERS = ["DD"];
+const BIRTH_YEAR_PLACEHOLDERS = ["YYYY"];
+const EMAIL_PLACEHOLDERS = [
+  "Email address",
+  "maya@school.edu",
+  "jordan@example.com",
+];
+const PASSWORD_PLACEHOLDERS = [
+  "Choose a password",
+  "Use 8+ characters",
+  "Add a strong password",
+];
+const VERIFICATION_PLACEHOLDERS = ["Verification code", "123456"];
 
 function getErrorMessage(error: unknown): string {
   if (
@@ -30,6 +43,10 @@ function getErrorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+function digitsOnly(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
 export default function ClerkSignUpView() {
   const router = useRouter();
   const { isLoaded, setActive, signUp } = useSignUp();
@@ -38,10 +55,62 @@ export default function ClerkSignUpView() {
   const [lastName, setLastName] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
-  const [birthdate, setBirthdate] = useState("");
+  const [birthMonth, setBirthMonth] = useState("");
+  const [birthDay, setBirthDay] = useState("");
+  const [birthYear, setBirthYear] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const birthMonthRef = useRef<HTMLInputElement | null>(null);
+  const birthDayRef = useRef<HTMLInputElement | null>(null);
+  const birthYearRef = useRef<HTMLInputElement | null>(null);
+  const firstNamePlaceholder = useTypewriterPlaceholder({
+    enabled: firstName.trim() === "",
+    phrases: FIRST_NAME_PLACEHOLDERS,
+  });
+  const lastNamePlaceholder = useTypewriterPlaceholder({
+    enabled: lastName.trim() === "",
+    phrases: LAST_NAME_PLACEHOLDERS,
+  });
+  const birthMonthPlaceholder = useTypewriterPlaceholder({
+    enabled: birthMonth.trim() === "",
+    phrases: BIRTH_MONTH_PLACEHOLDERS,
+  });
+  const birthDayPlaceholder = useTypewriterPlaceholder({
+    enabled: birthDay.trim() === "",
+    phrases: BIRTH_DAY_PLACEHOLDERS,
+  });
+  const birthYearPlaceholder = useTypewriterPlaceholder({
+    enabled: birthYear.trim() === "",
+    phrases: BIRTH_YEAR_PLACEHOLDERS,
+  });
+  const emailPlaceholder = useTypewriterPlaceholder({
+    enabled: emailAddress.trim() === "",
+    phrases: EMAIL_PLACEHOLDERS,
+  });
+  const passwordPlaceholder = useTypewriterPlaceholder({
+    enabled: password.trim() === "",
+    phrases: PASSWORD_PLACEHOLDERS,
+  });
+  const verificationPlaceholder = useTypewriterPlaceholder({
+    enabled: verificationCode.trim() === "",
+    phrases: VERIFICATION_PLACEHOLDERS,
+  });
+  const birthdate =
+    birthMonth.length === 2 && birthDay.length === 2 && birthYear.length === 4
+      ? `${birthYear}-${birthMonth}-${birthDay}`
+      : "";
+  const isDetailsComplete =
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
+    birthdate.trim() !== "" &&
+    emailAddress.trim() !== "" &&
+    password.trim() !== "";
+  const isVerifyComplete = verificationCode.trim() !== "";
+  const inputClassName =
+    "auth-input-surface w-full rounded-[1.75rem] border border-black/10 bg-black/[0.03] px-5 py-4 text-[1.2rem] text-black outline-none sm:text-[1.35rem]";
+  const birthInputClassName =
+    "auth-input-surface w-full rounded-[1.75rem] border border-black/10 bg-black/[0.03] px-5 py-4 text-center text-[1.2rem] text-black outline-none sm:text-[1.35rem]";
 
   async function handleDetailsSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,151 +191,246 @@ export default function ClerkSignUpView() {
   }
 
   return (
-    <main
-      className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-12 text-[#2b2725] ${quicksand.className}`}
-    >
+    <main className="flex min-h-screen items-center justify-center bg-white px-6 py-12 text-[#2b2725]">
       <div className="mx-auto w-full max-w-3xl">
         {step === "details" ? (
           <>
-            <h1 className="max-w-3xl text-[2.5rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.8rem]">
-              Create your account.
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg text-black/50">
-              First name, last name, and birthdate are required at sign up.
-            </p>
+            <TypewriterText
+              as="h1"
+              className="max-w-3xl text-[2.5rem] font-semibold leading-tight tracking-[-0.05em] text-black sm:text-[3.8rem]"
+              text="Let's get to know you"
+            />
 
-            <form className="mt-14 space-y-6" onSubmit={handleDetailsSubmit}>
+            <form className="mt-14 space-y-5" onSubmit={handleDetailsSubmit}>
               <div className="grid gap-6 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                    First name
-                  </span>
-                  <input
-                    required
-                    value={firstName}
-                    onChange={(event) => setFirstName(event.target.value)}
-                    className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
-                  />
-                </label>
+                <input
+                  required
+                  aria-label="First name"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
+                  placeholder={firstNamePlaceholder}
+                  className={`${inputClassName} auth-entry`}
+                  style={{ animationDelay: "70ms" }}
+                />
 
-                <label className="block">
-                  <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                    Last name
-                  </span>
-                  <input
-                    required
-                    value={lastName}
-                    onChange={(event) => setLastName(event.target.value)}
-                    className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
-                  />
-                </label>
+                <input
+                  required
+                  aria-label="Last name"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
+                  placeholder={lastNamePlaceholder}
+                  className={`${inputClassName} auth-entry`}
+                  style={{ animationDelay: "130ms" }}
+                />
               </div>
 
-              <label className="block">
-                <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                  Birthdate
-                </span>
+              <div
+                className="auth-entry grid grid-cols-[0.95fr_0.95fr_1.1fr] gap-4"
+                style={{ animationDelay: "190ms" }}
+              >
                 <input
+                  ref={birthMonthRef}
                   required
-                  type="date"
-                  value={birthdate}
-                  onChange={(event) => setBirthdate(event.target.value)}
-                  max={new Date().toISOString().slice(0, 10)}
-                  className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
-                />
-              </label>
+                  aria-label="Birth month"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={birthMonth}
+                  onChange={(event) => {
+                    const nextValue = digitsOnly(event.target.value, 2);
+                    setBirthMonth(nextValue);
 
-              <label className="block">
-                <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                  Email
-                </span>
-                <input
-                  required
-                  type="email"
-                  value={emailAddress}
-                  onChange={(event) => setEmailAddress(event.target.value)}
-                  className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
+                    if (nextValue.length === 2) {
+                      birthDayRef.current?.focus();
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Backspace" && birthMonth.length === 0) {
+                      event.preventDefault();
+                    }
+                  }}
+                  placeholder={birthMonthPlaceholder}
+                  className={birthInputClassName}
                 />
-              </label>
 
-              <label className="block">
-                <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                  Password
-                </span>
                 <input
+                  ref={birthDayRef}
                   required
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
+                  aria-label="Birth day"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={birthDay}
+                  onChange={(event) => {
+                    const nextValue = digitsOnly(event.target.value, 2);
+                    setBirthDay(nextValue);
+
+                    if (nextValue.length === 2) {
+                      birthYearRef.current?.focus();
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Backspace" && birthDay.length === 0) {
+                      birthMonthRef.current?.focus();
+                    }
+                  }}
+                  placeholder={birthDayPlaceholder}
+                  className={birthInputClassName}
                 />
-              </label>
+
+                <input
+                  ref={birthYearRef}
+                  required
+                  aria-label="Birth year"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={birthYear}
+                  onChange={(event) => {
+                    setBirthYear(digitsOnly(event.target.value, 4));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Backspace" && birthYear.length === 0) {
+                      birthDayRef.current?.focus();
+                    }
+                  }}
+                  placeholder={birthYearPlaceholder}
+                  className={birthInputClassName}
+                />
+              </div>
+
+              <input
+                required
+                aria-label="Email address"
+                type="email"
+                value={emailAddress}
+                onChange={(event) => setEmailAddress(event.target.value)}
+                placeholder={emailPlaceholder}
+                className={`${inputClassName} auth-entry`}
+                style={{ animationDelay: "250ms" }}
+              />
+
+              <input
+                required
+                aria-label="Password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={passwordPlaceholder}
+                className={`${inputClassName} auth-entry`}
+                style={{ animationDelay: "310ms" }}
+              />
 
               {errorMessage ? (
-                <p className="text-sm text-red-600">{errorMessage}</p>
+                <p
+                  className="auth-entry text-sm text-red-600"
+                  style={{ animationDelay: "340ms" }}
+                >
+                  {errorMessage}
+                </p>
               ) : null}
 
-              <div className="flex items-center justify-between gap-4 pt-4">
-                <Link className="text-sm uppercase tracking-[0.22em] text-black/40 hover:text-black" href="/">
-                  Sign in instead
-                </Link>
-                <button
-                  disabled={!isLoaded || isSubmitting}
-                  type="submit"
-                  className="rounded-full border border-black px-6 py-3 text-sm uppercase tracking-[0.22em] text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:border-black/15 disabled:text-black/25"
-                >
-                  {isSubmitting ? "Creating" : "Continue"}
-                </button>
+              <div
+                className={`auth-entry auth-guidance mt-6 w-full ${
+                  isDetailsComplete ? "auth-guidance--ready text-black" : "text-black/55"
+                }`}
+                style={{ animationDelay: "370ms" }}
+              >
+                <div className="flex items-center justify-between gap-6">
+                  <span className="auth-guidance-line" />
+                  <span className="auth-guidance-dot" />
+                  <p
+                    className="auth-guidance-text flex-1 text-center text-sm uppercase tracking-[0.22em]"
+                  >
+                    {isDetailsComplete
+                      ? (
+                        <>
+                          Press <span className="font-bold text-base">Enter</span>{" "}
+                          to continue
+                        </>
+                      )
+                      : "Finish every field before moving on"}
+                  </p>
+                  <span className="auth-guidance-dot" />
+                  <span className="auth-guidance-line" />
+                </div>
               </div>
+              <button
+                aria-hidden="true"
+                tabIndex={-1}
+                disabled={!isLoaded || isSubmitting}
+                type="submit"
+                className="sr-only"
+              >
+                Submit
+              </button>
             </form>
           </>
         ) : (
           <>
-            <h1 className="max-w-3xl text-[2.5rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.8rem]">
-              Check your email.
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg text-black/50">
-              Enter the verification code Clerk sent to {emailAddress}.
-            </p>
+            <TypewriterText
+              as="h1"
+              className="max-w-3xl text-[2.5rem] font-semibold leading-tight tracking-[-0.05em] text-black sm:text-[3.8rem]"
+              text="Check your email"
+            />
 
             <form className="mt-14 space-y-6" onSubmit={handleVerifySubmit}>
-              <label className="block">
-                <span className="text-sm uppercase tracking-[0.22em] text-black/35">
-                  Verification code
-                </span>
-                <input
-                  required
-                  inputMode="numeric"
-                  value={verificationCode}
-                  onChange={(event) => setVerificationCode(event.target.value)}
-                  className="mt-3 w-full border-b border-black/20 pb-4 text-[1.45rem] outline-none"
-                />
-              </label>
+              <input
+                required
+                aria-label="Verification code"
+                inputMode="numeric"
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value)}
+                placeholder={verificationPlaceholder}
+                className={`${inputClassName} auth-entry`}
+                style={{ animationDelay: "80ms" }}
+              />
 
               {errorMessage ? (
-                <p className="text-sm text-red-600">{errorMessage}</p>
+                <p
+                  className="auth-entry text-sm text-red-600"
+                  style={{ animationDelay: "140ms" }}
+                >
+                  {errorMessage}
+                </p>
               ) : null}
 
-              <div className="flex items-center justify-between gap-4 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setStep("details")}
-                  className="text-sm uppercase tracking-[0.22em] text-black/40 hover:text-black"
-                >
-                  Back
-                </button>
-                <button
-                  disabled={!isLoaded || isSubmitting}
-                  type="submit"
-                  className="rounded-full border border-black px-6 py-3 text-sm uppercase tracking-[0.22em] text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:border-black/15 disabled:text-black/25"
-                >
-                  {isSubmitting ? "Verifying" : "Verify"}
-                </button>
+              <div
+                className={`auth-entry auth-guidance mt-6 w-full ${
+                  isVerifyComplete ? "auth-guidance--ready text-black" : "text-black/55"
+                }`}
+                style={{ animationDelay: "180ms" }}
+              >
+                <div className="flex items-center justify-between gap-6">
+                  <span className="auth-guidance-line" />
+                  <span className="auth-guidance-dot" />
+                  <p
+                    className="auth-guidance-text flex-1 text-center text-sm uppercase tracking-[0.22em]"
+                  >
+                    {isVerifyComplete
+                      ? (
+                        <>
+                          Press <span className="font-bold text-base">Enter</span>{" "}
+                          to continue
+                        </>
+                      )
+                      : "Finish entering the code before moving on"}
+                  </p>
+                  <span className="auth-guidance-dot" />
+                  <span className="auth-guidance-line" />
+                </div>
               </div>
+              <button
+                aria-hidden="true"
+                tabIndex={-1}
+                disabled={!isLoaded || isSubmitting}
+                type="submit"
+                className="sr-only"
+              >
+                Submit
+              </button>
             </form>
           </>
         )}
       </div>
+      <SignUpStyles />
     </main>
   );
 }

@@ -1,4 +1,12 @@
 import type { KeyboardEvent, RefObject } from "react";
+import { useTypewriterPlaceholder } from "@/hooks/use-typewriter-placeholder";
+
+const SCHOOL_SEARCH_PLACEHOLDERS = [
+  "Search for your school",
+  "University of Michigan",
+  "New York University",
+  "UCLA",
+];
 
 type SchoolSearchFieldProps = {
   autocompleteSuffix: string;
@@ -15,13 +23,18 @@ export default function SchoolSearchField({
   schoolInputRef,
   schoolQuery,
 }: SchoolSearchFieldProps) {
+  const placeholder = useTypewriterPlaceholder({
+    enabled: schoolQuery.trim() === "",
+    phrases: SCHOOL_SEARCH_PLACEHOLDERS,
+  });
+
   return (
-    <div className="relative mt-12 border-b border-black/20 pb-4">
+    <div className="auth-entry auth-input-surface relative mt-12 rounded-[2rem] border border-black/10 bg-black/[0.03] px-6 py-5">
       <div
-        className="school-search-display pointer-events-none absolute inset-0 flex items-center text-[1.55rem] font-medium sm:text-[1.9rem]"
+        className="school-search-display pointer-events-none absolute inset-0 flex items-center px-6 py-5 text-[1.55rem] font-medium sm:text-[1.9rem]"
       >
         {schoolQuery.trim() === "" ? (
-          <span className="text-black/18">Search for your school</span>
+          <span className="text-black/18">{placeholder}</span>
         ) : (
           <>
             <span className="text-black">{schoolQuery}</span>
@@ -34,6 +47,7 @@ export default function SchoolSearchField({
 
       <input
         ref={schoolInputRef}
+        aria-label="Search for your school"
         value={schoolQuery}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}

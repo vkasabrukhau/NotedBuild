@@ -1,15 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Quicksand } from "next/font/google";
-import { useRouter } from "next/navigation";
 import { completeOnboarding } from "@/app/actions/complete-onboarding";
 
 type PersonalInfoViewProps = {
   clerkId: string;
   email: string;
   fullName: string;
-  testMode?: boolean;
 };
 
 const quicksand = Quicksand({
@@ -21,30 +19,32 @@ export default function PersonalInfoView({
   clerkId,
   email,
   fullName,
-  testMode = false,
 }: PersonalInfoViewProps) {
   const [age, setAge] = useState("");
-  const router = useRouter();
-  const firstName = fullName.split(" ").filter(Boolean)[0] ?? "there";
+  const [panelVisible, setPanelVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPanelVisible(true);
+    }, 40);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   return (
     <main
       className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col">
-        <div className="relative min-h-[34rem] sm:min-h-[38rem]">
-          <section
-            className="personal-info-intro pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center"
-          >
-            <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Hi <span className="font-semibold">{firstName}</span>, let&apos;s
-              set up the rest.
-            </h1>
-          </section>
-
-          <section
-            className="personal-info-panel absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 sm:pt-24"
-          >
+        <div
+          className={`mx-auto min-h-[34rem] w-full max-w-5xl px-2 pt-16 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] sm:min-h-[38rem] sm:pt-24 ${
+            panelVisible
+              ? "translate-y-0 scale-100 opacity-100 blur-0"
+              : "translate-y-3 scale-[0.992] opacity-0 blur-sm"
+          }`}
+        >
             <h1 className="max-w-4xl text-center text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
               Tell us your age.
             </h1>
@@ -55,20 +55,8 @@ export default function PersonalInfoView({
             </p>
 
             <form
-              action={testMode ? undefined : completeOnboarding}
+              action={completeOnboarding}
               className="mx-auto mt-14 flex w-full max-w-3xl flex-col"
-              onSubmit={(event) => {
-                if (!testMode) {
-                  return;
-                }
-
-                event.preventDefault();
-                if (!age.trim()) {
-                  return;
-                }
-
-                router.push("/?step=school");
-              }}
             >
               <input type="hidden" name="clerkId" value={clerkId} />
               <input type="hidden" name="fullName" value={fullName} />
@@ -103,61 +91,8 @@ export default function PersonalInfoView({
                 Continue
               </button>
             </form>
-          </section>
         </div>
       </div>
-      <style jsx>{`
-        @keyframes onboardingIntroFade {
-          0% {
-            opacity: 0;
-            filter: blur(10px);
-            transform: translateY(18px) scale(0.99);
-          }
-          18% {
-            opacity: 1;
-            filter: blur(0);
-            transform: translateY(0) scale(1);
-          }
-          62% {
-            opacity: 1;
-            filter: blur(0);
-            transform: translateY(0) scale(1);
-          }
-          100% {
-            opacity: 0;
-            filter: blur(8px);
-            transform: translateY(-28px) scale(0.975);
-          }
-        }
-
-        @keyframes onboardingPanelRise {
-          0% {
-            opacity: 0;
-            filter: blur(8px);
-            transform: translateY(24px) scale(0.99);
-          }
-          38% {
-            opacity: 0;
-            filter: blur(8px);
-            transform: translateY(24px) scale(0.99);
-          }
-          100% {
-            opacity: 1;
-            filter: blur(0);
-            transform: translateY(0) scale(1);
-          }
-        }
-
-        .personal-info-intro {
-          animation: onboardingIntroFade 1800ms cubic-bezier(0.22, 1, 0.36, 1)
-            forwards;
-        }
-
-        .personal-info-panel {
-          animation: onboardingPanelRise 1800ms cubic-bezier(0.22, 1, 0.36, 1)
-            forwards;
-        }
-      `}</style>
     </main>
   );
 }

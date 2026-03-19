@@ -2,7 +2,7 @@
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { syncClerkUserToDb } from "@/lib/sync-clerk-user";
 
 export async function completeOnboarding(formData: FormData) {
   const { userId } = await auth();
@@ -31,19 +31,13 @@ export async function completeOnboarding(formData: FormData) {
     throw new Error("Please enter a valid age.");
   }
 
-  await prisma.user.upsert({
-    where: { clerkId: userId },
-    update: {
-      age,
-      email,
-      fullName,
-    },
-    create: {
-      age,
-      clerkId: userId,
-      email,
-      fullName,
-    },
+  if (!clerkUser || clerkUser.id !== userId) {
+    throw new Error("We could not load your Clerk account.");
+  }
+
+  await syncClerkUserToDb(clerkUser, {
+    age,
+    fullName,
   });
 
   redirect("/?step=school");

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   ClerkProvider,
   Show,
   SignInButton,
-  SignUpButton,
   UserButton,
 } from "@clerk/nextjs";
 import { Doto } from "next/font/google";
@@ -32,11 +32,11 @@ export default function RootLayout({
           <header className="flex justify-end items-center p-4 gap-4 h-16">
             <Show when="signed-out">
               <SignInButton />
-              <SignUpButton>
-                <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
+              <Link href="/sign-up">
+                <span className="inline-flex items-center bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
                   Sign Up
-                </button>
-              </SignUpButton>
+                </span>
+              </Link>
             </Show>
             <Show when="signed-in">
               <UserButton />

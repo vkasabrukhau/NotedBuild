@@ -3,10 +3,13 @@ import PersonalInfoView from "@/components/personal-info/personal-info";
 import RootHomeShell from "@/components/root-home-shell";
 import SignInView from "@/components/sing-in/sign-in";
 import SignUpView from "@/components/sign-up/sign-up";
+import { calculateAgeFromBirthdate } from "@/lib/birthdate";
 import { prisma } from "@/lib/prisma";
-
-// Temporary test switch for iterating on onboarding UI without Clerk/Prisma.
-const TEST_ONBOARDING_MODE = true;
+import {
+  getClerkUserEmail,
+  getClerkUserFullName,
+  syncClerkUserToDb,
+} from "@/lib/sync-clerk-user";
 
 type DbStatus = {
   ok: boolean;
@@ -21,9 +24,19 @@ type DbStatus = {
   error: string | null;
 };
 
-async function getDbStatus(clerkId: string | null): Promise<DbStatus> {
+function getBirthdateFromClerkUser(
+  clerkUser: Awaited<ReturnType<typeof currentUser>>,
+): string | null {
+  const birthdate = clerkUser?.unsafeMetadata?.birthdate;
+  return typeof birthdate === "string" ? birthdate : null;
+}
+
+async function getDbStatus(
+  clerkId: string | null,
+  clerkUser?: Awaited<ReturnType<typeof currentUser>>,
+): Promise<DbStatus> {
   try {
-    const matchedUser = clerkId
+    const existingUser = clerkId
       ? await prisma.user.findUnique({
           where: { clerkId },
           select: {
@@ -45,18 +58,82 @@ async function getDbStatus(clerkId: string | null): Promise<DbStatus> {
         })
       : null;
 
+    if (!clerkId || !clerkUser) {
+      return {
+        ok: true,
+        matchedUser: existingUser
+          ? {
+              id: existingUser.id,
+              age: existingUser.age,
+              email: existingUser.email,
+              fullName: existingUser.fullName,
+              schoolId: existingUser.schoolId,
+              noteUsageCount: existingUser._count.notes,
+            }
+          : null,
+        error: null,
+      };
+    }
+
+    const email = getClerkUserEmail(clerkUser) ?? existingUser?.email ?? "";
+    const derivedFullName = getClerkUserFullName(
+      clerkUser,
+      email,
+      existingUser?.fullName,
+    );
+    const derivedAge = calculateAgeFromBirthdate(
+      getBirthdateFromClerkUser(clerkUser) ?? "",
+    );
+
+    if (!email) {
+      return {
+        ok: false,
+        matchedUser: null,
+        error: "Missing required Clerk email data.",
+      };
+    }
+
+    const syncedUser = await syncClerkUserToDb(clerkUser, {
+      age: derivedAge ?? undefined,
+      fullName: derivedFullName,
+    });
+
+    const matchedUser = await prisma.user.findUnique({
+      where: {
+        id: syncedUser.id,
+      },
+      select: {
+        id: true,
+        age: true,
+        email: true,
+        fullName: true,
+        schoolId: true,
+        _count: {
+          select: {
+            notes: {
+              where: {
+                deletedAt: null,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!matchedUser) {
+      throw new Error("User record was not found after syncing with Clerk.");
+    }
+
     return {
       ok: true,
-      matchedUser: matchedUser
-        ? {
-            id: matchedUser.id,
-            age: matchedUser.age,
-            email: matchedUser.email,
-            fullName: matchedUser.fullName,
-            schoolId: matchedUser.schoolId,
-            noteUsageCount: matchedUser._count.notes,
-          }
-        : null,
+      matchedUser: {
+        id: matchedUser.id,
+        age: matchedUser.age,
+        email: matchedUser.email,
+        fullName: matchedUser.fullName,
+        schoolId: matchedUser.schoolId,
+        noteUsageCount: matchedUser._count.notes,
+      },
       error: null,
     };
   } catch (error) {
@@ -77,40 +154,6 @@ type HomeProps = {
 export default async function Home({ searchParams }: HomeProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
 
-  if (TEST_ONBOARDING_MODE) {
-    const mockFullName = "Sulaiman";
-    const mockEmail = "sulaiman@example.com";
-    const mockSchools = [
-      { id: "duke", name: "Duke University", location: "Durham, NC" },
-      { id: "nyu", name: "New York University", location: "New York, NY" },
-      { id: "columbia", name: "Columbia University", location: "New York, NY" },
-      { id: "ucla", name: "UCLA", location: "Los Angeles, CA" },
-    ];
-
-    if (resolvedSearchParams.step === "school") {
-      return (
-        <SignUpView
-          fullName={mockFullName}
-          schools={mockSchools}
-          testMode
-        />
-      );
-    }
-
-    if (resolvedSearchParams.step === "home") {
-      return <RootHomeShell initialNoteUsageCount={0} />;
-    }
-
-    return (
-      <PersonalInfoView
-        clerkId="test-user"
-        email={mockEmail}
-        fullName={mockFullName}
-        testMode
-      />
-    );
-  }
-
   const { userId } = await auth();
 
   if (!userId) {
@@ -121,10 +164,17 @@ export default async function Home({ searchParams }: HomeProps) {
     );
   }
 
-  const [dbStatus, clerkUser] = await Promise.all([
-    getDbStatus(userId),
-    currentUser(),
-  ]);
+  const clerkUser = await currentUser();
+
+  if (!clerkUser) {
+    return (
+      <main className="min-h-[calc(100vh-4rem)] grid place-items-center px-6">
+        <SignInView />
+      </main>
+    );
+  }
+
+  const dbStatus = await getDbStatus(userId, clerkUser);
 
   if (!dbStatus.ok) {
     return <main>{dbStatus.error}</main>;

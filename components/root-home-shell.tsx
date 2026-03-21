@@ -5,6 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
+import ProfileView, { type ProfileViewData } from "@/components/profile/profile-view";
 import type {
   Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
@@ -77,10 +78,11 @@ type InitialFolder = {
 };
 
 type RootHomeShellProps = {
-  initialView?: "home" | "all-notes" | "note" | "folder";
+  initialView?: "home" | "all-notes" | "note" | "folder" | "profile";
   initialNote?: InitialNote | null;
   initialFolder?: InitialFolder | null;
   initialNoteUsageCount?: number;
+  profile: ProfileViewData;
 };
 
 function createNoteSignature(
@@ -442,9 +444,11 @@ function HomeComponent() {
 function MenuOverlay({
   onClose,
   noteUsageCount,
+  onSelectOption,
 }: {
   onClose: () => void;
   noteUsageCount: number;
+  onSelectOption: (option: (typeof MENU_OPTIONS)[number]) => void;
 }) {
   const storageLimit = 250;
   const normalizedNoteUsageCount = Math.max(0, noteUsageCount);
@@ -477,7 +481,12 @@ function MenuOverlay({
                 <button
                   key={option}
                   type="button"
-                  className="block text-left font-medium transition-opacity duration-150 hover:opacity-65"
+                  onClick={() => onSelectOption(option)}
+                  className={`block text-left font-medium transition-opacity duration-150 ${
+                    option === "Account"
+                      ? "hover:opacity-65"
+                      : "cursor-default opacity-45"
+                  }`}
                 >
                   {option}
                 </button>
@@ -1856,8 +1865,11 @@ export default function RootHomeShell({
   initialNote = null,
   initialFolder = null,
   initialNoteUsageCount = 0,
+  profile,
 }: RootHomeShellProps) {
-  const [view, setView] = useState<"home" | "all-notes" | "note" | "folder">(
+  const [view, setView] = useState<
+    "home" | "all-notes" | "note" | "folder" | "profile"
+  >(
     initialView,
   );
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
@@ -1893,7 +1905,7 @@ export default function RootHomeShell({
 
       if (e.key === "Escape" && view !== "note") {
         e.preventDefault();
-        if (view === "all-notes" || view === "folder") {
+        if (view === "all-notes" || view === "folder" || view === "profile") {
           setView("home");
         }
         return;
@@ -1979,10 +1991,17 @@ export default function RootHomeShell({
           initialFolder={activeFolder}
         />
       ) : null}
+      {view === "profile" ? <ProfileView profile={profile} /> : null}
       {isMenuOpen ? (
         <MenuOverlay
           onClose={() => setIsMenuOpen(false)}
           noteUsageCount={noteUsageCount}
+          onSelectOption={(option) => {
+            if (option === "Account") {
+              setView("profile");
+              setIsMenuOpen(false);
+            }
+          }}
         />
       ) : null}
     </>

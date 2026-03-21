@@ -3,8 +3,10 @@ import ClerkSignUpView from "@/components/auth/clerk-sign-up";
 import PersonalInfoView from "@/components/personal-info/personal-info";
 import RootHomeShell from "@/components/root-home-shell";
 import SignUpView from "@/components/sign-up/sign-up";
+import type { ProfileViewData } from "@/components/profile/profile-view";
 import { calculateAgeFromBirthdate } from "@/lib/birthdate";
 import { prisma } from "@/lib/prisma";
+import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 import {
   getClerkUserEmail,
   getClerkUserFullName,
@@ -17,9 +19,16 @@ type DbStatus = {
     id: string;
     age: number | null;
     email: string;
+    folderCount: number;
     fullName: string;
+    joinedAt: string;
+    schoolAccentColor: string | null;
     schoolId: string | null;
+    schoolLocation: string | null;
+    schoolName: string | null;
+    schoolPrimaryColor: string | null;
     noteUsageCount: number;
+    profilePhotoUrl: string | null;
   } | null;
   error: string | null;
 };
@@ -43,8 +52,19 @@ async function getDbStatus(
             id: true,
             age: true,
             email: true,
+            foldersOwnedCount: true,
             fullName: true,
+            joinedAt: true,
+            profilePhotoUrl: true,
             schoolId: true,
+            school: {
+              select: {
+                accentColor: true,
+                location: true,
+                name: true,
+                primaryColor: true,
+              },
+            },
             _count: {
               select: {
                 notes: {
@@ -66,9 +86,16 @@ async function getDbStatus(
               id: existingUser.id,
               age: existingUser.age,
               email: existingUser.email,
+              folderCount: existingUser.foldersOwnedCount,
               fullName: existingUser.fullName,
+              joinedAt: existingUser.joinedAt.toISOString(),
+              schoolAccentColor: existingUser.school?.accentColor ?? null,
               schoolId: existingUser.schoolId,
+              schoolLocation: existingUser.school?.location ?? null,
+              schoolName: existingUser.school?.name ?? null,
+              schoolPrimaryColor: existingUser.school?.primaryColor ?? null,
               noteUsageCount: existingUser._count.notes,
+              profilePhotoUrl: existingUser.profilePhotoUrl,
             }
           : null,
         error: null,
@@ -106,8 +133,19 @@ async function getDbStatus(
         id: true,
         age: true,
         email: true,
+        foldersOwnedCount: true,
         fullName: true,
+        joinedAt: true,
+        profilePhotoUrl: true,
         schoolId: true,
+        school: {
+          select: {
+            accentColor: true,
+            location: true,
+            name: true,
+            primaryColor: true,
+          },
+        },
         _count: {
           select: {
             notes: {
@@ -130,9 +168,16 @@ async function getDbStatus(
         id: matchedUser.id,
         age: matchedUser.age,
         email: matchedUser.email,
+        folderCount: matchedUser.foldersOwnedCount,
         fullName: matchedUser.fullName,
+        joinedAt: matchedUser.joinedAt.toISOString(),
+        schoolAccentColor: matchedUser.school?.accentColor ?? null,
         schoolId: matchedUser.schoolId,
+        schoolLocation: matchedUser.school?.location ?? null,
+        schoolName: matchedUser.school?.name ?? null,
+        schoolPrimaryColor: matchedUser.school?.primaryColor ?? null,
         noteUsageCount: matchedUser._count.notes,
+        profilePhotoUrl: matchedUser.profilePhotoUrl,
       },
       error: null,
     };
@@ -199,7 +244,25 @@ export default async function Home() {
     return <SignUpView fullName={fullName} schools={schools} />;
   }
 
+  const profile: ProfileViewData = {
+    age: dbStatus.matchedUser.age,
+    email,
+    folderCount: dbStatus.matchedUser.folderCount,
+    fullName,
+    joinedAt: dbStatus.matchedUser.joinedAt,
+    noteCount: dbStatus.matchedUser.noteUsageCount,
+    profilePhotoUrl: clerkUser.imageUrl ?? dbStatus.matchedUser.profilePhotoUrl,
+    schoolAccentColor: dbStatus.matchedUser.schoolAccentColor,
+    schoolLogoUrl: getMatchedSchoolLogoUrl(dbStatus.matchedUser.schoolName),
+    schoolLocation: dbStatus.matchedUser.schoolLocation,
+    schoolName: dbStatus.matchedUser.schoolName,
+    schoolPrimaryColor: dbStatus.matchedUser.schoolPrimaryColor,
+  };
+
   return (
-    <RootHomeShell initialNoteUsageCount={dbStatus.matchedUser.noteUsageCount} />
+    <RootHomeShell
+      initialNoteUsageCount={dbStatus.matchedUser.noteUsageCount}
+      profile={profile}
+    />
   );
 }

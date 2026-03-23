@@ -54,22 +54,8 @@ function DottedSchoolMark({ profile }: { profile: ProfileViewData }) {
         backgroundImage: `linear-gradient(145deg, ${colors.primary}, ${colors.accent})`,
       }}
     >
-      <div
-        className="absolute inset-0 opacity-80"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 18% 22%, rgba(255,255,255,0.92) 0 1.6px, transparent 1.9px),
-            radial-gradient(circle at 58% 34%, rgba(255,255,255,0.72) 0 1.8px, transparent 2.1px),
-            radial-gradient(circle at 78% 70%, rgba(255,255,255,0.86) 0 1.4px, transparent 1.8px),
-            radial-gradient(circle at 30% 76%, rgba(255,255,255,0.78) 0 1.7px, transparent 2px)
-          `,
-          backgroundSize: "18px 18px, 22px 22px, 16px 16px, 20px 20px",
-          backgroundPosition: "0 0, 8px 10px, 4px 6px, 11px 3px",
-        }}
-      />
       {profile.schoolLogoUrl ? (
         <>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,transparent_18%,rgba(255,255,255,0.1)_19%,rgba(255,255,255,0.12)_45%,transparent_76%)]" />
           <img
             src={profile.schoolLogoUrl}
             alt={schoolLabel}
@@ -79,22 +65,11 @@ function DottedSchoolMark({ profile }: { profile: ProfileViewData }) {
             style={{
               filter: "brightness(0) invert(1)",
               mixBlendMode: "screen",
-              WebkitMaskImage:
-                "radial-gradient(circle, rgba(0,0,0,1) 0 52%, transparent 58%)",
-              WebkitMaskPosition: "0 0",
-              WebkitMaskSize: "12px 12px",
-              WebkitMaskRepeat: "repeat",
-              maskImage:
-                "radial-gradient(circle, rgba(0,0,0,1) 0 52%, transparent 58%)",
-              maskPosition: "0 0",
-              maskRepeat: "repeat",
-              maskSize: "12px 12px",
             }}
           />
         </>
       ) : (
         <>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,transparent_28%,rgba(255,255,255,0.16)_29%,rgba(255,255,255,0.12)_45%,transparent_76%)]" />
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="translate-y-1 text-[44px] font-bold uppercase tracking-[-0.08em] text-white/92">
               {badgeText}

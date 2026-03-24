@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound, redirect } from "next/navigation";
-import type { ProfileViewData } from "@/components/profile/profile-view";
 import RootHomeShell from "@/components/root-home-shell";
+import type { ProfileViewData } from "@/lib/profile-data";
+import { getSchoolOptions } from "@/lib/profile-data";
 import { prisma } from "@/lib/prisma";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
@@ -41,6 +42,7 @@ export default async function FolderPage({
           fullName: true,
           joinedAt: true,
           profilePhotoUrl: true,
+          schoolId: true,
           school: {
             select: {
               accentColor: true,
@@ -72,7 +74,7 @@ export default async function FolderPage({
     notFound();
   }
 
-  const [noteUsageCount, folderCount] = await Promise.all([
+  const [noteUsageCount, folderCount, friendCount] = await Promise.all([
     prisma.note.count({
       where: {
         ownerId: folder.ownerId,
@@ -85,22 +87,33 @@ export default async function FolderPage({
         deletedAt: null,
       },
     }),
+    prisma.friendship.count({
+      where: {
+        status: "ACCEPTED",
+        OR: [{ requesterId: folder.ownerId }, { addresseeId: folder.ownerId }],
+      },
+    }),
   ]);
 
   const profile: ProfileViewData = {
+    id: folder.ownerId,
     age: folder.owner.age,
     email: folder.owner.email,
+    friendCount,
     folderCount,
     fullName: folder.owner.fullName,
     joinedAt: folder.owner.joinedAt.toISOString(),
     noteCount: noteUsageCount,
     profilePhotoUrl: folder.owner.profilePhotoUrl,
     schoolAccentColor: folder.owner.school?.accentColor ?? null,
+    schoolId: folder.owner.schoolId,
     schoolLogoUrl: getMatchedSchoolLogoUrl(folder.owner.school?.name ?? null),
     schoolLocation: folder.owner.school?.location ?? null,
     schoolName: folder.owner.school?.name ?? null,
     schoolPrimaryColor: folder.owner.school?.primaryColor ?? null,
   };
+
+  const schools = await getSchoolOptions();
 
   return (
     <RootHomeShell
@@ -113,6 +126,11 @@ export default async function FolderPage({
         selectedNoteIds: folder.notes.map((note) => note.id),
       }}
       profile={profile}
+      schools={schools}
+      viewer={{
+        friendshipState: "self",
+        isOwnProfile: true,
+      }}
     />
   );
 }

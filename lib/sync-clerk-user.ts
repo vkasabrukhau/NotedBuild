@@ -45,8 +45,6 @@ export async function syncClerkUserToDb(
     throw new Error("Signed-in user is missing an email address.");
   }
 
-  const fullName = getClerkUserFullName(clerkUser, email, options.fullName);
-
   return prisma.$transaction(async (tx) => {
     const existingByClerkId = await tx.user.findUnique({
       where: {
@@ -61,6 +59,12 @@ export async function syncClerkUserToDb(
           email,
         },
       }));
+
+    const fullName = getClerkUserFullName(
+      clerkUser,
+      email,
+      options.fullName ?? targetUser?.fullName,
+    );
 
     const data = {
       clerkId: clerkUser.id,

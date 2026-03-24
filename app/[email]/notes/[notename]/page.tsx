@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound, redirect } from "next/navigation";
-import type { ProfileViewData } from "@/components/profile/profile-view";
 import RootHomeShell from "@/components/root-home-shell";
+import type { ProfileViewData } from "@/lib/profile-data";
+import { getSchoolOptions } from "@/lib/profile-data";
 import { prisma } from "@/lib/prisma";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
@@ -41,6 +42,7 @@ export default async function NotePage({
           fullName: true,
           joinedAt: true,
           profilePhotoUrl: true,
+          schoolId: true,
           school: {
             select: {
               accentColor: true,
@@ -61,7 +63,7 @@ export default async function NotePage({
     notFound();
   }
 
-  const [noteUsageCount, folderCount] = await Promise.all([
+  const [noteUsageCount, folderCount, friendCount] = await Promise.all([
     prisma.note.count({
       where: {
         ownerId: note.ownerId,
@@ -74,22 +76,33 @@ export default async function NotePage({
         deletedAt: null,
       },
     }),
+    prisma.friendship.count({
+      where: {
+        status: "ACCEPTED",
+        OR: [{ requesterId: note.ownerId }, { addresseeId: note.ownerId }],
+      },
+    }),
   ]);
 
   const profile: ProfileViewData = {
+    id: note.ownerId,
     age: note.owner.age,
     email: note.owner.email,
+    friendCount,
     folderCount,
     fullName: note.owner.fullName,
     joinedAt: note.owner.joinedAt.toISOString(),
     noteCount: noteUsageCount,
     profilePhotoUrl: note.owner.profilePhotoUrl,
     schoolAccentColor: note.owner.school?.accentColor ?? null,
+    schoolId: note.owner.schoolId,
     schoolLogoUrl: getMatchedSchoolLogoUrl(note.owner.school?.name ?? null),
     schoolLocation: note.owner.school?.location ?? null,
     schoolName: note.owner.school?.name ?? null,
     schoolPrimaryColor: note.owner.school?.primaryColor ?? null,
   };
+
+  const schools = await getSchoolOptions();
 
   return (
     <RootHomeShell
@@ -102,6 +115,11 @@ export default async function NotePage({
         ownerEmail: note.owner.email,
       }}
       profile={profile}
+      schools={schools}
+      viewer={{
+        friendshipState: "self",
+        isOwnProfile: true,
+      }}
     />
   );
 }

@@ -5,7 +5,12 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
-import ProfileView, { type ProfileViewData } from "@/components/profile/profile-view";
+import ProfileView from "@/components/profile/profile-view";
+import type {
+  ProfileSchoolOption,
+  ProfileViewData,
+  ProfileViewerData,
+} from "@/lib/profile-data";
 import type {
   Dispatch,
   KeyboardEvent as ReactKeyboardEvent,
@@ -209,6 +214,8 @@ type RootHomeShellProps = {
   initialFolder?: InitialFolder | null;
   initialNoteUsageCount?: number;
   profile: ProfileViewData;
+  schools: ProfileSchoolOption[];
+  viewer: ProfileViewerData;
 };
 
 function createNoteSignature(
@@ -569,12 +576,10 @@ function HomeComponent() {
 
 function MenuOverlay({
   onClose,
-  onItemSelect,
   noteUsageCount,
   onSelectOption,
 }: {
   onClose: () => void;
-  onItemSelect: (option: string) => void;
   noteUsageCount: number;
   onSelectOption: (option: (typeof MENU_OPTIONS)[number]) => void;
 }) {
@@ -599,13 +604,13 @@ function MenuOverlay({
         );
       } else if (e.key === "Enter") {
         e.preventDefault();
-        onItemSelect(MENU_OPTIONS[focusedIndex]);
+        onSelectOption(MENU_OPTIONS[focusedIndex]);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedIndex, onItemSelect]);
+  }, [focusedIndex, onSelectOption]);
 
   return (
     <div
@@ -631,11 +636,9 @@ function MenuOverlay({
                 <button
                   key={option}
                   type="button"
-                  className="flex items-center gap-3 text-left transition-opacity duration-150 hover:opacity-65"
                   onMouseEnter={() => setFocusedIndex(index)}
-                  onClick={() => onItemSelect(option)}
                   onClick={() => onSelectOption(option)}
-                  className={`block text-left font-medium transition-opacity duration-150 ${
+                  className={`flex items-center gap-3 text-left font-medium transition-opacity duration-150 ${
                     option === "Account"
                       ? "hover:opacity-65"
                       : "cursor-default opacity-45"
@@ -2270,6 +2273,8 @@ export default function RootHomeShell({
   initialFolder = null,
   initialNoteUsageCount = 0,
   profile,
+  schools,
+  viewer,
 }: RootHomeShellProps) {
   const [view, setView] = useState<
     "home" | "all-notes" | "note" | "folder" | "profile"
@@ -2448,13 +2453,20 @@ export default function RootHomeShell({
           initialFolder={activeFolder}
         />
       ) : null}
-      {view === "profile" ? <ProfileView profile={profile} /> : null}
+      {view === "profile" ? (
+        <ProfileView
+          profile={profile}
+          schools={schools}
+          viewer={viewer}
+        />
+      ) : null}
       {isMenuOpen ? (
         <MenuOverlay
           onClose={() => setIsMenuOpen(false)}
-          onItemSelect={handleMenuItemSelect}
           noteUsageCount={noteUsageCount}
           onSelectOption={(option) => {
+            handleMenuItemSelect(option);
+
             if (option === "Account") {
               setView("profile");
               setIsMenuOpen(false);

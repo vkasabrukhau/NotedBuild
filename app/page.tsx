@@ -3,8 +3,9 @@ import ClerkSignUpView from "@/components/auth/clerk-sign-up";
 import PersonalInfoView from "@/components/personal-info/personal-info";
 import RootHomeShell from "@/components/root-home-shell";
 import SignUpView from "@/components/sign-up/sign-up";
-import type { ProfileViewData } from "@/components/profile/profile-view";
 import { calculateAgeFromBirthdate } from "@/lib/birthdate";
+import type { ProfileViewData } from "@/lib/profile-data";
+import { getSchoolOptions } from "@/lib/profile-data";
 import { prisma } from "@/lib/prisma";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 import {
@@ -19,6 +20,7 @@ type DbStatus = {
     id: string;
     age: number | null;
     email: string;
+    friendCount: number;
     folderCount: number;
     fullName: string;
     joinedAt: string;
@@ -77,6 +79,17 @@ async function getDbStatus(
           },
         })
       : null;
+    const existingFriendCount = existingUser
+      ? await prisma.friendship.count({
+          where: {
+            status: "ACCEPTED",
+            OR: [
+              { requesterId: existingUser.id },
+              { addresseeId: existingUser.id },
+            ],
+          },
+        })
+      : 0;
 
     if (!clerkId || !clerkUser) {
       return {
@@ -86,6 +99,7 @@ async function getDbStatus(
               id: existingUser.id,
               age: existingUser.age,
               email: existingUser.email,
+              friendCount: existingFriendCount,
               folderCount: existingUser.foldersOwnedCount,
               fullName: existingUser.fullName,
               joinedAt: existingUser.joinedAt.toISOString(),
@@ -162,12 +176,20 @@ async function getDbStatus(
       throw new Error("User record was not found after syncing with Clerk.");
     }
 
+    const friendCount = await prisma.friendship.count({
+      where: {
+        status: "ACCEPTED",
+        OR: [{ requesterId: matchedUser.id }, { addresseeId: matchedUser.id }],
+      },
+    });
+
     return {
       ok: true,
       matchedUser: {
         id: matchedUser.id,
         age: matchedUser.age,
         email: matchedUser.email,
+        friendCount,
         folderCount: matchedUser.foldersOwnedCount,
         fullName: matchedUser.fullName,
         joinedAt: matchedUser.joinedAt.toISOString(),
@@ -216,9 +238,9 @@ export default async function Home() {
     "";
 
   const fullName =
+    dbStatus.matchedUser?.fullName ??
     clerkUser?.fullName ??
     [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ") ??
-    dbStatus.matchedUser?.fullName ??
     "";
 
   if (!dbStatus.matchedUser || dbStatus.matchedUser.age === null) {
@@ -245,24 +267,34 @@ export default async function Home() {
   }
 
   const profile: ProfileViewData = {
+    id: dbStatus.matchedUser.id,
     age: dbStatus.matchedUser.age,
     email,
+    friendCount: dbStatus.matchedUser.friendCount,
     folderCount: dbStatus.matchedUser.folderCount,
     fullName,
     joinedAt: dbStatus.matchedUser.joinedAt,
     noteCount: dbStatus.matchedUser.noteUsageCount,
     profilePhotoUrl: clerkUser.imageUrl ?? dbStatus.matchedUser.profilePhotoUrl,
     schoolAccentColor: dbStatus.matchedUser.schoolAccentColor,
+    schoolId: dbStatus.matchedUser.schoolId,
     schoolLogoUrl: getMatchedSchoolLogoUrl(dbStatus.matchedUser.schoolName),
     schoolLocation: dbStatus.matchedUser.schoolLocation,
     schoolName: dbStatus.matchedUser.schoolName,
     schoolPrimaryColor: dbStatus.matchedUser.schoolPrimaryColor,
   };
 
+  const schools = await getSchoolOptions();
+
   return (
     <RootHomeShell
       initialNoteUsageCount={dbStatus.matchedUser.noteUsageCount}
       profile={profile}
+      schools={schools}
+      viewer={{
+        friendshipState: "self",
+        isOwnProfile: true,
+      }}
     />
   );
 }

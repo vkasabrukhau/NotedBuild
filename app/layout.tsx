@@ -4,13 +4,61 @@ import {
   Show,
   UserButton,
 } from "@clerk/nextjs";
-import { Doto } from "next/font/google";
+import {
+  Bitcount_Grid_Double_Ink,
+  Cabin,
+  Doto,
+  Lora,
+  Merriweather,
+  Roboto,
+  Source_Code_Pro,
+  Sue_Ellen_Francisco,
+} from "next/font/google";
 import "./globals.scss";
 
 const doto = Doto({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-doto",
+});
+
+const bitcount = Bitcount_Grid_Double_Ink({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-bitcount",
+});
+
+const roboto = Roboto({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--font-roboto",
+});
+
+const sueEllen = Sue_Ellen_Francisco({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-sue-ellen",
+});
+
+const merriweather = Merriweather({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--font-merriweather",
+});
+
+const lora = Lora({
+  subsets: ["latin"],
+  variable: "--font-lora",
+});
+
+const sourceCodePro = Source_Code_Pro({
+  subsets: ["latin"],
+  variable: "--font-source-code-pro",
+});
+
+const cabin = Cabin({
+  subsets: ["latin"],
+  variable: "--font-cabin",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +73,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${doto.variable} antialiased`}>
+      <body className={`${doto.variable} ${bitcount.variable} ${roboto.variable} ${sueEllen.variable} ${merriweather.variable} ${lora.variable} ${sourceCodePro.variable} ${cabin.variable} antialiased`}>
         <ClerkProvider>
           <Show when="signed-in">
             <header className="flex h-16 items-center justify-end p-4">

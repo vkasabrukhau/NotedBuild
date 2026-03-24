@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Quicksand } from "next/font/google";
 import { completeOnboarding } from "@/app/actions/complete-onboarding";
+import SignUpStyles from "@/components/sign-up/sign-up-styles";
+import TypewriterText from "@/components/ui/typewriter-text";
+import { useTypewriterPlaceholder } from "@/hooks/use-typewriter-placeholder";
+
+const AGE_PLACEHOLDERS = ["How old are you?", "18", "21", "34"];
 
 type PersonalInfoViewProps = {
   clerkId: string;
@@ -10,120 +14,105 @@ type PersonalInfoViewProps = {
   fullName: string;
 };
 
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
 export default function PersonalInfoView({
   clerkId,
   email,
   fullName,
 }: PersonalInfoViewProps) {
   const [age, setAge] = useState("");
-  const [introVisible, setIntroVisible] = useState(true);
-  const [introFadingOut, setIntroFadingOut] = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
+  const isAgeComplete = age.trim() !== "";
+  const agePlaceholder = useTypewriterPlaceholder({
+    enabled: age.trim() === "",
+    phrases: AGE_PLACEHOLDERS,
+  });
 
   useEffect(() => {
-    const fadeTimer = window.setTimeout(() => {
-      setIntroFadingOut(true);
-    }, 3000);
-
-    const hideTimer = window.setTimeout(() => {
-      setIntroVisible(false);
-    }, 4000);
+    const timer = window.setTimeout(() => {
+      setPanelVisible(true);
+    }, 40);
 
     return () => {
-      window.clearTimeout(fadeTimer);
-      window.clearTimeout(hideTimer);
+      window.clearTimeout(timer);
     };
   }, []);
 
-  const firstName = fullName.split(" ").filter(Boolean)[0] ?? "there";
-
   return (
-    <main
-      className={`min-h-[calc(100vh-4rem)] bg-white px-6 py-8 text-[#2b2725] ${quicksand.className}`}
-    >
-      <div className="mx-auto flex w-full max-w-6xl flex-col">
-        <div className="relative min-h-[34rem] sm:min-h-[38rem]">
-          <section
-            className={`absolute inset-0 flex items-center justify-center px-2 text-center transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              introFadingOut
-                ? "-translate-y-8 scale-[0.985]"
-                : "translate-y-0 scale-100"
-            }`}
+    <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-white px-6 py-8 text-[#2b2725]">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-center">
+        <div
+          className={`mx-auto w-full max-w-5xl px-2 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            panelVisible
+              ? "translate-y-0 scale-100 opacity-100 blur-0"
+              : "translate-y-3 scale-[0.992] opacity-0 blur-sm"
+          }`}
+        >
+          <TypewriterText
+            as="h1"
+            className="mx-auto max-w-4xl text-center text-[2.4rem] font-semibold leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]"
+            text="Let's get to know you"
+          />
+
+          <form
+            action={completeOnboarding}
+            className="mx-auto mt-14 flex w-full max-w-3xl flex-col"
           >
-            <h1 className="max-w-4xl text-[2.35rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Hi <span className="font-semibold">{firstName}</span>, let&apos;s
-              set up the rest.
-            </h1>
-          </section>
+            <input type="hidden" name="clerkId" value={clerkId} />
+            <input type="hidden" name="fullName" value={fullName} />
+            <input type="hidden" name="email" value={email} />
 
-          <section
-            className={`absolute inset-0 mx-auto flex w-full max-w-5xl flex-col px-2 pt-16 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] sm:pt-24 ${
-              !introVisible
-                ? "opacity-100 blur-0"
-                : "pointer-events-none opacity-0 blur-sm"
-            } ${
-              !introVisible
-                ? "translate-x-0 scale-100"
-                : "-translate-x-10 scale-[0.985]"
-            }`}
-          >
-            <h1 className="max-w-4xl text-center text-[2.4rem] leading-tight tracking-[-0.05em] text-black sm:text-[3.6rem]">
-              Tell us your age.
-            </h1>
+            <input
+              id="age"
+              name="age"
+              type="number"
+              min={1}
+              max={120}
+              inputMode="numeric"
+              placeholder={agePlaceholder}
+              value={age}
+              onChange={(event) => setAge(event.target.value)}
+              className="auth-entry auth-input-surface w-full rounded-[2rem] border border-black/10 bg-black/[0.03] px-6 py-5 text-[2rem] leading-none text-black outline-none placeholder:text-black/20 sm:text-[2.4rem]"
+              style={{ animationDelay: "90ms" }}
+              required
+            />
 
-            <p className="mt-5 text-center text-base text-black/40 sm:text-lg">
-              We&apos;ll use this to personalize your experience for{" "}
-              {fullName || email}.
-            </p>
-
-            <form
-              action={completeOnboarding}
-              className="mx-auto mt-14 flex w-full max-w-3xl flex-col"
+            <div
+              className={`auth-entry auth-guidance mt-10 w-full ${
+                isAgeComplete ? "auth-guidance--ready text-black" : "text-black/55"
+              }`}
+              style={{ animationDelay: "160ms" }}
             >
-              <input type="hidden" name="clerkId" value={clerkId} />
-              <input type="hidden" name="fullName" value={fullName} />
-              <input type="hidden" name="email" value={email} />
-
-              <label
-                htmlFor="age"
-                className="text-sm uppercase tracking-[0.22em] text-black/35"
-              >
-                Age
-              </label>
-
-              <input
-                id="age"
-                name="age"
-                type="number"
-                min={1}
-                max={120}
-                inputMode="numeric"
-                placeholder="Enter your age"
-                value={age}
-                onChange={(event) => setAge(event.target.value)}
-                className="mt-5 w-full border-b border-black/20 pb-4 text-[2rem] leading-none outline-none placeholder:text-black/20 sm:text-[2.6rem]"
-                required
-              />
-
-              <button
-                type="submit"
-                disabled={age.trim() === ""}
-                className="mt-10 w-fit self-end rounded-full border border-black px-6 py-3 text-sm uppercase tracking-[0.22em] text-black transition hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:border-black/10 disabled:text-black/25 disabled:hover:bg-transparent"
-              >
-                Continue
-              </button>
-            </form>
-          </section>
+              <div className="flex items-center justify-between gap-6">
+                <span className="auth-guidance-line" />
+                <span className="auth-guidance-dot" />
+                <p
+                  className="auth-guidance-text flex-1 text-center text-sm uppercase tracking-[0.22em]"
+                >
+                  {isAgeComplete
+                    ? (
+                      <>
+                        Press <span className="font-bold text-base">Enter</span>{" "}
+                        to continue
+                      </>
+                    )
+                    : "Finish entering your age before moving on"}
+                </p>
+                <span className="auth-guidance-dot" />
+                <span className="auth-guidance-line" />
+              </div>
+            </div>
+            <button
+              aria-hidden="true"
+              tabIndex={-1}
+              type="submit"
+              className="sr-only"
+            >
+              Submit
+            </button>
+          </form>
         </div>
       </div>
+      <SignUpStyles />
     </main>
   );
 }

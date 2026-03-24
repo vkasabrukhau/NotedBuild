@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound, redirect } from "next/navigation";
+import type { ProfileViewData } from "@/components/profile/profile-view";
 import RootHomeShell from "@/components/root-home-shell";
 import { prisma } from "@/lib/prisma";
+import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
 export default async function FolderPage({
   params,
@@ -33,7 +35,20 @@ export default async function FolderPage({
     include: {
       owner: {
         select: {
+          age: true,
           email: true,
+          foldersOwnedCount: true,
+          fullName: true,
+          joinedAt: true,
+          profilePhotoUrl: true,
+          school: {
+            select: {
+              accentColor: true,
+              location: true,
+              name: true,
+              primaryColor: true,
+            },
+          },
         },
       },
       notes: {
@@ -57,12 +72,35 @@ export default async function FolderPage({
     notFound();
   }
 
-  const noteUsageCount = await prisma.note.count({
-    where: {
-      ownerId: folder.ownerId,
-      deletedAt: null,
-    },
-  });
+  const [noteUsageCount, folderCount] = await Promise.all([
+    prisma.note.count({
+      where: {
+        ownerId: folder.ownerId,
+        deletedAt: null,
+      },
+    }),
+    prisma.folder.count({
+      where: {
+        ownerId: folder.ownerId,
+        deletedAt: null,
+      },
+    }),
+  ]);
+
+  const profile: ProfileViewData = {
+    age: folder.owner.age,
+    email: folder.owner.email,
+    folderCount,
+    fullName: folder.owner.fullName,
+    joinedAt: folder.owner.joinedAt.toISOString(),
+    noteCount: noteUsageCount,
+    profilePhotoUrl: folder.owner.profilePhotoUrl,
+    schoolAccentColor: folder.owner.school?.accentColor ?? null,
+    schoolLogoUrl: getMatchedSchoolLogoUrl(folder.owner.school?.name ?? null),
+    schoolLocation: folder.owner.school?.location ?? null,
+    schoolName: folder.owner.school?.name ?? null,
+    schoolPrimaryColor: folder.owner.school?.primaryColor ?? null,
+  };
 
   return (
     <RootHomeShell
@@ -74,6 +112,7 @@ export default async function FolderPage({
         ownerEmail: folder.owner.email,
         selectedNoteIds: folder.notes.map((note) => note.id),
       }}
+      profile={profile}
     />
   );
 }

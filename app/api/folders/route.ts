@@ -1,6 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { syncClerkUserToDb } from "@/lib/sync-clerk-user";
 
 async function getOrCreateDbUser() {
   const clerkUser = await currentUser();
@@ -9,35 +10,7 @@ async function getOrCreateDbUser() {
     return null;
   }
 
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress;
-
-  if (!email) {
-    throw new Error("Signed-in user is missing an email address.");
-  }
-
-  const fullName =
-    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
-    clerkUser.username ||
-    email;
-
-  return prisma.user.upsert({
-    where: {
-      clerkId: clerkUser.id,
-    },
-    update: {
-      email,
-      fullName,
-    },
-    create: {
-      clerkId: clerkUser.id,
-      email,
-      fullName,
-      notesOwnedCount: 0,
-      foldersOwnedCount: 0,
-    },
-  });
+  return syncClerkUserToDb(clerkUser);
 }
 
 export async function GET() {

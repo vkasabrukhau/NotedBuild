@@ -23,9 +23,9 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 Create a `.env` file from `.env.example` and set:
 
 ```bash
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 # optional
-OPENROUTER_MODEL=google/gemma-3-27b-it:free
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 This is required for the `/math[...]` to LaTeX conversion in the note editor.

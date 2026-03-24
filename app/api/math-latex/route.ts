@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-const DEFAULT_MODEL = "google/gemma-3-27b-it:free"
+const DEFAULT_MODEL = "gemini-2.5-flash"
 const MAX_RETRIES = 2
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
 const BASE_SYSTEM_INSTRUCTION =
@@ -12,46 +12,20 @@ const FALLBACK_SYSTEM_INSTRUCTION = [
   "Prefer a single equation that can render inline.",
 ].join(" ")
 
-type OpenRouterChoice = {
-  message?: {
-    content?:
-      | string
-      | Array<{
-          type?: string
-          text?: string
-        }>
-  }
-}
-
-type OpenRouterResponse = {
-  choices?: OpenRouterChoice[]
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string
+      }>
+    }
+    finishReason?: string
+  }>
   error?: {
     message?: string
-    code?: string | number
-    metadata?: {
-      raw?: string
-      provider_name?: string
-      is_byok?: boolean
-    }
+    status?: string
+    code?: number
   }
-}
-
-function extractProviderErrorDetails(data: OpenRouterResponse | null) {
-  const message = data?.error?.message?.trim() ?? ""
-  const raw = data?.error?.metadata?.raw?.trim() ?? ""
-  const providerName = data?.error?.metadata?.provider_name?.trim() ?? ""
-
-  const detailParts = [message]
-
-  if (raw && !message.includes(raw)) {
-    detailParts.push(raw)
-  }
-
-  if (providerName && !detailParts.some((part) => part.includes(providerName))) {
-    detailParts.push(`provider=${providerName}`)
-  }
-
-  return detailParts.filter(Boolean).join(": ")
 }
 
 function sanitizeLatex(output: string) {
@@ -88,97 +62,73 @@ function sleep(ms: number) {
 function isRetryableProviderFailure(status: number, error: string) {
   return (
     RETRYABLE_STATUS_CODES.has(status) ||
-    /provider returned error|upstream|timed out|timeout|temporar|unavailable|overloaded|capacity|no endpoints|connection reset|econnreset|gateway/i.test(
+    /upstream|timed out|timeout|temporar|unavailable|overloaded|capacity|quota|rate limit|internal/i.test(
       error
     )
   )
 }
 
-function extractContent(choice: OpenRouterChoice | undefined) {
-  const content = choice?.message?.content
-
-  if (typeof content === "string") {
-    return content
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => part.text ?? "")
+function extractContent(data: GeminiResponse | null) {
+  return (
+    data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
       .join("\n")
-      .trim()
-  }
-
-  return ""
+      .trim() ?? ""
+  )
 }
 
-async function requestOpenRouter(prompt: string, systemInstruction: string) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  const model = process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL
+async function requestGemini(prompt: string, systemInstruction: string) {
+  const apiKey = process.env.GEMINI_API_KEY
+  const model = process.env.GEMINI_MODEL ?? DEFAULT_MODEL
 
   if (!apiKey) {
     return {
       ok: false as const,
       status: 500,
-      error: "OPENROUTER_API_KEY is not configured.",
+      error: "GEMINI_API_KEY is not configured.",
     }
   }
 
-  const makeRequest = async (messages: Array<{ role: "system" | "user"; content: string }>) =>
-    fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "x-goog-api-key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
-        temperature: 0,
-        messages,
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0,
+          topK: 1,
+          topP: 1,
+        },
       }),
-    })
+    }
+  )
 
-  let response = await makeRequest([
-    {
-      role: "system",
-      content: systemInstruction,
-    },
-    {
-      role: "user",
-      content: prompt,
-    },
-  ])
-
-  let data = (await response.json().catch(() => null)) as OpenRouterResponse | null
-
-  const rawProviderError = data?.error?.metadata?.raw || ""
-  const needsMergedPromptFallback =
-    response.status === 400 &&
-    /Developer instruction is not enabled/i.test(rawProviderError)
-
-  if (needsMergedPromptFallback) {
-    response = await makeRequest([
-      {
-        role: "user",
-        content: `${systemInstruction}\n\nUser request: ${prompt}`,
-      },
-    ])
-
-    data = (await response.json().catch(() => null)) as OpenRouterResponse | null
-  }
+  const data = (await response.json().catch(() => null)) as GeminiResponse | null
 
   if (!response.ok) {
-    const message =
-      extractProviderErrorDetails(data) ||
-      `OpenRouter request failed with status ${response.status}.`
-
     return {
       ok: false as const,
       status: response.status,
-      error: message,
+      error:
+        data?.error?.message?.trim() ||
+        `Gemini request failed with status ${response.status}.`,
     }
   }
 
-  const latex = sanitizeLatex(extractContent(data?.choices?.[0]))
+  const latex = sanitizeLatex(extractContent(data))
 
   return {
     ok: true as const,
@@ -191,14 +141,14 @@ async function generateLatex(prompt: string) {
   let lastFailure: { status: number; error: string } | null = null
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    const result = await requestOpenRouter(prompt, BASE_SYSTEM_INSTRUCTION)
+    const result = await requestGemini(prompt, BASE_SYSTEM_INSTRUCTION)
 
     if (result.ok) {
       if (result.latex && !isPromptEcho(result.latex, prompt)) {
         return { ok: true as const, latex: result.latex }
       }
 
-      const fallback = await requestOpenRouter(prompt, FALLBACK_SYSTEM_INSTRUCTION)
+      const fallback = await requestGemini(prompt, FALLBACK_SYSTEM_INSTRUCTION)
 
       if (fallback.ok && fallback.latex && !isPromptEcho(fallback.latex, prompt)) {
         return { ok: true as const, latex: fallback.latex }
@@ -208,7 +158,7 @@ async function generateLatex(prompt: string) {
         status: fallback.status,
         error:
           fallback.ok
-            ? "OpenRouter returned low-quality LaTeX for this prompt."
+            ? "Gemini returned low-quality LaTeX for this prompt."
             : fallback.error,
       }
 

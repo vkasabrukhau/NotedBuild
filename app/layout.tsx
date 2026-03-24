@@ -17,7 +17,7 @@ import {
 import "./globals.scss";
 
 const doto = Doto({
-  weight: "400",
+  weight: ["400", "600", "700"],
   subsets: ["latin"],
   variable: "--font-doto",
 });
@@ -76,7 +76,7 @@ export default function RootLayout({
       <body className={`${doto.variable} ${bitcount.variable} ${roboto.variable} ${sueEllen.variable} ${merriweather.variable} ${lora.variable} ${sourceCodePro.variable} ${cabin.variable} antialiased`}>
         <ClerkProvider>
           <Show when="signed-in">
-            <header className="flex h-16 items-center justify-end p-4">
+            <header className="flex h-16 items-center justify-end gap-4 p-4">
               <UserButton />
             </header>
           </Show>

@@ -195,9 +195,6 @@ export default function ProfileView({
           <h1 className="text-[40px] font-bold leading-none tracking-[-0.05em] text-black">
             Profile
           </h1>
-          <p className="mt-3 text-sm uppercase tracking-[0.22em] text-black/35">
-            Identity and account
-          </p>
         </div>
 
         <div className="flex items-start gap-3">

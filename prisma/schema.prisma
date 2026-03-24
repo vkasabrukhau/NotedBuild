@@ -45,6 +45,8 @@ model User {
   folders         Folder[]
   comments        Comment[]
   pets            Pet[]
+  streak          UserStreak?
+  tamagotchis     UserTamagotchi[]
 
   // interactions
   noteLikes       NoteLike[]
@@ -226,10 +228,47 @@ model TamagotchiPet {
   modelName               String
   purchaseThreshold       Int
   startingHealth          Int     @default(100)
-  
+
   healthUpgradeThreshold  Int?
   healthUpgradeBump       Int?
 
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+// ─── Tamagotchi System ───
+
+model UserStreak {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastCheckinAt  DateTime?
+  totalCheckins  Int       @default(0)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model UserTamagotchi {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  species          String   // "bear" | "ghost" | "bonely" | "lugia" | "mewtwo" | "charizard" | "snorlax"
+  displayName      String?  // user-customizable; null = use species default name
+
+  health           Int      @default(0)
+  level            Int      @default(1)
+  currentThreshold Int      // health needed to level up; starts at species startingThreshold
+
+  isActive         Boolean  @default(false)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, species])
+  @@index([userId])
 }

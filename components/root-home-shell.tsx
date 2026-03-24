@@ -11,6 +11,7 @@ import type {
   SetStateAction,
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TAMAGOTCHI_SPECIES } from "@/lib/tamagotchi-config";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const PLACEHOLDERS = [
@@ -202,6 +203,25 @@ type InitialFolder = {
   selectedNoteIds: string[];
 };
 
+type OwnedTamagotchi = {
+  species: string;
+  displayName: string | null;
+  health: number;
+  level: number;
+  currentThreshold: number;
+  isActive: boolean;
+};
+
+type TamagotchiStatus = {
+  streak: {
+    current: number;
+    longest: number;
+    totalCheckins: number;
+    checkedInToday: boolean;
+  };
+  tamagotchis: OwnedTamagotchi[];
+};
+
 type RootHomeShellProps = {
   initialView?: "home" | "all-notes" | "note" | "folder";
   initialNote?: InitialNote | null;
@@ -358,7 +378,13 @@ async function convertMathPromptToLatex(
     .trim();
 }
 
-function HomeComponent() {
+function HomeComponent({
+  activeTamagotchi,
+  onTamagotchiClick,
+}: {
+  activeTamagotchi: OwnedTamagotchi | null;
+  onTamagotchiClick: () => void;
+}) {
   const [pressedKeys, setPressedKeys] = useState<{
     ctrl: boolean;
     shift: boolean;
@@ -547,18 +573,38 @@ function HomeComponent() {
           </div>
         </div>
 
-        <div className="lg:col-span-2">
-          <div className="relative overflow-hidden rounded-[40px]">
-            <div className="pointer-events-none absolute inset-0 z-10 bg-white/10" />
-            <Image
-              src="/mylittlecoffeeshop.gif"
-              alt="Coffee shop"
-              width={1200}
-              height={900}
-              className="h-auto w-full rounded-[40px] object-contain"
-              priority
-            />
-          </div>
+        <div className="flex h-full items-start lg:col-span-2">
+          {activeTamagotchi ? (
+            <button
+              type="button"
+              onClick={onTamagotchiClick}
+              className="relative flex h-[80%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/tamagotchi/${activeTamagotchi.species}.gif`}
+                alt={
+                  activeTamagotchi.displayName ??
+                  (TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)
+                    ?.name ?? activeTamagotchi.species)
+                }
+                className="h-[98%] w-auto object-contain drop-shadow-lg"
+                style={{ imageRendering: "pixelated", transform: "scale(1.25)", transformOrigin: "center" }}
+              />
+            </button>
+          ) : (
+            <div className="relative overflow-hidden rounded-[40px]">
+              <div className="pointer-events-none absolute inset-0 z-10 bg-white/10" />
+              <Image
+                src="/mylittlecoffeeshop.gif"
+                alt="Coffee shop"
+                width={1200}
+                height={900}
+                className="h-auto w-full rounded-[40px] object-contain"
+                priority
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -895,6 +941,262 @@ function FontOverlay({
                       </span>
                     )}
                     {font.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TamagotchiPreferencesOverlay({
+  onClose,
+  status,
+  onSelectActive,
+  onRename,
+}: {
+  onClose: () => void;
+  status: TamagotchiStatus;
+  onSelectActive: (species: string | null) => void;
+  onRename: (species: string, name: string) => void;
+}) {
+  const ownedMap = new Map(status.tamagotchis.map((t) => [t.species, t]));
+  const [renamingSpecies, setRenamingSpecies] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renamingSpecies && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingSpecies]);
+
+  const rows = [TAMAGOTCHI_SPECIES.slice(0, 4), TAMAGOTCHI_SPECIES.slice(4)];
+
+  return (
+    <div
+      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tamagotchi Preferences"
+    >
+      <div className="flex items-baseline gap-4">
+        <h1 className="text-[40px] font-bold leading-none text-black">
+          たまごっち
+        </h1>
+        {status.streak.current > 0 ? (
+          <span className="text-[20px] font-medium text-black/50">
+            🔥 {status.streak.current} day streak
+          </span>
+        ) : null}
+      </div>
+
+      {(() => {
+        const activeTama = status.tamagotchis.find((t) => t.isActive);
+        const activeName =
+          activeTama?.displayName ??
+          TAMAGOTCHI_SPECIES.find((s) => s.id === activeTama?.species)?.name ??
+          activeTama?.species;
+        return (
+          <p className="mt-1 text-[15px] text-black/45">
+            {activeTama ? (
+              <>
+                <span className="font-medium text-black/60">{activeName}</span>
+                {" is on your home screen · "}
+                <button
+                  type="button"
+                  onClick={() => onSelectActive(null)}
+                  className="underline transition-colors hover:text-black/70"
+                >
+                  show homepage GIF instead
+                </button>
+              </>
+            ) : (
+              "No tamagotchi on home screen — select one below"
+            )}
+          </p>
+        );
+      })()}
+
+      <div className="flex flex-1 flex-col justify-evenly">
+        {rows.map((row, rowIndex) => (
+          <div key={rowIndex} className="flex justify-evenly">
+            {row.map((species) => {
+              const owned = ownedMap.get(species.id);
+              const isOwned = owned !== undefined;
+              const isActive = owned?.isActive ?? false;
+              const isRenaming = renamingSpecies === species.id;
+              const displayName = owned?.displayName ?? species.name;
+
+              // Streak progress for locked
+              const streakNeeded = species.unlockStreakDays ?? 0;
+              const streakProgress = Math.min(
+                status.streak.current,
+                streakNeeded,
+              );
+
+              return (
+                <div key={species.id} className="flex w-[260px] flex-col gap-3">
+                  {/* Card */}
+                  <div
+                    className="relative flex aspect-square w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[28px]"
+                    style={{
+                      backgroundColor: isOwned
+                        ? "var(--app-card)"
+                        : "color-mix(in srgb, var(--app-card) 60%, transparent)",
+                      outline: isActive
+                        ? "3px solid var(--app-ink)"
+                        : "2px solid transparent",
+                      outlineOffset: "3px",
+                      boxShadow: isActive
+                        ? "0 8px 24px color-mix(in srgb, var(--app-ink) 14%, transparent)"
+                        : "0 2px 6px rgba(0,0,0,0.06)",
+                      transition: "box-shadow 180ms ease",
+                      opacity: isOwned ? 1 : 0.55,
+                    }}
+                  >
+                    {/* GIF */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={species.gif}
+                      alt={species.name}
+                      className="h-24 w-24 object-contain"
+                      style={{ filter: isOwned ? "none" : "grayscale(1)" }}
+                    />
+
+                    {isOwned ? (
+                      <>
+                        {/* Level badge */}
+                        <div className="text-[13px] font-semibold text-black/60">
+                          Lv {owned.level}
+                        </div>
+                        {/* Health bar */}
+                        <div className="w-[80%]">
+                          <div className="mb-0.5 flex justify-between text-[11px] text-black/40">
+                            <span>❤</span>
+                            <span>
+                              {owned.health}/{owned.currentThreshold}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                            <div
+                              className="h-full rounded-full bg-black/70 transition-all duration-300"
+                              style={{
+                                width: `${Math.min(100, (owned.health / owned.currentThreshold) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Locked info */}
+                        <div className="text-[13px] font-semibold text-black/50">
+                          🔥 {streakNeeded} day streak
+                        </div>
+                        <div className="w-[80%]">
+                          <div className="mb-0.5 flex justify-between text-[11px] text-black/35">
+                            <span>progress</span>
+                            <span>
+                              {streakProgress}/{streakNeeded}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                            <div
+                              className="h-full rounded-full bg-black/30 transition-all duration-300"
+                              style={{
+                                width:
+                                  streakNeeded > 0
+                                    ? `${(streakProgress / streakNeeded) * 100}%`
+                                    : "0%",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Select / Active button */}
+                    {isOwned ? (
+                      <button
+                        type="button"
+                        onClick={() => !isActive && onSelectActive(species.id)}
+                        className="mt-1 rounded-full px-4 py-1 text-[12px] font-semibold transition-all duration-150"
+                        style={{
+                          backgroundColor: isActive
+                            ? "var(--app-ink)"
+                            : "color-mix(in srgb, var(--app-ink) 12%, transparent)",
+                          color: isActive
+                            ? "var(--app-surface)"
+                            : "var(--app-ink)",
+                          cursor: isActive ? "default" : "pointer",
+                        }}
+                      >
+                        {isActive ? "✓ Active" : "Set Active"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {/* Name + rename */}
+                  <div className="flex items-center justify-between px-1">
+                    {isRenaming ? (
+                      <form
+                        className="flex w-full items-center gap-1"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          onRename(species.id, renameValue);
+                          setRenamingSpecies(null);
+                        }}
+                      >
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setRenamingSpecies(null);
+                          }}
+                          onBlur={() => setRenamingSpecies(null)}
+                          className="w-full rounded-md border border-black/20 bg-transparent px-2 py-0.5 text-[15px] text-black outline-none focus:border-black/40"
+                          placeholder={species.name}
+                          maxLength={24}
+                        />
+                      </form>
+                    ) : (
+                      <>
+                        <span
+                          className="text-[15px] font-medium leading-tight text-black"
+                          style={{ opacity: isOwned ? 1 : 0.5 }}
+                        >
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black text-[9px] font-bold text-white">
+                                ✓
+                              </span>
+                              {displayName}
+                            </span>
+                          ) : (
+                            displayName
+                          )}
+                        </span>
+                        {isOwned ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRenameValue(displayName);
+                              setRenamingSpecies(species.id);
+                            }}
+                            className="ml-2 shrink-0 text-[14px] text-black/30 transition-opacity hover:text-black/60"
+                            title="Rename"
+                          >
+                            ✎
+                          </button>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -2277,8 +2579,12 @@ export default function RootHomeShell({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isFontOpen, setIsFontOpen] = useState(false);
+  const [isTamagotchiOpen, setIsTamagotchiOpen] = useState(false);
   const [currentTheme, setCurrentTheme] = useState("default");
   const [currentFont, setCurrentFont] = useState("doto");
+  const [tamagotchiStatus, setTamagotchiStatus] =
+    useState<TamagotchiStatus | null>(null);
+  const [newUnlockToast, setNewUnlockToast] = useState<string[]>([]);
   const [noteViewAnimationClass, setNoteViewAnimationClass] = useState("");
   const noteTransitionTimerRef = useRef<number | null>(null);
 
@@ -2291,6 +2597,31 @@ export default function RootHomeShell({
     const savedFont = localStorage.getItem("noted-font") ?? "doto";
     document.body.setAttribute("data-font", savedFont);
     setCurrentFont(savedFont);
+  }, []);
+
+  // Daily tamagotchi check-in on mount
+  useEffect(() => {
+    void fetch("/api/tamagotchi/checkin", { method: "POST" })
+      .then((r) => r.json())
+      .then(
+        (data: {
+          streak: TamagotchiStatus["streak"];
+          tamagotchis: OwnedTamagotchi[];
+          newUnlocks: string[];
+          alreadyCheckedIn: boolean;
+        }) => {
+          setTamagotchiStatus({
+            streak: data.streak,
+            tamagotchis: data.tamagotchis,
+          });
+          if (data.newUnlocks.length > 0) {
+            setNewUnlockToast(data.newUnlocks);
+          }
+        },
+      )
+      .catch(() => {
+        // silent — tamagotchi is non-critical
+      });
   }, []);
 
   const applyTheme = useCallback((themeId: string) => {
@@ -2313,6 +2644,9 @@ export default function RootHomeShell({
       } else if (option === "Font") {
         setIsMenuOpen(false);
         setIsFontOpen(true);
+      } else if (option === "たまごっち Preferences") {
+        setIsMenuOpen(false);
+        setIsTamagotchiOpen(true);
       }
       // other menu items: no action yet
     },
@@ -2338,6 +2672,12 @@ export default function RootHomeShell({
       if (e.key === "Escape" && isFontOpen) {
         e.preventDefault();
         setIsFontOpen(false);
+        return;
+      }
+
+      if (e.key === "Escape" && isTamagotchiOpen) {
+        e.preventDefault();
+        setIsTamagotchiOpen(false);
         return;
       }
 
@@ -2383,11 +2723,18 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen, isAppearanceOpen, isFontOpen, view]);
+  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view]);
 
   return (
     <>
-      {view === "home" ? <HomeComponent /> : null}
+      {view === "home" ? (
+        <HomeComponent
+          activeTamagotchi={
+            tamagotchiStatus?.tamagotchis.find((t) => t.isActive) ?? null
+          }
+          onTamagotchiClick={() => setIsTamagotchiOpen(true)}
+        />
+      ) : null}
       {view === "all-notes" ? (
         <AllNotesComponent
           refreshToken={allNotesRefreshToken}
@@ -2461,6 +2808,92 @@ export default function RootHomeShell({
             setIsFontOpen(false);
           }}
         />
+      ) : null}
+      {isTamagotchiOpen && tamagotchiStatus ? (
+        <TamagotchiPreferencesOverlay
+          onClose={() => setIsTamagotchiOpen(false)}
+          status={tamagotchiStatus}
+          onSelectActive={(species) => {
+            void fetch("/api/tamagotchi/select", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ species }),
+            }).then(() => {
+              setTamagotchiStatus((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      tamagotchis: prev.tamagotchis.map((t) => ({
+                        ...t,
+                        isActive: species ? t.species === species : false,
+                      })),
+                    }
+                  : prev,
+              );
+            });
+          }}
+          onRename={(species, name) => {
+            void fetch("/api/tamagotchi/rename", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ species, name }),
+            }).then(() => {
+              setTamagotchiStatus((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      tamagotchis: prev.tamagotchis.map((t) =>
+                        t.species === species
+                          ? { ...t, displayName: name || null }
+                          : t,
+                      ),
+                    }
+                  : prev,
+              );
+            });
+          }}
+        />
+      ) : null}
+      {newUnlockToast.length > 0 ? (
+        <div className="saved-toast fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[20px] bg-black px-5 py-3 text-white shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2">
+              {newUnlockToast.map((s) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  key={s}
+                  src={`/tamagotchi/${s}.gif`}
+                  alt={s}
+                  className="h-10 w-10 rounded-full bg-white/10 object-contain"
+                />
+              ))}
+            </div>
+            <div>
+              <div className="text-[16px] font-bold leading-tight">
+                {newUnlockToast.length === 1
+                  ? `${TAMAGOTCHI_SPECIES.find((sp) => sp.id === newUnlockToast[0])?.name ?? newUnlockToast[0]} unlocked!`
+                  : `${newUnlockToast.length} new companions unlocked!`}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewUnlockToast([]);
+                  setIsTamagotchiOpen(true);
+                }}
+                className="mt-0.5 text-[13px] text-white/70 underline"
+              >
+                View in たまごっち Preferences
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewUnlockToast([])}
+              className="ml-2 text-white/50 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       ) : null}
     </>
   );

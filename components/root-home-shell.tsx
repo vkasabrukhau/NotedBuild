@@ -12,6 +12,7 @@ import type {
   SetStateAction,
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { TAMAGOTCHI_SPECIES } from "@/lib/tamagotchi-config";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
@@ -383,10 +384,23 @@ async function convertMathPromptToLatex(
 function HomeComponent({
   activeTamagotchi,
   onTamagotchiClick,
+  onRename,
 }: {
   activeTamagotchi: OwnedTamagotchi | null;
   onTamagotchiClick: () => void;
+  onRename: (name: string) => void;
 }) {
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [isRenaming]);
+
   const [pressedKeys, setPressedKeys] = useState<{
     ctrl: boolean;
     shift: boolean;
@@ -396,7 +410,12 @@ function HomeComponent({
     shift: false,
     letter: null,
   });
-  const [headingPrefix, setHeadingPrefix] = useState("");
+  const { user } = useUser();
+  const firstName = user?.firstName ?? user?.fullName?.split(" ")[0] ?? "";
+
+  const [headingGreeting, setHeadingGreeting] = useState("");
+  const [headingName, setHeadingName] = useState("");
+  const [headingMid, setHeadingMid] = useState("");
   const [headingNoting, setHeadingNoting] = useState("");
   const modifierText = "^ + Shift +";
 
@@ -468,9 +487,28 @@ function HomeComponent({
       }
     };
 
+    setHeadingGreeting("");
+    setHeadingName("");
+    setHeadingMid("");
+    setHeadingNoting("");
+
+    const hour = new Date().getHours();
+    const timeGreeting =
+      hour >= 5 && hour < 12
+        ? "Good morning"
+        : hour >= 12 && hour < 17
+          ? "Good afternoon"
+          : "Good evening";
+
     const run = async () => {
       await sleep(150);
-      await typeInto("Good morning, let's get ", setHeadingPrefix);
+      await typeInto(`${timeGreeting}, `, setHeadingGreeting);
+      if (firstName) {
+        await typeInto(firstName, setHeadingName);
+        await typeInto(", let's get ", setHeadingMid);
+      } else {
+        await typeInto("let's get ", setHeadingMid);
+      }
       await typeInto("noting", setHeadingNoting);
     };
 
@@ -479,12 +517,14 @@ function HomeComponent({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [firstName]);
 
   return (
     <div className="min-h-screen w-full bg-white px-6 py-8">
       <h1 className="text-[40px] font-normal leading-none text-black">
-        {headingPrefix}
+        {headingGreeting}
+        <span className="font-bold italic">{headingName}</span>
+        {headingMid}
         <span className="font-bold italic">{headingNoting}</span>
         <span className="typewriter-cursor" aria-hidden="true">
           |
@@ -575,25 +615,89 @@ function HomeComponent({
           </div>
         </div>
 
-        <div className="flex h-full items-start lg:col-span-2">
+        <div className="flex h-full flex-col items-start lg:col-span-2">
           {activeTamagotchi ? (
-            <button
-              type="button"
-              onClick={onTamagotchiClick}
-              className="relative flex h-[80%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/tamagotchi/${activeTamagotchi.species}.gif`}
-                alt={
-                  activeTamagotchi.displayName ??
-                  (TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)
-                    ?.name ?? activeTamagotchi.species)
-                }
-                className="h-[98%] w-auto object-contain drop-shadow-lg"
-                style={{ imageRendering: "pixelated", transform: "scale(1.25)", transformOrigin: "center" }}
-              />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onTamagotchiClick}
+                className="relative flex h-[80%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/tamagotchi/${activeTamagotchi.species}.gif`}
+                  alt={
+                    activeTamagotchi.displayName ??
+                    (TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)
+                      ?.name ?? activeTamagotchi.species)
+                  }
+                  className="h-[98%] w-auto object-contain drop-shadow-lg"
+                  style={{ imageRendering: "pixelated", transform: "scale(1.4375)", transformOrigin: "center" }}
+                />
+              </button>
+
+              {/* Name + health bar */}
+              <div className="mt-4 w-full px-1">
+                <div className="flex items-center gap-2">
+                  {isRenaming ? (
+                    <form
+                      className="flex flex-1 items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        onRename(renameValue);
+                        setIsRenaming(false);
+                      }}
+                    >
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setIsRenaming(false); }}
+                        onBlur={() => setIsRenaming(false)}
+                        className="w-full bg-transparent text-[22px] font-medium text-black outline-none border-b border-black/30 focus:border-black/60"
+                        placeholder={TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ?? ""}
+                        maxLength={24}
+                      />
+                    </form>
+                  ) : (
+                    <>
+                      <span className="text-[22px] font-medium text-black">
+                        {activeTamagotchi.displayName ??
+                          TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ??
+                          activeTamagotchi.species}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenameValue(
+                            activeTamagotchi.displayName ??
+                            TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ??
+                            "",
+                          );
+                          setIsRenaming(true);
+                        }}
+                        className="text-[16px] text-black/30 transition-colors hover:text-black/60"
+                        title="Rename"
+                      >
+                        ✎
+                      </button>
+                    </>
+                  )}
+                  <span className="ml-auto text-[20px] font-medium text-black/40">
+                    Lv {activeTamagotchi.level} · ❤ {activeTamagotchi.health}/{activeTamagotchi.currentThreshold}
+                  </span>
+                </div>
+
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                  <div
+                    className="h-full rounded-full bg-black/50 transition-all duration-500"
+                    style={{
+                      width: `${Math.min(100, (activeTamagotchi.health / activeTamagotchi.currentThreshold) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </>
           ) : (
             <div className="relative overflow-hidden rounded-[40px]">
               <div className="pointer-events-none absolute inset-0 z-10 bg-white/10" />
@@ -680,12 +784,6 @@ function MenuOverlay({
                   className="flex items-center gap-3 text-left transition-opacity duration-150 hover:opacity-65"
                   onMouseEnter={() => setFocusedIndex(index)}
                   onClick={() => onItemSelect(option)}
-                  onClick={() => onSelectOption(option)}
-                  className={`block text-left font-medium transition-opacity duration-150 ${
-                    option === "Account"
-                      ? "hover:opacity-65"
-                      : "cursor-default opacity-45"
-                  }`}
                 >
                   <span className="w-6 font-mono font-bold text-black">
                     {focusedIndex === index ? ">" : ""}
@@ -2746,6 +2844,26 @@ export default function RootHomeShell({
             tamagotchiStatus?.tamagotchis.find((t) => t.isActive) ?? null
           }
           onTamagotchiClick={() => setIsTamagotchiOpen(true)}
+          onRename={(name) => {
+            const active = tamagotchiStatus?.tamagotchis.find((t) => t.isActive);
+            if (!active) return;
+            void fetch("/api/tamagotchi/rename", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ species: active.species, name }),
+            }).then(() => {
+              setTamagotchiStatus((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      tamagotchis: prev.tamagotchis.map((t) =>
+                        t.isActive ? { ...t, displayName: name || null } : t,
+                      ),
+                    }
+                  : prev,
+              );
+            });
+          }}
         />
       ) : null}
       {view === "all-notes" ? (

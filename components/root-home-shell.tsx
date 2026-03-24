@@ -47,6 +47,132 @@ const MENU_OPTIONS = [
   "たまごっち Preferences",
 ] as const;
 
+const FONTS = [
+  {
+    id: "doto",
+    name: "Doto",
+    variable: "--font-doto",
+    sample: "Aa Bb Cc",
+    description: "Default",
+  },
+  {
+    id: "bitcount",
+    name: "Bitcount Grid Double Ink",
+    variable: "--font-bitcount",
+    sample: "Aa Bb Cc",
+    description: "Display",
+  },
+  {
+    id: "roboto",
+    name: "Roboto",
+    variable: "--font-roboto",
+    sample: "Aa Bb Cc",
+    description: "Sans-serif",
+  },
+  {
+    id: "sue-ellen",
+    name: "Sue Ellen Francisco",
+    variable: "--font-sue-ellen",
+    sample: "Aa Bb Cc",
+    description: "Handwriting",
+  },
+  {
+    id: "merriweather",
+    name: "Merriweather",
+    variable: "--font-merriweather",
+    sample: "Aa Bb Cc",
+    description: "Serif",
+  },
+  {
+    id: "lora",
+    name: "Lora",
+    variable: "--font-lora",
+    sample: "Aa Bb Cc",
+    description: "Serif",
+  },
+  {
+    id: "source-code-pro",
+    name: "Source Code Pro",
+    variable: "--font-source-code-pro",
+    sample: "Aa Bb Cc",
+    description: "Monospace",
+  },
+  {
+    id: "cabin",
+    name: "Cabin",
+    variable: "--font-cabin",
+    sample: "Aa Bb Cc",
+    description: "Sans-serif",
+  },
+];
+
+const THEMES = [
+  {
+    id: "default",
+    name: "Default",
+    image: "/themes/default.png",
+    cardBg: "#f5f5f5",
+    accent: "#000000",
+    ink: "#000000",
+  },
+  {
+    id: "black-coffee",
+    name: "Black Coffee",
+    image: "/themes/black-coffee.png",
+    cardBg: "#ece4dc",
+    accent: "#6f4e37",
+    ink: "#4a2e18",
+  },
+  {
+    id: "latte",
+    name: "Latte",
+    image: "/themes/latte.png",
+    cardBg: "#f0e5d8",
+    accent: "#a07850",
+    ink: "#5c3d20",
+  },
+  {
+    id: "mocha",
+    name: "Mocha",
+    image: "/themes/mocha.png",
+    cardBg: "#ede0cf",
+    accent: "#964b00",
+    ink: "#5c2e00",
+  },
+  {
+    id: "caramel-macchiato",
+    name: "Caramel Macchiato",
+    image: "/themes/caramel-macchiato.png",
+    cardBg: "#faf0d0",
+    accent: "#c49a3c",
+    ink: "#7a5c14",
+  },
+  {
+    id: "cappuccino",
+    name: "Cappuccino",
+    image: "/themes/cappuccino.png",
+    cardBg: "#ede0cc",
+    accent: "#b56a25",
+    ink: "#6e3a0a",
+  },
+  {
+    id: "light-roast",
+    name: "Light Roast",
+    image: "/themes/light-roast.png",
+    cardBg: "#edd8d8",
+    accent: "#a52a2a",
+    ink: "#6b1010",
+  },
+  {
+    id: "chai",
+    name: "Chai",
+    image: "/themes/chai.png",
+    cardBg: "#eddfc0",
+    accent: "#b8860b",
+    ink: "#6b4a00",
+  },
+];
+
 type MathEditorState = {
   pos: number;
   left: number;
@@ -443,10 +569,12 @@ function HomeComponent() {
 
 function MenuOverlay({
   onClose,
+  onItemSelect,
   noteUsageCount,
   onSelectOption,
 }: {
   onClose: () => void;
+  onItemSelect: (option: string) => void;
   noteUsageCount: number;
   onSelectOption: (option: (typeof MENU_OPTIONS)[number]) => void;
 }) {
@@ -456,6 +584,28 @@ function MenuOverlay({
     100,
     (normalizedNoteUsageCount / storageLimit) * 100,
   );
+
+  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + 1) % MENU_OPTIONS.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex(
+          (prev) => (prev - 1 + MENU_OPTIONS.length) % MENU_OPTIONS.length,
+        );
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        onItemSelect(MENU_OPTIONS[focusedIndex]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedIndex, onItemSelect]);
 
   return (
     <div
@@ -477,10 +627,13 @@ function MenuOverlay({
             </h2>
 
             <div className="mt-10 space-y-6 text-[28px] leading-none text-black">
-              {MENU_OPTIONS.map((option) => (
+              {MENU_OPTIONS.map((option, index) => (
                 <button
                   key={option}
                   type="button"
+                  className="flex items-center gap-3 text-left transition-opacity duration-150 hover:opacity-65"
+                  onMouseEnter={() => setFocusedIndex(index)}
+                  onClick={() => onItemSelect(option)}
                   onClick={() => onSelectOption(option)}
                   className={`block text-left font-medium transition-opacity duration-150 ${
                     option === "Account"
@@ -488,7 +641,12 @@ function MenuOverlay({
                       : "cursor-default opacity-45"
                   }`}
                 >
-                  {option}
+                  <span className="w-6 font-mono font-bold text-black">
+                    {focusedIndex === index ? ">" : ""}
+                  </span>
+                  <span className={focusedIndex === index ? "font-bold" : "font-medium"}>
+                    {option}
+                  </span>
                 </button>
               ))}
             </div>
@@ -507,6 +665,252 @@ function MenuOverlay({
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AppearanceOverlay({
+  onClose,
+  currentTheme,
+  onThemeSelect,
+}: {
+  onClose: () => void;
+  currentTheme: string;
+  onThemeSelect: (themeId: string) => void;
+}) {
+  const [focusedIndex, setFocusedIndex] = useState(
+    () => Math.max(0, THEMES.findIndex((t) => t.id === currentTheme)),
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const cols = 4;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + 1) % THEMES.length);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setFocusedIndex(
+          (prev) => (prev - 1 + THEMES.length) % THEMES.length,
+        );
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex(
+          (prev) => (prev + cols) % THEMES.length,
+        );
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex(
+          (prev) => (prev - cols + THEMES.length) % THEMES.length,
+        );
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        onThemeSelect(THEMES[focusedIndex].id);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedIndex, onThemeSelect]);
+
+  const rows = [THEMES.slice(0, 4), THEMES.slice(4, 8)];
+
+  return (
+    <div
+      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Appearance"
+    >
+      <h1 className="text-[40px] font-bold leading-none text-black">
+        Appearance
+      </h1>
+
+      <div className="flex flex-1 flex-col justify-evenly">
+        {rows.map((row, rowIndex) => (
+          <div key={rowIndex} className="flex justify-evenly">
+            {row.map((theme, colIndex) => {
+              const index = rowIndex * 4 + colIndex;
+              const isSelected = theme.id === currentTheme;
+              const isFocused = focusedIndex === index;
+              const isActive = isSelected || isFocused;
+
+              return (
+                <div key={theme.id} className="flex w-[320px] flex-col gap-3">
+                  <button
+                    type="button"
+                    className="aspect-square w-full overflow-hidden rounded-[28px]"
+                    style={{
+                      backgroundColor: theme.cardBg,
+                      outline: isSelected
+                        ? `3px solid ${theme.accent}`
+                        : isFocused
+                          ? `2px solid ${theme.accent}80`
+                          : "2px solid transparent",
+                      outlineOffset: "3px",
+                      boxShadow: isSelected
+                        ? `0 8px 24px ${theme.accent}38`
+                        : isFocused
+                          ? `0 4px 14px ${theme.accent}22`
+                          : "0 2px 6px rgba(0,0,0,0.06)",
+                      transition: "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
+                    }}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                    onClick={() => onThemeSelect(theme.id)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={theme.image}
+                      alt={theme.name}
+                      className="h-full w-full object-contain p-8"
+                    />
+                  </button>
+
+                  <div
+                    className="flex items-center gap-2 px-1 text-[16px] leading-tight"
+                    style={{
+                      color: isActive ? theme.ink : `${theme.ink}99`,
+                      fontWeight: isSelected ? 700 : isFocused ? 600 : 500,
+                      transition: "color 180ms ease",
+                    }}
+                  >
+                    {isSelected && (
+                      <span
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                        style={{ backgroundColor: theme.accent }}
+                      >
+                        ✓
+                      </span>
+                    )}
+                    {theme.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FontOverlay({
+  onClose,
+  currentFont,
+  onFontSelect,
+}: {
+  onClose: () => void;
+  currentFont: string;
+  onFontSelect: (fontId: string) => void;
+}) {
+  const [focusedIndex, setFocusedIndex] = useState(
+    () => Math.max(0, FONTS.findIndex((f) => f.id === currentFont)),
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const cols = 4;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + 1) % FONTS.length);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev - 1 + FONTS.length) % FONTS.length);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev + cols) % FONTS.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev - cols + FONTS.length) % FONTS.length);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        onFontSelect(FONTS[focusedIndex].id);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedIndex, onFontSelect]);
+
+  const rows = [FONTS.slice(0, 4), FONTS.slice(4, 8)];
+
+  return (
+    <div
+      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Font"
+    >
+      <h1 className="text-[40px] font-bold leading-none text-black">
+        Font
+      </h1>
+
+      <div className="flex flex-1 flex-col justify-evenly">
+        {rows.map((row, rowIndex) => (
+          <div key={rowIndex} className="flex justify-evenly">
+            {row.map((font, colIndex) => {
+              const index = rowIndex * 4 + colIndex;
+              const isSelected = font.id === currentFont;
+              const isFocused = focusedIndex === index;
+              const isActive = isSelected || isFocused;
+
+              return (
+                <div key={font.id} className="flex w-[320px] flex-col gap-3">
+                  <button
+                    type="button"
+                    className="aspect-square w-full overflow-hidden rounded-[28px] bg-[var(--app-card)] flex flex-col items-center justify-center gap-2"
+                    style={{
+                      outline: isSelected
+                        ? "3px solid var(--app-ink)"
+                        : isFocused
+                          ? "2px solid color-mix(in srgb, var(--app-ink) 50%, transparent)"
+                          : "2px solid transparent",
+                      outlineOffset: "3px",
+                      boxShadow: isSelected
+                        ? "0 8px 24px color-mix(in srgb, var(--app-ink) 14%, transparent)"
+                        : isFocused
+                          ? "0 4px 14px color-mix(in srgb, var(--app-ink) 8%, transparent)"
+                          : "0 2px 6px rgba(0,0,0,0.06)",
+                      transition: "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
+                    }}
+                    onMouseEnter={() => setFocusedIndex(index)}
+                    onClick={() => onFontSelect(font.id)}
+                  >
+                    <span
+                      className="text-[72px] leading-none text-black"
+                      style={{ fontFamily: `var(${font.variable})` }}
+                    >
+                      Aa
+                    </span>
+                    <span
+                      className="text-[13px] text-black/40"
+                      style={{ fontFamily: `var(${font.variable})` }}
+                    >
+                      {font.description}
+                    </span>
+                  </button>
+
+                  <div
+                    className="flex items-center gap-2 px-1 text-[16px] leading-tight text-black"
+                    style={{
+                      opacity: isActive ? 1 : 0.6,
+                      fontWeight: isSelected ? 700 : isFocused ? 600 : 500,
+                      transition: "opacity 180ms ease",
+                    }}
+                  >
+                    {isSelected && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white">
+                        ✓
+                      </span>
+                    )}
+                    {font.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -534,7 +938,7 @@ function NoteGridCard({
       className={`folder-grid-card rounded-[28px] border p-5 text-left ${
         isSelected
           ? "border-black bg-black text-white"
-          : "border-black/10 bg-[#f7f7f7] text-black"
+          : "border-black/10 bg-[var(--app-card)] text-black"
       } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
         isSelected ? "folder-grid-card--selected" : ""
       }`}
@@ -756,7 +1160,7 @@ function AllNotesComponent({
                   | "size-desc",
               )
             }
-            className="w-full rounded-[18px] border border-black/10 bg-[#f7f7f7] px-4 py-3 pr-12 text-[18px] font-medium text-black outline-none"
+            className="w-full rounded-[18px] border border-black/10 bg-[var(--app-card)] px-4 py-3 pr-12 text-[18px] font-medium text-black outline-none"
           >
             <option value="date-desc">Date: newest first</option>
             <option value="date-asc">Date: oldest first</option>
@@ -779,7 +1183,7 @@ function AllNotesComponent({
           ? Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={`all-notes-skeleton-${index}`}
-                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[#f4f4f4] p-5"
+                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
               >
                 <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
                 <div className="mt-5 space-y-3">
@@ -1772,7 +2176,7 @@ function FolderComponent({
           ? Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={`folder-skeleton-${index}`}
-                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[#f4f4f4] p-5"
+                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
               >
                 <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
                 <div className="mt-5 space-y-3">
@@ -1795,7 +2199,7 @@ function FolderComponent({
                   className={`folder-grid-card rounded-[28px] border p-5 text-left ${
                     isSelected
                       ? "border-black bg-black text-white"
-                      : "border-black/10 bg-[#f7f7f7] text-black"
+                      : "border-black/10 bg-[var(--app-card)] text-black"
                   } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
                     isSelected ? "folder-grid-card--selected" : ""
                   }`}
@@ -1884,8 +2288,49 @@ export default function RootHomeShell({
   const [allNotesRefreshToken, setAllNotesRefreshToken] = useState(0);
   const [noteUsageCount, setNoteUsageCount] = useState(initialNoteUsageCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  const [isFontOpen, setIsFontOpen] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState("default");
+  const [currentFont, setCurrentFont] = useState("doto");
   const [noteViewAnimationClass, setNoteViewAnimationClass] = useState("");
   const noteTransitionTimerRef = useRef<number | null>(null);
+
+  // Init theme + font from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("noted-theme") ?? "default";
+    document.documentElement.setAttribute("data-theme", saved);
+    setCurrentTheme(saved);
+
+    const savedFont = localStorage.getItem("noted-font") ?? "doto";
+    document.body.setAttribute("data-font", savedFont);
+    setCurrentFont(savedFont);
+  }, []);
+
+  const applyTheme = useCallback((themeId: string) => {
+    document.documentElement.setAttribute("data-theme", themeId);
+    localStorage.setItem("noted-theme", themeId);
+    setCurrentTheme(themeId);
+  }, []);
+
+  const applyFont = useCallback((fontId: string) => {
+    document.body.setAttribute("data-font", fontId);
+    localStorage.setItem("noted-font", fontId);
+    setCurrentFont(fontId);
+  }, []);
+
+  const handleMenuItemSelect = useCallback(
+    (option: string) => {
+      if (option === "Appearance") {
+        setIsMenuOpen(false);
+        setIsAppearanceOpen(true);
+      } else if (option === "Font") {
+        setIsMenuOpen(false);
+        setIsFontOpen(true);
+      }
+      // other menu items: no action yet
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -1897,6 +2342,18 @@ export default function RootHomeShell({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isAppearanceOpen) {
+        e.preventDefault();
+        setIsAppearanceOpen(false);
+        return;
+      }
+
+      if (e.key === "Escape" && isFontOpen) {
+        e.preventDefault();
+        setIsFontOpen(false);
+        return;
+      }
+
       if (e.key === "Escape" && isMenuOpen) {
         e.preventDefault();
         setIsMenuOpen(false);
@@ -1939,7 +2396,7 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen, view]);
+  }, [isMenuOpen, isAppearanceOpen, isFontOpen, view]);
 
   return (
     <>
@@ -1995,12 +2452,33 @@ export default function RootHomeShell({
       {isMenuOpen ? (
         <MenuOverlay
           onClose={() => setIsMenuOpen(false)}
+          onItemSelect={handleMenuItemSelect}
           noteUsageCount={noteUsageCount}
           onSelectOption={(option) => {
             if (option === "Account") {
               setView("profile");
               setIsMenuOpen(false);
             }
+          }}
+        />
+      ) : null}
+      {isAppearanceOpen ? (
+        <AppearanceOverlay
+          onClose={() => setIsAppearanceOpen(false)}
+          currentTheme={currentTheme}
+          onThemeSelect={(themeId) => {
+            applyTheme(themeId);
+            setIsAppearanceOpen(false);
+          }}
+        />
+      ) : null}
+      {isFontOpen ? (
+        <FontOverlay
+          onClose={() => setIsFontOpen(false)}
+          currentFont={currentFont}
+          onFontSelect={(fontId) => {
+            applyFont(fontId);
+            setIsFontOpen(false);
           }}
         />
       ) : null}

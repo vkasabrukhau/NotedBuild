@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import ProfileView from "@/components/profile/profile-view";
 import {
   getAcceptedFriendCount,
+  getProfileNotes,
   getProfileViewerData,
   getSchoolOptions,
   profileUserSelect,
@@ -52,9 +53,14 @@ export default async function PublicProfilePage({
     viewer?.id === targetUser.id ? getSchoolOptions() : Promise.resolve([]),
   ]);
 
+  const notes =
+    viewerData.isOwnProfile || viewerData.friendshipState === "accepted"
+      ? await getProfileNotes(targetUser.id, targetUser.email)
+      : [];
+
   return (
     <ProfileView
-      profile={toProfileViewData(targetUser, friendCount)}
+      profile={toProfileViewData(targetUser, friendCount, notes)}
       schools={schools}
       viewer={viewerData}
     />

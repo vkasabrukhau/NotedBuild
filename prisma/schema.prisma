@@ -170,6 +170,7 @@ model Friendship {
   requesterId  String
   addresseeId  String
   status       FriendshipStatus @default(PENDING)
+  requesterAcceptedNotificationSeenAt DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 

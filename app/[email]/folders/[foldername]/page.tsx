@@ -111,6 +111,7 @@ export default async function FolderPage({
     schoolLocation: folder.owner.school?.location ?? null,
     schoolName: folder.owner.school?.name ?? null,
     schoolPrimaryColor: folder.owner.school?.primaryColor ?? null,
+    notes: [],
   };
 
   const schools = await getSchoolOptions();

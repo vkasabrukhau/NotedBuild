@@ -5,7 +5,7 @@ import RootHomeShell from "@/components/root-home-shell";
 import SignUpView from "@/components/sign-up/sign-up";
 import { calculateAgeFromBirthdate } from "@/lib/birthdate";
 import type { ProfileViewData } from "@/lib/profile-data";
-import { getSchoolOptions } from "@/lib/profile-data";
+import { getProfileNotes, getSchoolOptions } from "@/lib/profile-data";
 import { prisma } from "@/lib/prisma";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 import {
@@ -266,6 +266,8 @@ export default async function Home() {
     return <SignUpView fullName={fullName} schools={schools} />;
   }
 
+  const profileNotes = await getProfileNotes(dbStatus.matchedUser.id, email);
+
   const profile: ProfileViewData = {
     id: dbStatus.matchedUser.id,
     age: dbStatus.matchedUser.age,
@@ -282,6 +284,7 @@ export default async function Home() {
     schoolLocation: dbStatus.matchedUser.schoolLocation,
     schoolName: dbStatus.matchedUser.schoolName,
     schoolPrimaryColor: dbStatus.matchedUser.schoolPrimaryColor,
+    notes: profileNotes,
   };
 
   const schools = await getSchoolOptions();

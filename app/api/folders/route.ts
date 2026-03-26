@@ -13,12 +13,55 @@ async function getOrCreateDbUser() {
   return syncClerkUserToDb(clerkUser);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const dbUser = await getOrCreateDbUser();
 
     if (!dbUser) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+
+    if (searchParams.get("view") === "folders") {
+      const folders = await prisma.folder.findMany({
+        where: {
+          ownerId: dbUser.id,
+          deletedAt: null,
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        select: {
+          id: true,
+          name: true,
+          owner: {
+            select: {
+              email: true,
+            },
+          },
+          updatedAt: true,
+          _count: {
+            select: {
+              notes: {
+                where: {
+                  deletedAt: null,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return NextResponse.json({
+        folders: folders.map((folder) => ({
+          id: folder.id,
+          name: folder.name,
+          noteCount: folder._count.notes,
+          ownerEmail: folder.owner.email,
+          updatedAt: folder.updatedAt.toISOString(),
+        })),
+      });
     }
 
     const notes = await prisma.note.findMany({

@@ -100,6 +100,7 @@ export default async function NotePage({
     schoolLocation: note.owner.school?.location ?? null,
     schoolName: note.owner.school?.name ?? null,
     schoolPrimaryColor: note.owner.school?.primaryColor ?? null,
+    notes: [],
   };
 
   const schools = await getSchoolOptions();

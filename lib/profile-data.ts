@@ -1,5 +1,9 @@
-import type { FriendshipStatus, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  getFriendshipStateFromRecords,
+  type ProfileFriendshipState,
+} from "@/lib/friendship-state";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
 export type ProfileViewData = {
@@ -29,22 +33,9 @@ export type ProfileNoteSummary = {
   ownerEmail: string;
 };
 
-export type ProfileFriendshipState =
-  | "self"
-  | "none"
-  | "pending_outgoing"
-  | "pending_incoming"
-  | "accepted";
-
 export type ProfileViewerData = {
   friendshipState: ProfileFriendshipState;
   isOwnProfile: boolean;
-};
-
-type FriendshipStateRecord = {
-  addresseeId: string;
-  requesterId: string;
-  status: FriendshipStatus;
 };
 
 export type ProfileSchoolOption = {
@@ -209,38 +200,4 @@ export async function getProfileViewerData(
   };
 }
 
-export function getFriendshipStateFromRecords(
-  viewerUserId: string,
-  profileUserId: string,
-  friendships: FriendshipStateRecord[],
-): ProfileFriendshipState {
-  if (viewerUserId === profileUserId) {
-    return "self";
-  }
-
-  if (friendships.some((friendship) => friendship.status === "ACCEPTED")) {
-    return "accepted";
-  }
-
-  const directFriendship = friendships.find(
-    (friendship) =>
-      friendship.requesterId === viewerUserId &&
-      friendship.addresseeId === profileUserId,
-  );
-
-  if (directFriendship?.status === "PENDING") {
-    return "pending_outgoing";
-  }
-
-  const reverseFriendship = friendships.find(
-    (friendship) =>
-      friendship.requesterId === profileUserId &&
-      friendship.addresseeId === viewerUserId,
-  );
-
-  if (reverseFriendship?.status === "PENDING") {
-    return "pending_incoming";
-  }
-
-  return "none";
-}
+export type { ProfileFriendshipState };

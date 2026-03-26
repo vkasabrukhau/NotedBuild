@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getFriendshipStateFromRecords,
   type ProfileFriendshipState,
-} from "@/lib/profile-data";
+} from "@/lib/friendship-state";
 
 type CreateFriendshipBody = {
   targetUserId?: string;

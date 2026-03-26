@@ -229,6 +229,61 @@ type TamagotchiStatus = {
   tamagotchis: OwnedTamagotchi[];
 };
 
+type TamagotchiCheckinResponse = TamagotchiStatus & {
+  newUnlocks?: string[];
+};
+
+function isOwnedTamagotchi(value: unknown): value is OwnedTamagotchi {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.species === "string" &&
+    (typeof candidate.displayName === "string" || candidate.displayName === null) &&
+    typeof candidate.health === "number" &&
+    typeof candidate.level === "number" &&
+    typeof candidate.currentThreshold === "number" &&
+    typeof candidate.isActive === "boolean"
+  );
+}
+
+function isTamagotchiStatus(value: unknown): value is TamagotchiStatus {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const streak = candidate.streak;
+
+  if (!streak || typeof streak !== "object" || !Array.isArray(candidate.tamagotchis)) {
+    return false;
+  }
+
+  const streakCandidate = streak as Record<string, unknown>;
+  return (
+    typeof streakCandidate.current === "number" &&
+    typeof streakCandidate.longest === "number" &&
+    typeof streakCandidate.totalCheckins === "number" &&
+    typeof streakCandidate.checkedInToday === "boolean" &&
+    candidate.tamagotchis.every(isOwnedTamagotchi)
+  );
+}
+
+function isTamagotchiCheckinResponse(value: unknown): value is TamagotchiCheckinResponse {
+  if (!isTamagotchiStatus(value)) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.newUnlocks === undefined ||
+    (Array.isArray(candidate.newUnlocks) &&
+      candidate.newUnlocks.every((unlock) => typeof unlock === "string"))
+  );
+}
+
 type RootHomeShellProps = {
   initialView?: "home" | "all-notes" | "note" | "folder" | "profile";
   initialNote?: InitialNote | null;
@@ -2725,23 +2780,19 @@ export default function RootHomeShell({
   // Daily tamagotchi check-in on mount
   useEffect(() => {
     void fetch("/api/tamagotchi/checkin", { method: "POST" })
-      .then((r) => r.json())
-      .then(
-        (data: {
-          streak: TamagotchiStatus["streak"];
-          tamagotchis: OwnedTamagotchi[];
-          newUnlocks: string[];
-          alreadyCheckedIn: boolean;
-        }) => {
-          setTamagotchiStatus({
-            streak: data.streak,
-            tamagotchis: data.tamagotchis,
-          });
-          if (data.newUnlocks.length > 0) {
-            setNewUnlockToast(data.newUnlocks);
-          }
-        },
-      )
+      .then(async (response) => {
+        const data: unknown = await response.json();
+        if (!response.ok || !isTamagotchiCheckinResponse(data)) {
+          throw new Error("Invalid tamagotchi response.");
+        }
+
+        setTamagotchiStatus(data);
+        const newUnlocks = data.newUnlocks ?? [];
+
+        if (newUnlocks.length > 0) {
+          setNewUnlockToast(newUnlocks);
+        }
+      })
       .catch(() => {
         // silent — tamagotchi is non-critical
       });
@@ -2848,16 +2899,17 @@ export default function RootHomeShell({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view]);
 
+  const activeTamagotchi =
+    tamagotchiStatus?.tamagotchis?.find((t) => t.isActive) ?? null;
+
   return (
     <>
       {view === "home" ? (
         <HomeComponent
-          activeTamagotchi={
-            tamagotchiStatus?.tamagotchis.find((t) => t.isActive) ?? null
-          }
+          activeTamagotchi={activeTamagotchi}
           onTamagotchiClick={() => setIsTamagotchiOpen(true)}
           onRename={(name) => {
-            const active = tamagotchiStatus?.tamagotchis.find((t) => t.isActive);
+            const active = activeTamagotchi;
             if (!active) return;
             void fetch("/api/tamagotchi/rename", {
               method: "POST",

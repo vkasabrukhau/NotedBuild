@@ -11,7 +11,7 @@ type CreateFriendshipBody = {
 };
 
 type UpdateFriendshipBody = {
-  action?: "accept" | "reject" | "dismiss_accepted_notification";
+  action?: "accept" | "reject";
   targetUserId?: string;
 };
 
@@ -149,7 +149,6 @@ export async function GET(request: Request) {
         }),
         prisma.friendship.findMany({
           where: {
-            requesterAcceptedNotificationSeenAt: null,
             requesterId: viewer.id,
             status: "ACCEPTED",
           },
@@ -165,21 +164,26 @@ export async function GET(request: Request) {
                 profilePhotoUrl: true,
               },
             },
+            createdAt: true,
             updatedAt: true,
           },
         }),
       ]);
 
       return NextResponse.json({
-        acceptedRequests: acceptedRequests.map((friendship) => ({
-          createdAt: friendship.updatedAt.toISOString(),
-          user: friendship.addressee,
-        })),
+        acceptedRequests: acceptedRequests
+          .filter(
+            (friendship) =>
+              friendship.updatedAt.getTime() > friendship.createdAt.getTime(),
+          )
+          .map((friendship) => ({
+            createdAt: friendship.updatedAt.toISOString(),
+            user: friendship.addressee,
+          })),
         incomingRequests: incomingRequests.map((friendship) => ({
           createdAt: friendship.createdAt.toISOString(),
           user: friendship.requester,
         })),
-        unreadCount: incomingRequests.length + acceptedRequests.length,
       });
     }
 
@@ -299,7 +303,6 @@ export async function POST(request: Request) {
             },
           },
           data: {
-            requesterAcceptedNotificationSeenAt: null,
             status: "ACCEPTED",
           },
         });
@@ -326,7 +329,6 @@ export async function POST(request: Request) {
             },
           },
           data: {
-            requesterAcceptedNotificationSeenAt: null,
             status: "PENDING",
           },
         });
@@ -351,7 +353,6 @@ export async function POST(request: Request) {
       await tx.friendship.create({
         data: {
           addresseeId: targetUserId,
-          requesterAcceptedNotificationSeenAt: null,
           requesterId: viewer.id,
           status: "PENDING",
         },
@@ -418,7 +419,6 @@ export async function PATCH(request: Request) {
           },
         },
         data: {
-          requesterAcceptedNotificationSeenAt: null,
           status: "ACCEPTED",
         },
       });
@@ -450,7 +450,6 @@ export async function PATCH(request: Request) {
           },
         },
         data: {
-          requesterAcceptedNotificationSeenAt: null,
           status: "REJECTED",
         },
       });
@@ -460,32 +459,7 @@ export async function PATCH(request: Request) {
       });
     }
 
-    const friendship = await prisma.friendship.findUnique({
-      where: {
-        requesterId_addresseeId: {
-          addresseeId: targetUserId,
-          requesterId: viewer.id,
-        },
-      },
-    });
-
-    if (!friendship || friendship.status !== "ACCEPTED") {
-      return jsonError("That acceptance notification could not be found.", 404);
-    }
-
-    await prisma.friendship.update({
-      where: {
-        requesterId_addresseeId: {
-          addresseeId: targetUserId,
-          requesterId: viewer.id,
-        },
-      },
-      data: {
-        requesterAcceptedNotificationSeenAt: new Date(),
-      },
-    });
-
-    return NextResponse.json({ ok: true });
+    return jsonError("Unsupported friendship action.", 422);
   } catch (error) {
     const message =
       error instanceof Error

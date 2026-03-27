@@ -31,12 +31,30 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
+    const bearSpecies = TAMAGOTCHI_SPECIES.find((s) => s.id === "bear")!;
+
     const [streak, tamagotchis] = await Promise.all([
       prisma.userStreak.findUnique({ where: { userId: dbUser.id } }),
-      prisma.userTamagotchi.findMany({
-        where: { userId: dbUser.id },
-        orderBy: { createdAt: "asc" },
-      }),
+      // Ensure Bear is always unlocked before fetching
+      prisma.userTamagotchi
+        .upsert({
+          where: { userId_species: { userId: dbUser.id, species: "bear" } },
+          update: {},
+          create: {
+            userId: dbUser.id,
+            species: "bear",
+            health: 0,
+            level: 1,
+            currentThreshold: bearSpecies.startingThreshold,
+            isActive: false,
+          },
+        })
+        .then(() =>
+          prisma.userTamagotchi.findMany({
+            where: { userId: dbUser.id },
+            orderBy: { createdAt: "asc" },
+          }),
+        ),
     ]);
 
     const todayStr = toDateStr(new Date());
@@ -58,6 +76,7 @@ export async function GET() {
         level: t.level,
         currentThreshold: t.currentThreshold,
         isActive: t.isActive,
+        isLocked: t.isLocked,
       })),
       // species the user has met the streak requirement for but hasn't been given yet
       // (useful if they load the page without triggering a checkin)

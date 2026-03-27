@@ -47,7 +47,7 @@ export async function POST() {
           where: { userId: dbUser.id },
           orderBy: { createdAt: "asc" },
         });
-        return { streak, tamagotchis, newUnlocks: [] as string[], alreadyCheckedIn: true };
+        return { streak, tamagotchis, newUnlocks: [] as string[], newLocks: [] as string[], alreadyCheckedIn: true };
       }
 
       // ── 3. Days missed since last check-in ──────────────────────────
@@ -72,7 +72,7 @@ export async function POST() {
         },
       });
 
-      // ── 5. Auto-unlock tamagotchis (sequential) ──────────────────────
+      // ── 5. Auto-unlock new tamagotchis ───────────────────────────────
       const existingTamas = await tx.userTamagotchi.findMany({
         where: { userId: dbUser.id },
         orderBy: { createdAt: "asc" },
@@ -106,7 +106,48 @@ export async function POST() {
         ownedSpecies.add(species.id);
       }
 
-      // ── 6. Update health for all owned tamagotchis (sequential) ──────
+      // ── 6. Lock/unlock tamagotchis based on current streak ───────────
+      // Re-fetch after potential new creations
+      const allTamasBeforeUpdate = await tx.userTamagotchi.findMany({
+        where: { userId: dbUser.id },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const newLocks: string[] = [];
+      let activeBecameLocked = false;
+
+      for (const tama of allTamasBeforeUpdate) {
+        const config = getSpecies(tama.species);
+        if (!config || config.unlockStreakDays === null) continue; // Bear is never locked
+
+        const meetsThreshold = newStreakValue >= config.unlockStreakDays;
+
+        if (!meetsThreshold && !tama.isLocked) {
+          // Streak dropped below unlock requirement — lock this tamagotchi
+          await tx.userTamagotchi.update({
+            where: { id: tama.id },
+            data: { isLocked: true, isActive: false },
+          });
+          newLocks.push(tama.species);
+          if (tama.isActive) activeBecameLocked = true;
+        } else if (meetsThreshold && tama.isLocked) {
+          // Streak recovered — re-unlock
+          await tx.userTamagotchi.update({
+            where: { id: tama.id },
+            data: { isLocked: false },
+          });
+        }
+      }
+
+      // If the active tamagotchi was just locked, fall back to bear
+      if (activeBecameLocked) {
+        await tx.userTamagotchi.updateMany({
+          where: { userId: dbUser.id, species: "bear" },
+          data: { isActive: true },
+        });
+      }
+
+      // ── 7. Update health for all unlocked tamagotchis ────────────────
       const allTamas = await tx.userTamagotchi.findMany({
         where: { userId: dbUser.id },
         orderBy: { createdAt: "asc" },
@@ -114,6 +155,12 @@ export async function POST() {
 
       const updatedTamas = [];
       for (const tama of allTamas) {
+        // Skip locked tamagotchis — no health changes while inaccessible
+        if (tama.isLocked) {
+          updatedTamas.push(tama);
+          continue;
+        }
+
         const config = getSpecies(tama.species);
         if (!config) {
           updatedTamas.push(tama);
@@ -140,7 +187,7 @@ export async function POST() {
         updatedTamas.push(updated);
       }
 
-      return { streak: updatedStreak, tamagotchis: updatedTamas, newUnlocks, alreadyCheckedIn: false };
+      return { streak: updatedStreak, tamagotchis: updatedTamas, newUnlocks, newLocks, alreadyCheckedIn: false };
     });
 
     const todayStr = toDateStr(new Date());
@@ -160,8 +207,10 @@ export async function POST() {
         level: t.level,
         currentThreshold: t.currentThreshold,
         isActive: t.isActive,
+        isLocked: t.isLocked,
       })),
       newUnlocks: result.newUnlocks,
+      newLocks: result.newLocks,
       alreadyCheckedIn: result.alreadyCheckedIn,
     });
   } catch (error) {

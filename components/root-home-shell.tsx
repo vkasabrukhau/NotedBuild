@@ -5,6 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import ProfileView from "@/components/profile/profile-view";
 import type {
   ProfileSchoolOption,
@@ -30,7 +31,7 @@ const PLACEHOLDERS = [
 ];
 const HOME_SHORTCUTS = [
   { key: "H", label: "home" },
-  { key: "A", label: "all notes" },
+  { key: "A", label: "all items" },
   { key: "N", label: "new note" },
   { key: "F", label: "new folder" },
   { key: "M", label: "menu" },
@@ -203,6 +204,14 @@ type NoteSummary = {
   folderId: string | null;
 };
 
+type FolderSummary = {
+  id: string;
+  name: string;
+  noteCount: number;
+  ownerEmail: string;
+  updatedAt: string;
+};
+
 type InitialFolder = {
   id: string;
   name: string;
@@ -217,6 +226,7 @@ type OwnedTamagotchi = {
   level: number;
   currentThreshold: number;
   isActive: boolean;
+  isLocked: boolean;
 };
 
 type TamagotchiStatus = {
@@ -245,7 +255,8 @@ function isOwnedTamagotchi(value: unknown): value is OwnedTamagotchi {
     typeof candidate.health === "number" &&
     typeof candidate.level === "number" &&
     typeof candidate.currentThreshold === "number" &&
-    typeof candidate.isActive === "boolean"
+    typeof candidate.isActive === "boolean" &&
+    typeof candidate.isLocked === "boolean"
   );
 }
 
@@ -694,7 +705,7 @@ function HomeComponent({
                       ?.name ?? activeTamagotchi.species)
                   }
                   className="h-[98%] w-auto object-contain drop-shadow-lg"
-                  style={{ imageRendering: "pixelated", transform: "scale(1.4375)", transformOrigin: "center" }}
+                  style={{ imageRendering: "pixelated", transform: "scale(1.869)", transformOrigin: "center" }}
                 />
               </button>
 
@@ -783,10 +794,12 @@ function MenuOverlay({
   onClose,
   noteUsageCount,
   onSelectOption,
+  animationClass = "overlay-enter",
 }: {
   onClose: () => void;
   noteUsageCount: number;
   onSelectOption: (option: (typeof MENU_OPTIONS)[number]) => void;
+  animationClass?: string;
 }) {
   const storageLimit = 250;
   const normalizedNoteUsageCount = Math.max(0, noteUsageCount);
@@ -819,7 +832,7 @@ function MenuOverlay({
 
   return (
     <div
-      className="valtest-menu-overlay fixed inset-0 z-50 bg-black/20"
+      className={`valtest-menu-overlay fixed inset-0 z-50 bg-black/20 ${animationClass}`}
       onClick={onClose}
       role="presentation"
     >
@@ -842,7 +855,6 @@ function MenuOverlay({
                   key={option}
                   type="button"
                   onMouseEnter={() => setFocusedIndex(index)}
-                  onClick={() => onItemSelect(option)}
                   onClick={() => onSelectOption(option)}
                   className={`flex items-center gap-3 text-left font-medium transition-opacity duration-150 ${
                     option === "Account"
@@ -883,10 +895,12 @@ function AppearanceOverlay({
   onClose,
   currentTheme,
   onThemeSelect,
+  animationClass = "overlay-enter",
 }: {
   onClose: () => void;
   currentTheme: string;
   onThemeSelect: (themeId: string) => void;
+  animationClass?: string;
 }) {
   const [focusedIndex, setFocusedIndex] = useState(
     () => Math.max(0, THEMES.findIndex((t) => t.id === currentTheme)),
@@ -927,7 +941,7 @@ function AppearanceOverlay({
 
   return (
     <div
-      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Appearance"
@@ -1008,10 +1022,12 @@ function FontOverlay({
   onClose,
   currentFont,
   onFontSelect,
+  animationClass = "overlay-enter",
 }: {
   onClose: () => void;
   currentFont: string;
   onFontSelect: (fontId: string) => void;
+  animationClass?: string;
 }) {
   const [focusedIndex, setFocusedIndex] = useState(
     () => Math.max(0, FONTS.findIndex((f) => f.id === currentFont)),
@@ -1046,7 +1062,7 @@ function FontOverlay({
 
   return (
     <div
-      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Font"
@@ -1130,11 +1146,13 @@ function TamagotchiPreferencesOverlay({
   status,
   onSelectActive,
   onRename,
+  animationClass = "overlay-enter",
 }: {
   onClose: () => void;
   status: TamagotchiStatus;
   onSelectActive: (species: string | null) => void;
   onRename: (species: string, name: string) => void;
+  animationClass?: string;
 }) {
   const ownedMap = new Map(status.tamagotchis.map((t) => [t.species, t]));
   const [renamingSpecies, setRenamingSpecies] = useState<string | null>(null);
@@ -1152,7 +1170,7 @@ function TamagotchiPreferencesOverlay({
 
   return (
     <div
-      className="valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8"
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Tamagotchi Preferences"
@@ -1201,11 +1219,13 @@ function TamagotchiPreferencesOverlay({
             {row.map((species) => {
               const owned = ownedMap.get(species.id);
               const isOwned = owned !== undefined;
+              const isLocked = owned?.isLocked ?? false;
+              const isAccessible = isOwned && !isLocked;
               const isActive = owned?.isActive ?? false;
               const isRenaming = renamingSpecies === species.id;
               const displayName = owned?.displayName ?? species.name;
 
-              // Streak progress for locked
+              // Streak progress for not-yet-unlocked or locked species
               const streakNeeded = species.unlockStreakDays ?? 0;
               const streakProgress = Math.min(
                 status.streak.current,
@@ -1218,7 +1238,7 @@ function TamagotchiPreferencesOverlay({
                   <div
                     className="relative flex aspect-square w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[28px]"
                     style={{
-                      backgroundColor: isOwned
+                      backgroundColor: isAccessible
                         ? "var(--app-card)"
                         : "color-mix(in srgb, var(--app-card) 60%, transparent)",
                       outline: isActive
@@ -1229,7 +1249,7 @@ function TamagotchiPreferencesOverlay({
                         ? "0 8px 24px color-mix(in srgb, var(--app-ink) 14%, transparent)"
                         : "0 2px 6px rgba(0,0,0,0.06)",
                       transition: "box-shadow 180ms ease",
-                      opacity: isOwned ? 1 : 0.55,
+                      opacity: isAccessible ? 1 : 0.55,
                     }}
                   >
                     {/* GIF */}
@@ -1238,28 +1258,54 @@ function TamagotchiPreferencesOverlay({
                       src={species.gif}
                       alt={species.name}
                       className="h-24 w-24 object-contain"
-                      style={{ filter: isOwned ? "none" : "grayscale(1)" }}
+                      style={{ filter: isAccessible ? "none" : "grayscale(1)" }}
                     />
 
-                    {isOwned ? (
+                    {isAccessible ? (
                       <>
                         {/* Level badge */}
                         <div className="text-[13px] font-semibold text-black/60">
-                          Lv {owned.level}
+                          Lv {owned!.level}
                         </div>
                         {/* Health bar */}
                         <div className="w-[80%]">
                           <div className="mb-0.5 flex justify-between text-[11px] text-black/40">
                             <span>❤</span>
                             <span>
-                              {owned.health}/{owned.currentThreshold}
+                              {owned!.health}/{owned!.currentThreshold}
                             </span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
                             <div
                               className="h-full rounded-full bg-black/70 transition-all duration-300"
                               style={{
-                                width: `${Math.min(100, (owned.health / owned.currentThreshold) * 100)}%`,
+                                width: `${Math.min(100, (owned!.health / owned!.currentThreshold) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : isLocked ? (
+                      <>
+                        {/* Lost due to streak drop */}
+                        <div className="text-[13px] font-semibold text-black/50">
+                          🔒 streak lost
+                        </div>
+                        <div className="w-[80%]">
+                          <div className="mb-0.5 flex justify-between text-[11px] text-black/35">
+                            <span>need</span>
+                            <span>
+                              {streakProgress}/{streakNeeded}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                            <div
+                              className="h-full rounded-full bg-black/30 transition-all duration-300"
+                              style={{
+                                width:
+                                  streakNeeded > 0
+                                    ? `${(streakProgress / streakNeeded) * 100}%`
+                                    : "0%",
                               }}
                             />
                           </div>
@@ -1267,7 +1313,7 @@ function TamagotchiPreferencesOverlay({
                       </>
                     ) : (
                       <>
-                        {/* Locked info */}
+                        {/* Not yet unlocked */}
                         <div className="text-[13px] font-semibold text-black/50">
                           🔥 {streakNeeded} day streak
                         </div>
@@ -1294,7 +1340,7 @@ function TamagotchiPreferencesOverlay({
                     )}
 
                     {/* Select / Active button */}
-                    {isOwned ? (
+                    {isAccessible ? (
                       <button
                         type="button"
                         onClick={() => !isActive && onSelectActive(species.id)}
@@ -1342,7 +1388,7 @@ function TamagotchiPreferencesOverlay({
                       <>
                         <span
                           className="text-[15px] font-medium leading-tight text-black"
-                          style={{ opacity: isOwned ? 1 : 0.5 }}
+                          style={{ opacity: isAccessible ? 1 : 0.5 }}
                         >
                           {isActive ? (
                             <span className="inline-flex items-center gap-1.5">
@@ -1355,7 +1401,7 @@ function TamagotchiPreferencesOverlay({
                             displayName
                           )}
                         </span>
-                        {isOwned ? (
+                        {isAccessible ? (
                           <button
                             type="button"
                             onClick={() => {
@@ -1432,21 +1478,57 @@ function NoteGridCard({
   );
 }
 
-function AllNotesComponent({
+function FolderGridCard({
+  folder,
+  isActive = false,
+  animationDelayMs = 0,
+  onClick,
+  onFocus,
+}: {
+  folder: FolderSummary;
+  isActive?: boolean;
+  animationDelayMs?: number;
+  onClick: () => void;
+  onFocus?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="gridcell"
+      className={`folder-grid-card rounded-[28px] border p-5 text-left border-black/10 bg-[var(--app-card)] text-black ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
+      style={{ animationDelay: `${animationDelayMs}ms` }}
+      onClick={onClick}
+      onFocus={onFocus}
+    >
+      <div className="text-[18px] font-semibold leading-none text-black/40 uppercase tracking-[0.12em]">Folder</div>
+      <div className="mt-3 text-[24px] font-bold leading-tight">{folder.name}</div>
+      <div className="mt-5 text-[16px] font-medium leading-none text-black/55">
+        {folder.noteCount} {folder.noteCount === 1 ? "note" : "notes"}
+      </div>
+    </button>
+  );
+}
+
+function AllItemsComponent({
   refreshToken,
   onOpenNote,
+  onOpenFolder,
 }: {
   refreshToken: number;
   onOpenNote: (note: InitialNote) => void;
+  onOpenFolder: (folder: InitialFolder) => void;
 }) {
   const [headingText, setHeadingText] = useState("");
   const [sortMode, setSortMode] = useState<
     "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc"
   >("date-desc");
   const [notes, setNotes] = useState<NoteSummary[]>([]);
-  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+  const [folders, setFolders] = useState<FolderSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<"folders" | "notes">("folders");
   const [activeIndex, setActiveIndex] = useState(0);
-  const gridRef = useRef<HTMLDivElement | null>(null);
+  const foldersGridRef = useRef<HTMLDivElement | null>(null);
+  const notesGridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1454,176 +1536,176 @@ function AllNotesComponent({
     setHeadingText("");
 
     const run = async () => {
-      for (let index = 0; index < "All Notes".length; index += 1) {
-        if (cancelled) {
-          return;
-        }
-
-        setHeadingText((prev) => prev + "All Notes".charAt(index));
+      for (let index = 0; index < "All Items".length; index += 1) {
+        if (cancelled) return;
+        setHeadingText((prev) => prev + "All Items".charAt(index));
         await new Promise((resolve) => window.setTimeout(resolve, typingDelay));
       }
     };
 
     void run();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadNotes = async () => {
-      setIsLoadingNotes(true);
+    const loadAll = async () => {
+      setIsLoading(true);
 
       try {
-        const response = await fetch("/api/notes");
-        const data = (await response.json().catch(() => null)) as {
-          notes?: NoteSummary[];
-        } | null;
+        const [notesRes, foldersRes] = await Promise.all([
+          fetch("/api/notes"),
+          fetch("/api/folders?view=folders"),
+        ]);
 
-        if (!response.ok || !data?.notes || cancelled) {
-          return;
+        const notesData = (await notesRes.json().catch(() => null)) as { notes?: NoteSummary[] } | null;
+        const foldersData = (await foldersRes.json().catch(() => null)) as { folders?: FolderSummary[] } | null;
+
+        if (cancelled) return;
+
+        const loadedNotes = notesData?.notes ?? [];
+        const loadedFolders = foldersData?.folders ?? [];
+        setNotes(loadedNotes);
+        setFolders(loadedFolders);
+
+        if (loadedFolders.length > 0) {
+          setActiveSection("folders");
+          setActiveIndex(0);
+        } else if (loadedNotes.length > 0) {
+          setActiveSection("notes");
+          setActiveIndex(0);
+        } else {
+          setActiveIndex(-1);
         }
-
-        setNotes(data.notes);
-        setActiveIndex(data.notes.length > 0 ? 0 : -1);
       } catch (error) {
-        console.error("failed to load notes", error);
+        console.error("failed to load items", error);
       } finally {
-        if (!cancelled) {
-          setIsLoadingNotes(false);
-        }
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    void loadNotes();
-
-    return () => {
-      cancelled = true;
-    };
+    void loadAll();
+    return () => { cancelled = true; };
   }, [refreshToken]);
 
   const sortedNotes = [...notes].sort((left, right) => {
-    if (sortMode === "date-desc") {
-      return (
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      );
-    }
-
-    if (sortMode === "date-asc") {
-      return (
-        new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
-      );
-    }
-
-    if (sortMode === "alpha-asc") {
-      return left.name.localeCompare(right.name);
-    }
-
-    if (sortMode === "alpha-desc") {
-      return right.name.localeCompare(left.name);
-    }
-
+    if (sortMode === "date-desc") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    if (sortMode === "date-asc") return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
+    if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
     return stripHtml(right.content).length - stripHtml(left.content).length;
   });
 
-  useEffect(() => {
-    if (notes.length === 0) {
-      setActiveIndex(-1);
-      return;
-    }
-
-    setActiveIndex((current) =>
-      current < 0 ? 0 : Math.min(current, notes.length - 1),
-    );
-  }, [sortMode, notes.length]);
+  const sortedFolders = [...folders].sort((left, right) => {
+    if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
+    if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
+    // default: date-desc / date-asc by updatedAt
+    if (sortMode === "date-asc") return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
 
   useEffect(() => {
-    if (!isLoadingNotes && sortedNotes.length > 0) {
-      gridRef.current?.focus();
+    if (!isLoading) {
+      if (activeSection === "folders" && sortedFolders.length > 0) {
+        foldersGridRef.current?.focus();
+      } else if (activeSection === "notes" && sortedNotes.length > 0) {
+        notesGridRef.current?.focus();
+      }
     }
-  }, [isLoadingNotes, sortedNotes.length]);
+  }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (sortedNotes.length === 0) {
+  const handleFoldersKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (sortedFolders.length === 0) return;
+    const columnCount = 4;
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const folder = sortedFolders[activeIndex];
+      if (folder) {
+        const selectedNoteIds = notes.filter((n) => n.folderId === folder.id).map((n) => n.id);
+        onOpenFolder({ id: folder.id, name: folder.name, ownerEmail: folder.ownerEmail, selectedNoteIds });
+      }
       return;
     }
+    if (event.key === "ArrowLeft") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - 1)); return; }
+    if (event.key === "ArrowRight") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedFolders.length - 1, c + 1)); return; }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const next = activeIndex + columnCount;
+      if (next < sortedFolders.length) {
+        setActiveIndex(next);
+      } else if (sortedNotes.length > 0) {
+        setActiveSection("notes");
+        setActiveIndex(0);
+        notesGridRef.current?.focus();
+      }
+      return;
+    }
+    if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - columnCount)); }
+  };
 
+  const handleNotesKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (sortedNotes.length === 0) return;
     const columnCount = 4;
 
     if (event.key === "Enter") {
       event.preventDefault();
       const note = sortedNotes[activeIndex];
-      if (note) {
-        onOpenNote({
-          id: note.id,
-          name: note.name,
-          content: note.content,
-          ownerEmail: note.ownerEmail,
-        });
-      }
+      if (note) onOpenNote({ id: note.id, name: note.name, content: note.content, ownerEmail: note.ownerEmail });
       return;
     }
-
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      setActiveIndex((current) => Math.max(0, current - 1));
-      return;
-    }
-
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      setActiveIndex((current) =>
-        Math.min(sortedNotes.length - 1, current + 1),
-      );
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((current) =>
-        Math.min(sortedNotes.length - 1, current + columnCount),
-      );
-      return;
-    }
-
+    if (event.key === "ArrowLeft") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - 1)); return; }
+    if (event.key === "ArrowRight") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedNotes.length - 1, c + 1)); return; }
+    if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedNotes.length - 1, c + columnCount)); return; }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => Math.max(0, current - columnCount));
+      const prev = activeIndex - columnCount;
+      if (prev >= 0) {
+        setActiveIndex(prev);
+      } else if (sortedFolders.length > 0) {
+        setActiveSection("folders");
+        setActiveIndex(Math.min(activeIndex, sortedFolders.length - 1));
+        foldersGridRef.current?.focus();
+      }
     }
   };
+
+  const skeletons = Array.from({ length: 8 }).map((_, index) => (
+    <div
+      key={`skeleton-${index}`}
+      className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
+    >
+      <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
+      <div className="mt-5 space-y-3">
+        <div className="h-4 rounded-full bg-black/[0.08]" />
+        <div className="h-4 rounded-full bg-black/[0.08]" />
+        <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
+      </div>
+      <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
+    </div>
+  ));
 
   return (
     <div className="min-h-screen w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-6">
         <h1 className="text-[40px] font-bold leading-none text-black">
           {headingText}
-          <span className="typewriter-cursor" aria-hidden="true">
-            |
-          </span>
+          <span className="typewriter-cursor" aria-hidden="true">|</span>
         </h1>
 
         <div className="min-w-[260px]">
           <label
-            htmlFor="notes-sort"
+            htmlFor="items-sort"
             className="mb-2 block text-[16px] font-medium uppercase tracking-[0.12em] text-black/45"
           >
             Sort
           </label>
           <select
-            id="notes-sort"
+            id="items-sort"
             value={sortMode}
             onChange={(event) =>
-              setSortMode(
-                event.target.value as
-                  | "date-desc"
-                  | "date-asc"
-                  | "alpha-asc"
-                  | "alpha-desc"
-                  | "size-desc",
-              )
+              setSortMode(event.target.value as "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc")
             }
             className="w-full rounded-[18px] border border-black/10 bg-[var(--app-card)] px-4 py-3 pr-12 text-[18px] font-medium text-black outline-none"
           >
@@ -1636,55 +1718,82 @@ function AllNotesComponent({
         </div>
       </div>
 
-      <div
-        ref={gridRef}
-        tabIndex={0}
-        role="grid"
-        aria-label="All notes"
-        className="mt-10 grid grid-cols-1 gap-5 outline-none sm:grid-cols-2 xl:grid-cols-4"
-        onKeyDown={handleGridKeyDown}
-      >
-        {isLoadingNotes
-          ? Array.from({ length: 8 }).map((_, index) => (
-              <div
-                key={`all-notes-skeleton-${index}`}
-                className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
-              >
-                <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
-                <div className="mt-5 space-y-3">
-                  <div className="h-4 rounded-full bg-black/[0.08]" />
-                  <div className="h-4 rounded-full bg-black/[0.08]" />
-                  <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
-                </div>
-                <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
-              </div>
-            ))
-          : sortedNotes.map((note, index) => (
-              <NoteGridCard
-                key={note.id}
-                note={note}
-                isActive={index === activeIndex}
-                animationDelayMs={Math.min(index, 11) * 45}
-                onFocus={() => {
-                  setActiveIndex(index);
-                }}
-                onClick={() => {
-                  setActiveIndex(index);
-                  gridRef.current?.focus();
-                  onOpenNote({
-                    id: note.id,
-                    name: note.name,
-                    content: note.content,
-                    ownerEmail: note.ownerEmail,
-                  });
-                }}
-              />
-            ))}
-      </div>
+      {/* Folders section */}
+      {(isLoading || sortedFolders.length > 0) ? (
+        <div className="mt-10">
+          <h2 className="mb-4 text-[18px] font-semibold uppercase tracking-[0.14em] text-black/40">
+            Folders
+          </h2>
+          <div
+            ref={foldersGridRef}
+            tabIndex={0}
+            role="grid"
+            aria-label="Folders"
+            className="grid grid-cols-1 gap-5 outline-none sm:grid-cols-2 xl:grid-cols-4"
+            onKeyDown={handleFoldersKeyDown}
+            onFocus={() => setActiveSection("folders")}
+          >
+            {isLoading
+              ? skeletons
+              : sortedFolders.map((folder, index) => (
+                  <FolderGridCard
+                    key={folder.id}
+                    folder={folder}
+                    isActive={activeSection === "folders" && index === activeIndex}
+                    animationDelayMs={Math.min(index, 11) * 45}
+                    onFocus={() => { setActiveSection("folders"); setActiveIndex(index); }}
+                    onClick={() => {
+                      setActiveSection("folders");
+                      setActiveIndex(index);
+                      foldersGridRef.current?.focus();
+                      const selectedNoteIds = notes.filter((n) => n.folderId === folder.id).map((n) => n.id);
+                      onOpenFolder({ id: folder.id, name: folder.name, ownerEmail: folder.ownerEmail, selectedNoteIds });
+                    }}
+                  />
+                ))}
+          </div>
+        </div>
+      ) : null}
 
-      {!isLoadingNotes && sortedNotes.length === 0 ? (
+      {/* Notes section */}
+      {(isLoading || sortedNotes.length > 0) ? (
+        <div className={sortedFolders.length > 0 || isLoading ? "mt-10" : "mt-10"}>
+          <h2 className="mb-4 text-[18px] font-semibold uppercase tracking-[0.14em] text-black/40">
+            Notes
+          </h2>
+          <div
+            ref={notesGridRef}
+            tabIndex={0}
+            role="grid"
+            aria-label="All notes"
+            className="grid grid-cols-1 gap-5 outline-none sm:grid-cols-2 xl:grid-cols-4"
+            onKeyDown={handleNotesKeyDown}
+            onFocus={() => setActiveSection("notes")}
+          >
+            {isLoading
+              ? skeletons
+              : sortedNotes.map((note, index) => (
+                  <NoteGridCard
+                    key={note.id}
+                    note={note}
+                    isActive={activeSection === "notes" && index === activeIndex}
+                    animationDelayMs={Math.min(index, 11) * 45}
+                    onFocus={() => { setActiveSection("notes"); setActiveIndex(index); }}
+                    onClick={() => {
+                      setActiveSection("notes");
+                      setActiveIndex(index);
+                      notesGridRef.current?.focus();
+                      onOpenNote({ id: note.id, name: note.name, content: note.content, ownerEmail: note.ownerEmail });
+                    }}
+                  />
+                ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!isLoading && sortedFolders.length === 0 && sortedNotes.length === 0 ? (
         <div className="mt-10 text-[22px] font-medium text-black/45">
-          No notes yet.
+          No items yet.
         </div>
       ) : null}
     </div>
@@ -2738,6 +2847,7 @@ export default function RootHomeShell({
   schools,
   viewer,
 }: RootHomeShellProps) {
+  const router = useRouter();
   const [view, setView] = useState<
     "home" | "all-notes" | "note" | "folder" | "profile"
   >(
@@ -2758,6 +2868,20 @@ export default function RootHomeShell({
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isFontOpen, setIsFontOpen] = useState(false);
   const [isTamagotchiOpen, setIsTamagotchiOpen] = useState(false);
+  const [closingOverlay, setClosingOverlay] = useState<"menu" | "appearance" | "font" | "tamagotchi" | null>(null);
+  const closeOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const closeOverlay = useCallback((name: "menu" | "appearance" | "font" | "tamagotchi") => {
+    if (closeOverlayTimerRef.current) clearTimeout(closeOverlayTimerRef.current);
+    setClosingOverlay(name);
+    closeOverlayTimerRef.current = setTimeout(() => {
+      setClosingOverlay(null);
+      if (name === "menu") setIsMenuOpen(false);
+      else if (name === "appearance") setIsAppearanceOpen(false);
+      else if (name === "font") setIsFontOpen(false);
+      else if (name === "tamagotchi") setIsTamagotchiOpen(false);
+    }, 200);
+  }, []);
   const [currentTheme, setCurrentTheme] = useState("default");
   const [currentFont, setCurrentFont] = useState("doto");
   const [tamagotchiStatus, setTamagotchiStatus] =
@@ -2837,27 +2961,27 @@ export default function RootHomeShell({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isAppearanceOpen) {
+      if (e.key === "Escape" && isAppearanceOpen && closingOverlay !== "appearance") {
         e.preventDefault();
-        setIsAppearanceOpen(false);
+        closeOverlay("appearance");
         return;
       }
 
-      if (e.key === "Escape" && isFontOpen) {
+      if (e.key === "Escape" && isFontOpen && closingOverlay !== "font") {
         e.preventDefault();
-        setIsFontOpen(false);
+        closeOverlay("font");
         return;
       }
 
-      if (e.key === "Escape" && isTamagotchiOpen) {
+      if (e.key === "Escape" && isTamagotchiOpen && closingOverlay !== "tamagotchi") {
         e.preventDefault();
-        setIsTamagotchiOpen(false);
+        closeOverlay("tamagotchi");
         return;
       }
 
-      if (e.key === "Escape" && isMenuOpen) {
+      if (e.key === "Escape" && isMenuOpen && closingOverlay !== "menu") {
         e.preventDefault();
-        setIsMenuOpen(false);
+        closeOverlay("menu");
         return;
       }
 
@@ -2865,6 +2989,9 @@ export default function RootHomeShell({
         e.preventDefault();
         if (view === "all-notes" || view === "folder" || view === "profile") {
           setView("home");
+          if (window.location.pathname !== "/") {
+            router.push("/");
+          }
         }
         return;
       }
@@ -2897,14 +3024,15 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view]);
+  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view, closingOverlay, closeOverlay, router]);
 
   const activeTamagotchi =
-    tamagotchiStatus?.tamagotchis?.find((t) => t.isActive) ?? null;
+    tamagotchiStatus?.tamagotchis?.find((t) => t.isActive && !t.isLocked) ?? null;
 
   return (
     <>
       {view === "home" ? (
+        <div className="view-enter">
         <HomeComponent
           activeTamagotchi={activeTamagotchi}
           onTamagotchiClick={() => setIsTamagotchiOpen(true)}
@@ -2929,17 +3057,24 @@ export default function RootHomeShell({
             });
           }}
         />
+        </div>
       ) : null}
       {view === "all-notes" ? (
-        <AllNotesComponent
-          refreshToken={allNotesRefreshToken}
-          onOpenNote={(note) => {
-            setActiveNote(note);
-            setNoteReturnView("all-notes");
-            setNoteViewAnimationClass("note-view-shell--enter-from-grid");
-            setView("note");
-          }}
-        />
+        <div className="view-enter">
+          <AllItemsComponent
+            refreshToken={allNotesRefreshToken}
+            onOpenNote={(note) => {
+              setActiveNote(note);
+              setNoteReturnView("all-notes");
+              setNoteViewAnimationClass("note-view-shell--enter-from-grid");
+              setView("note");
+            }}
+            onOpenFolder={(folder) => {
+              setActiveFolder(folder);
+              setView("folder");
+            }}
+          />
+        </div>
       ) : null}
       {view === "note" ? (
         <div className={noteViewAnimationClass}>
@@ -2966,61 +3101,72 @@ export default function RootHomeShell({
                 setView(noteReturnView);
                 setAllNotesRefreshToken((current) => current + 1);
                 setNoteViewAnimationClass("");
+                if (window.location.pathname !== "/") {
+                  router.push("/");
+                }
               }, 220);
             }}
           />
         </div>
       ) : null}
       {view === "folder" ? (
-        <FolderComponent
-          key={activeFolder?.id ?? `new-folder-${folderSessionKey}`}
-          initialFolder={activeFolder}
-        />
+        <div className="view-enter">
+          <FolderComponent
+            key={activeFolder?.id ?? `new-folder-${folderSessionKey}`}
+            initialFolder={activeFolder}
+          />
+        </div>
       ) : null}
       {view === "profile" ? (
-        <ProfileView
-          profile={profile}
-          schools={schools}
-          viewer={viewer}
-        />
+        <div className="view-enter">
+          <ProfileView
+            profile={profile}
+            schools={schools}
+            viewer={viewer}
+          />
+        </div>
       ) : null}
-      {isMenuOpen ? (
+      {(isMenuOpen || closingOverlay === "menu") ? (
         <MenuOverlay
-          onClose={() => setIsMenuOpen(false)}
+          animationClass={closingOverlay === "menu" ? "overlay-exit" : "overlay-enter"}
+          onClose={() => closeOverlay("menu")}
           noteUsageCount={noteUsageCount}
           onSelectOption={(option) => {
             handleMenuItemSelect(option);
 
             if (option === "Account") {
               setView("profile");
-              setIsMenuOpen(false);
+              closeOverlay("menu");
             }
           }}
         />
       ) : null}
-      {isAppearanceOpen ? (
+      {(isAppearanceOpen || closingOverlay === "appearance") ? (
         <AppearanceOverlay
-          onClose={() => setIsAppearanceOpen(false)}
+          animationClass={closingOverlay === "appearance" ? "overlay-exit" : "overlay-enter"}
+          onClose={() => closeOverlay("appearance")}
           currentTheme={currentTheme}
           onThemeSelect={(themeId) => {
             applyTheme(themeId);
-            setIsAppearanceOpen(false);
+            closeOverlay("appearance");
           }}
         />
       ) : null}
-      {isFontOpen ? (
+      {(isFontOpen || closingOverlay === "font") ? (
         <FontOverlay
-          onClose={() => setIsFontOpen(false)}
+          animationClass={closingOverlay === "font" ? "overlay-exit" : "overlay-enter"}
+          onClose={() => closeOverlay("font")}
           currentFont={currentFont}
           onFontSelect={(fontId) => {
             applyFont(fontId);
-            setIsFontOpen(false);
+            closeOverlay("font");
           }}
         />
       ) : null}
-      {isTamagotchiOpen && tamagotchiStatus ? (
+      {(isTamagotchiOpen || closingOverlay === "tamagotchi") && tamagotchiStatus ? (
         <TamagotchiPreferencesOverlay
-          onClose={() => setIsTamagotchiOpen(false)}
+          animationClass={closingOverlay === "tamagotchi" ? "overlay-exit" : "overlay-enter"}
+          onClose={() => closeOverlay("tamagotchi")}
           status={tamagotchiStatus}
           onSelectActive={(species) => {
             void fetch("/api/tamagotchi/select", {

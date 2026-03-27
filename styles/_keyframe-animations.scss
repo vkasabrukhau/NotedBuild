@@ -89,3 +89,67 @@
     transform: rotate(360deg);
   }
 }
+
+@keyframes profileSectionEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-section-enter {
+  animation: profileSectionEnter 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── View transitions ── */
+@keyframes viewEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-enter {
+  animation: viewEnter 260ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── Overlay open / close ── */
+@keyframes overlayEnter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes overlayExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.overlay-enter {
+  animation: overlayEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05);
+}
+
+.overlay-exit {
+  animation: overlayExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+

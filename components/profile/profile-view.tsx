@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ProfileEditor from "@/components/profile/profile-editor";
 import PixelatedSchoolLogo from "@/components/profile/pixelated-school-logo";
 import type {
@@ -313,14 +313,19 @@ function ProfileNoteCard({
   createdAt,
   href,
   name,
+  isFocused = false,
 }: {
   content: string;
   createdAt: string;
   href?: string | null;
   name: string;
+  isFocused?: boolean;
 }) {
+  const focusedClass = isFocused
+    ? "-translate-y-1.5 border-black/35 shadow-[0_14px_36px_rgba(0,0,0,0.12)] ring-2 ring-black/20 ring-offset-1"
+    : "";
   const cardClassName =
-    "group flex aspect-square flex-col justify-between rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black transition duration-200";
+    `group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black transition duration-200 ${focusedClass}`;
   const sharedChildren = (
     <>
       <div>
@@ -351,13 +356,18 @@ function ProfileNoteCard({
 
 function ProfileFolderCard({
   folder,
+  isFocused = false,
 }: {
   folder: ProfileFolderSummary;
+  isFocused?: boolean;
 }) {
+  const focusedClass = isFocused
+    ? "-translate-y-1.5 border-black/35 shadow-[0_14px_36px_rgba(0,0,0,0.12)] ring-2 ring-black/20 ring-offset-1"
+    : "";
   return (
     <Link
       href={getFolderHref(folder.ownerEmail, folder.name)}
-      className="group flex aspect-square flex-col justify-between rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black transition duration-200 hover:-translate-y-1 hover:border-black/18 hover:shadow-[0_14px_36px_rgba(0,0,0,0.08)]"
+      className={`group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black transition duration-200 hover:-translate-y-1 hover:border-black/18 hover:shadow-[0_14px_36px_rgba(0,0,0,0.08)] ${focusedClass}`}
     >
       <div>
         <div className="text-[24px] font-bold leading-tight">{folder.name}</div>
@@ -479,6 +489,8 @@ async function updateFriendshipAction(
   return data;
 }
 
+const PROFILE_SECTIONS: ProfileContentSection[] = ["notes", "folders", "friends"];
+
 export default function ProfileView({
   profile,
   schools = [],
@@ -486,6 +498,10 @@ export default function ProfileView({
 }: ProfileViewProps) {
   const router = useRouter();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [keyboardFocusIndex, setKeyboardFocusIndex] = useState(0);
+  const [focusLevel, setFocusLevel] = useState<"tabs" | "items">("tabs");
+  const [focusedItemIndex, setFocusedItemIndex] = useState(0);
+  const [sectionAnimKey, setSectionAnimKey] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isFriendFinderOpen, setIsFriendFinderOpen] = useState(false);
   const [profileNotes, setProfileNotes] = useState(profile.notes);
@@ -528,6 +544,14 @@ export default function ProfileView({
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
 
+  const changeSection = useCallback((section: ProfileContentSection, tabIdx: number) => {
+    setActiveSection(section);
+    setKeyboardFocusIndex(tabIdx);
+    setSectionAnimKey((k) => k + 1);
+    setFocusedItemIndex(0);
+    setFocusLevel("tabs");
+  }, []);
+
   useEffect(() => {
     setProfileNotes(profile.notes);
   }, [profile.notes]);
@@ -541,6 +565,84 @@ export default function ProfileView({
       setActiveSection("notes");
     }
   }, [viewer.isOwnProfile]);
+
+  useEffect(() => {
+    if (!viewer.isOwnProfile) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Escape: exit items → tabs; at tabs level let the shell handle it (navigate home)
+      if (e.key === "Escape") {
+        if (focusLevel === "items") {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          setFocusLevel("tabs");
+        }
+        return;
+      }
+
+      const currentItems =
+        activeSection === "notes" ? profileNotes
+        : activeSection === "folders" ? folders
+        : friends;
+      const itemCount = currentItems.length;
+
+      if (focusLevel === "tabs") {
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          setKeyboardFocusIndex((i) => (i + 1) % 3);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          setKeyboardFocusIndex((i) => (i + 2) % 3);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          changeSection(PROFILE_SECTIONS[keyboardFocusIndex], keyboardFocusIndex);
+        } else if (e.key === "ArrowDown" && itemCount > 0) {
+          e.preventDefault();
+          setFocusLevel("items");
+          setFocusedItemIndex(0);
+        }
+      } else {
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          setFocusedItemIndex((i) => (i + 1) % Math.max(1, itemCount));
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          setFocusedItemIndex((i) => (i + Math.max(1, itemCount) - 1) % Math.max(1, itemCount));
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setFocusLevel("tabs");
+        } else if (e.key === "Enter" && itemCount > 0) {
+          e.preventDefault();
+          if (activeSection === "notes") {
+            const note = profileNotes[focusedItemIndex];
+            if (note) router.push(getNoteHref(note.ownerEmail, note.name));
+          } else if (activeSection === "folders") {
+            const folder = folders[focusedItemIndex];
+            if (folder) router.push(getFolderHref(folder.ownerEmail, folder.name));
+          } else if (activeSection === "friends") {
+            const friend = friends[focusedItemIndex];
+            if (friend) router.push(getProfileHref(friend.email));
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [
+    viewer.isOwnProfile,
+    keyboardFocusIndex,
+    focusLevel,
+    focusedItemIndex,
+    activeSection,
+    profileNotes,
+    folders,
+    friends,
+    router,
+    changeSection,
+  ]);
 
   useEffect(() => {
     if (!viewer.isOwnProfile) {
@@ -1244,10 +1346,10 @@ export default function ProfileView({
                   alt={profile.fullName}
                   width={112}
                   height={112}
-                  className="h-[112px] w-[112px] rounded-[30px] border-[5px] border-white object-cover shadow-[0_12px_30px_rgba(20,18,17,0.12)]"
+                  className="h-[112px] w-[112px] rounded-full object-cover"
                 />
               ) : (
-                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-[30px] border-[5px] border-white bg-black text-[34px] font-bold text-white shadow-[0_12px_30px_rgba(20,18,17,0.12)]">
+                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-full bg-black text-[34px] font-bold text-white">
                   {getInitials(profile.fullName)}
                 </div>
               )}
@@ -1258,9 +1360,6 @@ export default function ProfileView({
                     {profile.fullName}
                   </h2>
                   <InlineSchoolMark profile={profile} />
-                  {viewer.isOwnProfile ? (
-                    <EditButton onClick={() => setIsEditorOpen(true)} />
-                  ) : null}
                 </div>
                 <p className="mt-3 text-[12px] uppercase tracking-[0.22em] text-black/48">
                   Joined {formatJoinedDate(profile.joinedAt)}
@@ -1271,16 +1370,18 @@ export default function ProfileView({
         </div>
 
         <div className="mt-20">
-          <div className="grid max-w-4xl gap-x-0 gap-y-6 px-6 md:grid-cols-3 md:px-10">
+          <div className="grid max-w-4xl gap-x-0 gap-y-6 md:grid-cols-3">
             {viewer.isOwnProfile ? (
               <>
                 <button
                   type="button"
-                  onClick={() => setActiveSection("notes")}
+                  onClick={() => changeSection("notes", 0)}
                   className={`border px-6 py-6 text-left transition ${
                     activeSection === "notes"
                       ? "border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                      : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : keyboardFocusIndex === 0
+                        ? "border-black/20 bg-white/60 text-black"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                   }`}
                 >
                   <div
@@ -1303,11 +1404,13 @@ export default function ProfileView({
 
                 <button
                   type="button"
-                  onClick={() => setActiveSection("folders")}
+                  onClick={() => changeSection("folders", 1)}
                   className={`border px-6 py-6 text-left transition ${
                     activeSection === "folders"
                       ? "border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                      : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : keyboardFocusIndex === 1
+                        ? "border-black/20 bg-white/60 text-black"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                   }`}
                 >
                   <div
@@ -1330,11 +1433,13 @@ export default function ProfileView({
 
                 <button
                   type="button"
-                  onClick={() => setActiveSection("friends")}
+                  onClick={() => changeSection("friends", 2)}
                   className={`border px-6 py-6 text-left transition ${
                     activeSection === "friends"
                       ? "border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                      : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : keyboardFocusIndex === 2
+                        ? "border-black/20 bg-white/60 text-black"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                   }`}
                 >
                   <div
@@ -1403,127 +1508,123 @@ export default function ProfileView({
                     : "Folders"}
               </h3>
 
-              {activeSection === "notes" ? (
-                <>
-                  {profileNotes.length > 0 ? (
-                    <div className="mt-3">
-                      <Link
-                        href="/"
-                        className="text-[14px] font-medium uppercase tracking-[0.16em] text-black/55 transition hover:text-black"
-                      >
-                        Open workspace
-                      </Link>
-                    </div>
-                  ) : null}
-
-                  {isLoadingProfileNotes && profileNotes.length === 0 ? (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        Loading notes...
+              <div key={sectionAnimKey} className="profile-section-enter">
+                {activeSection === "notes" ? (
+                  <>
+                    {isLoadingProfileNotes && profileNotes.length === 0 ? (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          Loading notes...
+                        </div>
                       </div>
-                    </div>
-                  ) : profileNotes.length > 0 ? (
-                    <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                      {profileNotes.map((note) => (
-                        <ProfileNoteCard
-                          key={note.id}
-                          content={note.content}
-                          createdAt={note.createdAt}
-                          href={getNoteHref(note.ownerEmail, note.name)}
-                          name={note.name}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        No notes yet.
+                    ) : profileNotes.length > 0 ? (
+                      <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+                        {profileNotes.map((note, idx) => (
+                          <ProfileNoteCard
+                            key={note.id}
+                            content={note.content}
+                            createdAt={note.createdAt}
+                            href={getNoteHref(note.ownerEmail, note.name)}
+                            name={note.name}
+                            isFocused={focusLevel === "items" && activeSection === "notes" && focusedItemIndex === idx}
+                          />
+                        ))}
                       </div>
-                    </div>
-                  )}
-                </>
-              ) : null}
-
-              {activeSection === "friends" ? (
-                <>
-                  {friendDirectoryError ? (
-                    <p className="mt-4 text-sm text-[#a11d1d]">
-                      {friendDirectoryError}
-                    </p>
-                  ) : null}
-
-                  {isLoadingFriends ? (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        Loading friends...
+                    ) : (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          No notes yet.
+                        </div>
                       </div>
-                    </div>
-                  ) : friends.length > 0 ? (
-                    <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                      {friends.map((friend) => (
-                        <Link
-                          key={friend.id}
-                          href={getProfileHref(friend.email)}
-                          className="rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 transition hover:-translate-y-1 hover:border-black/18 hover:shadow-[0_14px_36px_rgba(0,0,0,0.08)]"
-                        >
-                          <div className="flex items-center gap-4">
-                            <UserAvatar
-                              fullName={friend.fullName}
-                              profilePhotoUrl={friend.profilePhotoUrl}
-                              size={56}
-                            />
-                            <div className="min-w-0">
-                              <div className="truncate text-lg font-semibold text-black">
-                                {friend.fullName}
+                    )}
+                  </>
+                ) : null}
+
+                {activeSection === "friends" ? (
+                  <>
+                    {friendDirectoryError ? (
+                      <p className="mt-4 text-sm text-[#a11d1d]">
+                        {friendDirectoryError}
+                      </p>
+                    ) : null}
+
+                    {isLoadingFriends ? (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          Loading friends...
+                        </div>
+                      </div>
+                    ) : friends.length > 0 ? (
+                      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {friends.map((friend, idx) => {
+                          const isItemFocused = focusLevel === "items" && activeSection === "friends" && focusedItemIndex === idx;
+                          return (
+                            <Link
+                              key={friend.id}
+                              href={getProfileHref(friend.email)}
+                              className={`rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 transition duration-200 hover:-translate-y-1 hover:border-black/18 hover:shadow-[0_14px_36px_rgba(0,0,0,0.08)] ${isItemFocused ? "-translate-y-1.5 border-black/35 shadow-[0_14px_36px_rgba(0,0,0,0.12)] ring-2 ring-black/20 ring-offset-1" : ""}`}
+                            >
+                              <div className="flex items-center gap-4">
+                                <UserAvatar
+                                  fullName={friend.fullName}
+                                  profilePhotoUrl={friend.profilePhotoUrl}
+                                  size={56}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate text-lg font-semibold text-black">
+                                    {friend.fullName}
+                                  </div>
+                                  <div className="truncate text-sm text-black/55">
+                                    {friend.email}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="truncate text-sm text-black/55">
-                                {friend.email}
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        No accepted friends yet.
+                            </Link>
+                          );
+                        })}
                       </div>
-                    </div>
-                  )}
-                </>
-              ) : null}
+                    ) : (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          No accepted friends yet.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
 
-              {activeSection === "folders" ? (
-                <>
-                  {folderError ? (
-                    <p className="mt-4 text-sm text-[#a11d1d]">{folderError}</p>
-                  ) : null}
+                {activeSection === "folders" ? (
+                  <>
+                    {folderError ? (
+                      <p className="mt-4 text-sm text-[#a11d1d]">{folderError}</p>
+                    ) : null}
 
-                  {isLoadingFolders ? (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        Loading folders...
+                    {isLoadingFolders ? (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          Loading folders...
+                        </div>
                       </div>
-                    </div>
-                  ) : folders.length > 0 ? (
-                    <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                      {folders.map((folder) => (
-                        <ProfileFolderCard
-                          key={folder.id}
-                          folder={folder}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                      <div className="text-[22px] font-medium text-black/52">
-                        No folders yet.
+                    ) : folders.length > 0 ? (
+                      <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+                        {folders.map((folder, idx) => (
+                          <ProfileFolderCard
+                            key={folder.id}
+                            folder={folder}
+                            isFocused={focusLevel === "items" && activeSection === "folders" && focusedItemIndex === idx}
+                          />
+                        ))}
                       </div>
-                    </div>
-                  )}
-                </>
-              ) : null}
+                    ) : (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          No folders yet.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </div>
             </div>
           ) : canSeeNotes ? (
             <div>
@@ -1532,7 +1633,7 @@ export default function ProfileView({
               </h3>
 
               {profileNotes.length > 0 ? (
-                <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                   {profileNotes.map((note) => (
                     <ProfileNoteCard
                       key={note.id}

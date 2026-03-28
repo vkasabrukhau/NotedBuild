@@ -801,6 +801,7 @@ function MenuOverlay({
   onSelectOption: (option: (typeof MENU_OPTIONS)[number]) => void;
   animationClass?: string;
 }) {
+  const isExiting = animationClass === "overlay-exit";
   const storageLimit = 250;
   const normalizedNoteUsageCount = Math.max(0, noteUsageCount);
   const storageProgress = Math.min(
@@ -832,13 +833,24 @@ function MenuOverlay({
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 bg-black/20 ${animationClass}`}
+      className="valtest-menu-overlay fixed inset-0 z-50 bg-black/20"
+      style={{
+        animation: isExiting
+          ? "backdropExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards"
+          : "backdropEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05)",
+        pointerEvents: isExiting ? "none" : undefined,
+      }}
       onClick={onClose}
       role="presentation"
     >
       <div className="flex h-full items-stretch justify-start p-6">
         <div
           className="valtest-menu-panel flex h-full w-full max-w-[420px] flex-col rounded-[40px] bg-white px-8 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]"
+          style={{
+            animation: isExiting
+              ? "menuPanelExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards"
+              : "menuPanelEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05)",
+          }}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -2882,6 +2894,19 @@ export default function RootHomeShell({
       else if (name === "tamagotchi") setIsTamagotchiOpen(false);
     }, 200);
   }, []);
+
+  const [closingView, setClosingView] = useState<"all-notes" | "folder" | "profile" | null>(null);
+  const closeViewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const closeView = useCallback((name: "all-notes" | "folder" | "profile", andThen?: () => void) => {
+    if (closeViewTimerRef.current) clearTimeout(closeViewTimerRef.current);
+    setClosingView(name);
+    closeViewTimerRef.current = setTimeout(() => {
+      setClosingView(null);
+      setView("home");
+      andThen?.();
+    }, 200);
+  }, []);
   const [currentTheme, setCurrentTheme] = useState("default");
   const [currentFont, setCurrentFont] = useState("doto");
   const [tamagotchiStatus, setTamagotchiStatus] =
@@ -2956,6 +2981,9 @@ export default function RootHomeShell({
       if (noteTransitionTimerRef.current) {
         window.clearTimeout(noteTransitionTimerRef.current);
       }
+      if (closeViewTimerRef.current) {
+        clearTimeout(closeViewTimerRef.current);
+      }
     };
   }, []);
 
@@ -2985,13 +3013,14 @@ export default function RootHomeShell({
         return;
       }
 
-      if (e.key === "Escape" && view !== "note") {
+      if (e.key === "Escape" && view !== "note" && closingView === null) {
         e.preventDefault();
         if (view === "all-notes" || view === "folder" || view === "profile") {
-          setView("home");
-          if (window.location.pathname !== "/") {
-            router.push("/");
-          }
+          closeView(view, () => {
+            if (window.location.pathname !== "/") {
+              router.push("/");
+            }
+          });
         }
         return;
       }
@@ -3024,7 +3053,7 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view, closingOverlay, closeOverlay, router]);
+  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view, closingOverlay, closingView, closeOverlay, closeView, router]);
 
   const activeTamagotchi =
     tamagotchiStatus?.tamagotchis?.find((t) => t.isActive && !t.isLocked) ?? null;
@@ -3059,8 +3088,8 @@ export default function RootHomeShell({
         />
         </div>
       ) : null}
-      {view === "all-notes" ? (
-        <div className="view-enter">
+      {(view === "all-notes" || closingView === "all-notes") ? (
+        <div className={closingView === "all-notes" ? "view-exit" : "view-enter"}>
           <AllItemsComponent
             refreshToken={allNotesRefreshToken}
             onOpenNote={(note) => {
@@ -3109,16 +3138,16 @@ export default function RootHomeShell({
           />
         </div>
       ) : null}
-      {view === "folder" ? (
-        <div className="view-enter">
+      {(view === "folder" || closingView === "folder") ? (
+        <div className={closingView === "folder" ? "view-exit" : "view-enter"}>
           <FolderComponent
             key={activeFolder?.id ?? `new-folder-${folderSessionKey}`}
             initialFolder={activeFolder}
           />
         </div>
       ) : null}
-      {view === "profile" ? (
-        <div className="view-enter">
+      {(view === "profile" || closingView === "profile") ? (
+        <div className={closingView === "profile" ? "view-exit" : "view-enter"}>
           <ProfileView
             profile={profile}
             schools={schools}

@@ -121,6 +121,72 @@
   animation: viewEnter 260ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
+@keyframes viewExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.view-exit {
+  animation: viewExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* ── Menu panel open / close ── */
+@keyframes menuPanelEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes menuPanelExit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+@keyframes backdropEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes backdropExit {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.menu-backdrop-enter {
+  animation: backdropEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05);
+}
+
+.menu-backdrop-exit {
+  animation: backdropExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+.menu-panel-enter {
+  animation: menuPanelEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05);
+}
+
+.menu-panel-exit {
+  animation: menuPanelExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 /* ── Overlay open / close ── */
 @keyframes overlayEnter {
   from {

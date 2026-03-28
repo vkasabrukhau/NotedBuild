@@ -869,15 +869,13 @@ function MenuOverlay({
                   onMouseEnter={() => setFocusedIndex(index)}
                   onClick={() => onSelectOption(option)}
                   className={`flex items-center gap-3 text-left font-medium transition-opacity duration-150 ${
-                    option === "Account"
-                      ? "hover:opacity-65"
-                      : "cursor-default opacity-45"
-                  }`}
+                    focusedIndex === index ? "opacity-100" : "opacity-45"
+                  } ${option !== "Account" ? "cursor-default" : ""}`}
                 >
-                  <span className="w-6 font-mono font-bold text-black">
+                  <span className="w-6 font-mono font-medium text-black">
                     {focusedIndex === index ? ">" : ""}
                   </span>
-                  <span className={focusedIndex === index ? "font-bold" : "font-medium"}>
+                  <span className="font-medium">
                     {option}
                   </span>
                 </button>

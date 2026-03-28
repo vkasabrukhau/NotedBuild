@@ -499,7 +499,7 @@ function HomeComponent({
       const letter = event.key.toUpperCase();
 
       setPressedKeys({
-        ctrl: event.ctrlKey || event.metaKey || event.altKey,
+        ctrl: event.ctrlKey,
         shift: event.shiftKey,
         letter: validLetters.has(letter) ? letter : null,
       });
@@ -509,7 +509,7 @@ function HomeComponent({
       const letter = event.key.toUpperCase();
 
       setPressedKeys((current) => ({
-        ctrl: event.ctrlKey || event.metaKey || event.altKey,
+        ctrl: event.ctrlKey,
         shift: event.shiftKey,
         letter:
           current.letter === letter && validLetters.has(letter)

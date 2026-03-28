@@ -1,5 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  getFriendshipStateFromRecords,
+  type ProfileFriendshipState,
+} from "@/lib/friendship-state";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
 export type ProfileViewData = {
@@ -18,14 +22,16 @@ export type ProfileViewData = {
   schoolLocation: string | null;
   schoolName: string | null;
   schoolPrimaryColor: string | null;
+  notes: ProfileNoteSummary[];
 };
 
-export type ProfileFriendshipState =
-  | "self"
-  | "none"
-  | "pending_outgoing"
-  | "pending_incoming"
-  | "accepted";
+export type ProfileNoteSummary = {
+  content: string;
+  createdAt: string;
+  id: string;
+  name: string;
+  ownerEmail: string;
+};
 
 export type ProfileViewerData = {
   friendshipState: ProfileFriendshipState;
@@ -82,6 +88,7 @@ export async function getAcceptedFriendCount(userId: string) {
 export function toProfileViewData(
   user: ProfileUserRecord,
   friendCount: number,
+  notes: ProfileNoteSummary[] = [],
 ): ProfileViewData {
   return {
     id: user.id,
@@ -99,7 +106,39 @@ export function toProfileViewData(
     schoolLocation: user.school?.location ?? null,
     schoolName: user.school?.name ?? null,
     schoolPrimaryColor: user.school?.primaryColor ?? null,
+    notes,
   };
+}
+
+export async function getProfileNotes(
+  userId: string,
+  ownerEmail: string,
+  limit = 6,
+): Promise<ProfileNoteSummary[]> {
+  const notes = await prisma.note.findMany({
+    where: {
+      deletedAt: null,
+      ownerId: userId,
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    take: limit,
+    select: {
+      content: true,
+      createdAt: true,
+      id: true,
+      name: true,
+    },
+  });
+
+  return notes.map((note) => ({
+    content: note.content,
+    createdAt: note.createdAt.toISOString(),
+    id: note.id,
+    name: note.name,
+    ownerEmail,
+  }));
 }
 
 export async function getSchoolOptions(): Promise<ProfileSchoolOption[]> {
@@ -151,41 +190,14 @@ export async function getProfileViewerData(
     },
   });
 
-  if (friendships.some((friendship) => friendship.status === "ACCEPTED")) {
-    return {
-      friendshipState: "accepted",
-      isOwnProfile: false,
-    };
-  }
-
-  const directFriendship = friendships.find(
-    (friendship) =>
-      friendship.requesterId === viewerUserId &&
-      friendship.addresseeId === profileUserId,
-  );
-
-  if (directFriendship?.status === "PENDING") {
-    return {
-      friendshipState: "pending_outgoing",
-      isOwnProfile: false,
-    };
-  }
-
-  const reverseFriendship = friendships.find(
-    (friendship) =>
-      friendship.requesterId === profileUserId &&
-      friendship.addresseeId === viewerUserId,
-  );
-
-  if (reverseFriendship?.status === "PENDING") {
-    return {
-      friendshipState: "pending_incoming",
-      isOwnProfile: false,
-    };
-  }
-
   return {
-    friendshipState: "none",
+    friendshipState: getFriendshipStateFromRecords(
+      viewerUserId,
+      profileUserId,
+      friendships,
+    ),
     isOwnProfile: false,
   };
 }
+
+export type { ProfileFriendshipState };

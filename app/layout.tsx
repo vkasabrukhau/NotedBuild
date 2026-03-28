@@ -26,6 +26,7 @@ const bitcount = Bitcount_Grid_Double_Ink({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-bitcount",
+  adjustFontFallback: false,
 });
 
 const roboto = Roboto({

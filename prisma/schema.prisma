@@ -265,6 +265,7 @@ model UserTamagotchi {
   currentThreshold Int      // health needed to level up; starts at species startingThreshold
 
   isActive         Boolean  @default(false)
+  isLocked         Boolean  @default(false)
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

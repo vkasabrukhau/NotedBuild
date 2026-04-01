@@ -1,17 +1,7 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { syncClerkUserToDb } from "@/lib/sync-clerk-user";
-
-async function getOrCreateDbUser() {
-  const clerkUser = await currentUser();
-
-  if (!clerkUser) {
-    return null;
-  }
-
-  return syncClerkUserToDb(clerkUser);
-}
+import { getOrCreateDbUser } from "@/lib/api-auth";
+import { getOrCreateProgress, checkAndUnlockTamagotchis, awardXpAndCheckUnlocks } from "@/lib/progress-utils";
 
 export async function GET(request: Request) {
   try {
@@ -263,6 +253,26 @@ export async function POST(request: Request) {
         selectedNoteIds,
       };
     });
+
+    // Track first-folder milestone + award XP (fire-and-forget; non-critical)
+    void (async () => {
+      const progress = await getOrCreateProgress(dbUser.id);
+      let didCreate = !body.folderId;
+
+      if (!progress.hasSavedFirstFolder) {
+        const updated = await prisma.userProgress.upsert({
+          where: { userId: dbUser.id },
+          update: { hasSavedFirstFolder: true },
+          create: { userId: dbUser.id, hasSavedFirstFolder: true },
+        });
+        await checkAndUnlockTamagotchis(dbUser.id, updated);
+      }
+
+      // Award 5 XP for creating a new folder (not for edits)
+      if (didCreate) {
+        await awardXpAndCheckUnlocks(dbUser.id, 5);
+      }
+    })();
 
     return NextResponse.json({ folder });
   } catch (error) {

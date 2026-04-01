@@ -17,18 +17,20 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   SetStateAction,
 } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { TAMAGOTCHI_SPECIES } from "@/lib/tamagotchi-config";
+import {
+  SPECIAL_PETS,
+  EVOLUTION_LINES,
+  getSpeciesIdleGif,
+  getSpeciesName,
+  getTier,
+  MAX_XP,
+} from "@/lib/tamagotchi-config";
+import { stripHtml, getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
-const PLACEHOLDERS = [
-  "Jot something down…",
-  "Let's start brewing...",
-  "Write your next big idea...",
-  "Thoughts, notes, reminders...",
-  "Start typing your genius here...",
-];
+const BODY_PLACEHOLDER = "Start typing your genius here...";
 const HOME_SHORTCUTS = [
   { key: "H", label: "home" },
   { key: "A", label: "all items" },
@@ -221,15 +223,15 @@ type InitialFolder = {
 
 type OwnedTamagotchi = {
   species: string;
+  lineId: string | null;
   displayName: string | null;
-  health: number;
-  level: number;
-  currentThreshold: number;
+  happiness: number;
   isActive: boolean;
-  isLocked: boolean;
+  lastClickAt: string | null;
 };
 
 type TamagotchiStatus = {
+  globalXp: number;
   streak: {
     current: number;
     longest: number;
@@ -251,12 +253,11 @@ function isOwnedTamagotchi(value: unknown): value is OwnedTamagotchi {
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.species === "string" &&
+    (typeof candidate.lineId === "string" || candidate.lineId === null) &&
     (typeof candidate.displayName === "string" || candidate.displayName === null) &&
-    typeof candidate.health === "number" &&
-    typeof candidate.level === "number" &&
-    typeof candidate.currentThreshold === "number" &&
+    typeof candidate.happiness === "number" &&
     typeof candidate.isActive === "boolean" &&
-    typeof candidate.isLocked === "boolean"
+    (typeof candidate.lastClickAt === "string" || candidate.lastClickAt === null)
   );
 }
 
@@ -274,6 +275,7 @@ function isTamagotchiStatus(value: unknown): value is TamagotchiStatus {
 
   const streakCandidate = streak as Record<string, unknown>;
   return (
+    typeof candidate.globalXp === "number" &&
     typeof streakCandidate.current === "number" &&
     typeof streakCandidate.longest === "number" &&
     typeof streakCandidate.totalCheckins === "number" &&
@@ -329,28 +331,6 @@ function createFolderSignature(
   });
 }
 
-function stripHtml(html: string) {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getPreviewText(content: string, maxWords = 48) {
-  return stripHtml(content)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(" ");
-}
-
-function formatAuthoredDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
 
 function sanitizeLatex(latex: string) {
   return latex
@@ -454,16 +434,47 @@ async function convertMathPromptToLatex(
     .trim();
 }
 
+const TAMAGOTCHI_DISPLAY: Record<string, { scale: number; translateY: string }> = {
+  // Special pets
+  bear:      { scale: 1.869, translateY: "-10%" },
+  mewtwo:    { scale: 0.740, translateY: "0%" },
+  snorlax:   { scale: 0.627, translateY: "0%" },
+  // Skeleton line
+  skeleton_spearman: { scale: 1.0, translateY: "0%" },
+  skeleton_warrior:  { scale: 1.0, translateY: "0%" },
+  skeleton_archer:   { scale: 1.0, translateY: "0%" },
+  // Wizard line
+  lightning_mage:    { scale: 1.0, translateY: "0%" },
+  fire_wizard:       { scale: 1.0, translateY: "0%" },
+  wanderer_magician: { scale: 1.0, translateY: "0%" },
+  // Ninja line
+  kunoichi:          { scale: 1.0, translateY: "0%" },
+  ninja_monk:        { scale: 1.0, translateY: "0%" },
+  ninja_peasant:     { scale: 1.0, translateY: "0%" },
+  // Karasu line
+  karasu_tengu:      { scale: 1.0, translateY: "0%" },
+  kitsune:           { scale: 1.0, translateY: "0%" },
+  yamabushi_tengu:   { scale: 1.0, translateY: "0%" },
+  // Samurai line
+  samurai:           { scale: 1.0, translateY: "0%" },
+  samurai_archer:    { scale: 1.0, translateY: "0%" },
+  samurai_commander: { scale: 1.0, translateY: "0%" },
+};
+
 function HomeComponent({
   activeTamagotchi,
+  globalXp,
   onTamagotchiClick,
   onRename,
 }: {
   activeTamagotchi: OwnedTamagotchi | null;
+  globalXp: number;
   onTamagotchiClick: () => void;
   onRename: (name: string) => void;
 }) {
   const [isRenaming, setIsRenaming] = useState(false);
+  const [heartVisible, setHeartVisible] = useState(false);
+  const heartTimerRef = useRef<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -693,23 +704,36 @@ function HomeComponent({
             <>
               <button
                 type="button"
-                onClick={onTamagotchiClick}
-                className="relative flex h-[80%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
+                onClick={() => {
+                  setHeartVisible(true);
+                  if (heartTimerRef.current) window.clearTimeout(heartTimerRef.current);
+                  heartTimerRef.current = window.setTimeout(() => setHeartVisible(false), 900);
+                  onTamagotchiClick();
+                }}
+                className="relative flex h-[70%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/tamagotchi/${activeTamagotchi.species}.gif`}
-                  alt={
-                    activeTamagotchi.displayName ??
-                    (TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)
-                      ?.name ?? activeTamagotchi.species)
-                  }
+                  src={getSpeciesIdleGif(activeTamagotchi.species)}
+                  alt={activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species)}
                   className="h-[98%] w-auto object-contain drop-shadow-lg"
-                  style={{ imageRendering: "pixelated", transform: "scale(1.869)", transformOrigin: "center" }}
+                  style={{
+                    imageRendering: "pixelated",
+                    transform: `translateY(${(TAMAGOTCHI_DISPLAY[activeTamagotchi.species] ?? { scale: 1, translateY: "0%" }).translateY}) scale(${(TAMAGOTCHI_DISPLAY[activeTamagotchi.species] ?? { scale: 1, translateY: "0%" }).scale})`,
+                    transformOrigin: "center",
+                  }}
                 />
+                {heartVisible ? (
+                  <span
+                    className="pointer-events-none absolute text-4xl"
+                    style={{ animation: "floatHeart 900ms ease-out forwards" }}
+                  >
+                    💗
+                  </span>
+                ) : null}
               </button>
 
-              {/* Name + health bar */}
+              {/* Name + stats */}
               <div className="mt-4 w-full px-1">
                 <div className="flex items-center gap-2">
                   {isRenaming ? (
@@ -728,24 +752,20 @@ function HomeComponent({
                         onKeyDown={(e) => { if (e.key === "Escape") setIsRenaming(false); }}
                         onBlur={() => setIsRenaming(false)}
                         className="w-full bg-transparent text-[22px] font-medium text-black outline-none border-b border-black/30 focus:border-black/60"
-                        placeholder={TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ?? ""}
+                        placeholder={getSpeciesName(activeTamagotchi.species)}
                         maxLength={24}
                       />
                     </form>
                   ) : (
                     <>
                       <span className="text-[22px] font-medium text-black">
-                        {activeTamagotchi.displayName ??
-                          TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ??
-                          activeTamagotchi.species}
+                        {activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species)}
                       </span>
                       <button
                         type="button"
                         onClick={() => {
                           setRenameValue(
-                            activeTamagotchi.displayName ??
-                            TAMAGOTCHI_SPECIES.find((s) => s.id === activeTamagotchi.species)?.name ??
-                            "",
+                            activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species),
                           );
                           setIsRenaming(true);
                         }}
@@ -756,18 +776,34 @@ function HomeComponent({
                       </button>
                     </>
                   )}
-                  <span className="ml-auto text-[20px] font-medium text-black/40">
-                    Lv {activeTamagotchi.level} · ❤ {activeTamagotchi.health}/{activeTamagotchi.currentThreshold}
-                  </span>
                 </div>
 
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/10">
-                  <div
-                    className="h-full rounded-full bg-black/50 transition-all duration-500"
-                    style={{
-                      width: `${Math.min(100, (activeTamagotchi.health / activeTamagotchi.currentThreshold) * 100)}%`,
-                    }}
-                  />
+                {/* Happiness bar (0–10) */}
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-[12px] font-medium text-black/40">
+                    <span>💗 Happiness</span>
+                    <span>{activeTamagotchi.happiness}/10</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-black/50 transition-all duration-500"
+                      style={{ width: `${(activeTamagotchi.happiness / 10) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* XP bar (0–1200) */}
+                <div className="mt-2">
+                  <div className="mb-1 flex justify-between text-[12px] font-medium text-black/40">
+                    <span>✨ XP</span>
+                    <span>{globalXp}/{MAX_XP}</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-black/30 transition-all duration-500"
+                      style={{ width: `${(globalXp / MAX_XP) * 100}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </>
@@ -1154,17 +1190,27 @@ function FontOverlay({
 function TamagotchiPreferencesOverlay({
   onClose,
   status,
-  onSelectActive,
+  onSelectSpecies,
   onRename,
   animationClass = "overlay-enter",
 }: {
   onClose: () => void;
   status: TamagotchiStatus;
-  onSelectActive: (species: string | null) => void;
+  onSelectSpecies: (speciesId: string | null) => void;
   onRename: (species: string, name: string) => void;
   animationClass?: string;
 }) {
-  const ownedMap = new Map(status.tamagotchis.map((t) => [t.species, t]));
+  const { globalXp } = status;
+  const ownedMap = useMemo(
+    () => new Map(status.tamagotchis.map((t) => [t.species, t])),
+    [status.tamagotchis],
+  );
+  const lineOwnedMap = useMemo(
+    () => new Map(status.tamagotchis.filter((t) => t.lineId).map((t) => [t.lineId!, t])),
+    [status.tamagotchis],
+  );
+  const activeTama = status.tamagotchis.find((t) => t.isActive);
+
   const [renamingSpecies, setRenamingSpecies] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -1176,15 +1222,154 @@ function TamagotchiPreferencesOverlay({
     }
   }, [renamingSpecies]);
 
-  const rows = [TAMAGOTCHI_SPECIES.slice(0, 4), TAMAGOTCHI_SPECIES.slice(4)];
+  // Tier card component used in both evolution lines and special pets
+  function TierCard({
+    speciesId,
+    name,
+    idleGif,
+    xpThreshold,
+    isSpecialPet = false,
+  }: {
+    speciesId: string;
+    name: string;
+    idleGif: string;
+    xpThreshold?: number;
+    isSpecialPet?: boolean;
+  }) {
+    const unlocked = isSpecialPet ? ownedMap.has(speciesId) : globalXp >= (xpThreshold ?? 0);
+    const isActive = activeTama?.species === speciesId;
+    const owned = ownedMap.get(speciesId);
+    const displayName = owned?.displayName ?? name;
+    const isRenaming = renamingSpecies === speciesId;
+
+    // For evolution line tiers: check if this tier is currently "held" by the user
+    const line = !isSpecialPet ? EVOLUTION_LINES.find((l) => l.tiers.some((t) => t.id === speciesId)) : null;
+    const lineOwned = line ? lineOwnedMap.get(line.id) : null;
+    const isLineCurrentTier = lineOwned?.species === speciesId;
+
+    const canSelect = unlocked && !isActive;
+    const isSelected = isActive || isLineCurrentTier;
+
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div
+          className="relative flex h-[140px] w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[20px] transition-all duration-150"
+          style={{
+            backgroundColor: unlocked
+              ? "var(--app-card)"
+              : "color-mix(in srgb, var(--app-card) 50%, transparent)",
+            outline: isActive
+              ? "3px solid var(--app-ink)"
+              : isSelected && !isActive
+                ? "2px solid color-mix(in srgb, var(--app-ink) 35%, transparent)"
+                : "2px solid transparent",
+            outlineOffset: "2px",
+            boxShadow: isActive
+              ? "0 6px 20px color-mix(in srgb, var(--app-ink) 14%, transparent)"
+              : "0 2px 6px rgba(0,0,0,0.05)",
+            opacity: unlocked ? 1 : 0.45,
+            cursor: canSelect ? "pointer" : "default",
+          }}
+          onClick={() => {
+            if (!unlocked || isActive) return;
+            onSelectSpecies(speciesId);
+          }}
+        >
+          {unlocked ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={idleGif}
+                alt={name}
+                className="h-16 w-16 object-contain"
+                style={{ imageRendering: "pixelated", transform: speciesId === "bear" ? "scale(1.4)" : undefined }}
+              />
+              {isActive && (
+                <span className="rounded-full bg-black px-2 py-0.5 text-[10px] font-bold text-white">
+                  ✓ Active
+                </span>
+              )}
+              {!isActive && isLineCurrentTier && (
+                <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-medium text-black/60">
+                  Selected
+                </span>
+              )}
+              {!isActive && !isLineCurrentTier && (
+                <span className="rounded-full bg-black/8 px-2 py-0.5 text-[10px] font-medium text-black/40">
+                  {isSpecialPet ? "Set Active" : "Switch"}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-[28px] text-black/20">?</span>
+          )}
+        </div>
+
+        {/* Name + rename */}
+        {isRenaming ? (
+          <form
+            className="flex w-full items-center gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRename(speciesId, renameValue);
+              setRenamingSpecies(null);
+            }}
+          >
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
+              onBlur={() => setRenamingSpecies(null)}
+              className="w-full rounded-md border border-black/20 bg-transparent px-1.5 py-0.5 text-[13px] text-black outline-none focus:border-black/40"
+              placeholder={name}
+              maxLength={24}
+            />
+          </form>
+        ) : (
+          <div className="flex items-center justify-between px-0.5">
+            <span
+              className="text-[13px] font-medium leading-tight text-black"
+              style={{ opacity: unlocked ? 1 : 0.4 }}
+            >
+              {unlocked && !isSpecialPet ? (
+                isLineCurrentTier ? (
+                  <span className="inline-flex items-center gap-1">
+                    {displayName}
+                  </span>
+                ) : displayName
+              ) : unlocked ? displayName : name}
+            </span>
+            {unlocked && (isActive || isLineCurrentTier) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRenameValue(displayName);
+                  setRenamingSpecies(speciesId);
+                }}
+                className="ml-1 shrink-0 text-[13px] text-black/30 transition-opacity hover:text-black/60"
+                title="Rename"
+              >
+                ✎
+              </button>
+            ) : null}
+            {!unlocked && xpThreshold !== undefined && (
+              <span className="text-[11px] text-black/30">{xpThreshold} XP</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col overflow-y-auto bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Tamagotchi Preferences"
     >
+      {/* Header */}
       <div className="flex items-baseline gap-4">
         <h1 className="text-[40px] font-bold leading-none text-black">
           たまごっち
@@ -1196,243 +1381,146 @@ function TamagotchiPreferencesOverlay({
         ) : null}
       </div>
 
-      {(() => {
-        const activeTama = status.tamagotchis.find((t) => t.isActive);
-        const activeName =
-          activeTama?.displayName ??
-          TAMAGOTCHI_SPECIES.find((s) => s.id === activeTama?.species)?.name ??
-          activeTama?.species;
-        return (
-          <p className="mt-1 text-[15px] text-black/45">
-            {activeTama ? (
-              <>
-                <span className="font-medium text-black/60">{activeName}</span>
-                {" is on your home screen · "}
-                <button
-                  type="button"
-                  onClick={() => onSelectActive(null)}
-                  className="underline transition-colors hover:text-black/70"
-                >
-                  show homepage GIF instead
-                </button>
-              </>
-            ) : (
-              "No tamagotchi on home screen — select one below"
-            )}
-          </p>
-        );
-      })()}
+      {/* Active pet info + deselect */}
+      <p className="mt-1 text-[15px] text-black/45">
+        {activeTama ? (
+          <>
+            <span className="font-medium text-black/60">
+              {activeTama.displayName ?? getSpeciesName(activeTama.species)}
+            </span>
+            {" is on your home screen · "}
+            <button
+              type="button"
+              onClick={() => onSelectSpecies(null)}
+              className="underline transition-colors hover:text-black/70"
+            >
+              show homepage GIF
+            </button>
+          </>
+        ) : (
+          "No tamagotchi on home screen — select one below"
+        )}
+      </p>
 
-      <div className="flex flex-1 flex-col justify-evenly">
-        {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex justify-evenly">
-            {row.map((species) => {
-              const owned = ownedMap.get(species.id);
-              const isOwned = owned !== undefined;
-              const isLocked = owned?.isLocked ?? false;
-              const isAccessible = isOwned && !isLocked;
-              const isActive = owned?.isActive ?? false;
-              const isRenaming = renamingSpecies === species.id;
-              const displayName = owned?.displayName ?? species.name;
-
-              // Streak progress for not-yet-unlocked or locked species
-              const streakNeeded = species.unlockStreakDays ?? 0;
-              const streakProgress = Math.min(
-                status.streak.current,
-                streakNeeded,
-              );
-
-              return (
-                <div key={species.id} className="flex w-[260px] flex-col gap-3">
-                  {/* Card */}
-                  <div
-                    className="relative flex aspect-square w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[28px]"
-                    style={{
-                      backgroundColor: isAccessible
-                        ? "var(--app-card)"
-                        : "color-mix(in srgb, var(--app-card) 60%, transparent)",
-                      outline: isActive
-                        ? "3px solid var(--app-ink)"
-                        : "2px solid transparent",
-                      outlineOffset: "3px",
-                      boxShadow: isActive
-                        ? "0 8px 24px color-mix(in srgb, var(--app-ink) 14%, transparent)"
-                        : "0 2px 6px rgba(0,0,0,0.06)",
-                      transition: "box-shadow 180ms ease",
-                      opacity: isAccessible ? 1 : 0.55,
-                    }}
-                  >
-                    {/* GIF */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={species.gif}
-                      alt={species.name}
-                      className="h-24 w-24 object-contain"
-                      style={{ filter: isAccessible ? "none" : "grayscale(1)" }}
-                    />
-
-                    {isAccessible ? (
-                      <>
-                        {/* Level badge */}
-                        <div className="text-[13px] font-semibold text-black/60">
-                          Lv {owned!.level}
-                        </div>
-                        {/* Health bar */}
-                        <div className="w-[80%]">
-                          <div className="mb-0.5 flex justify-between text-[11px] text-black/40">
-                            <span>❤</span>
-                            <span>
-                              {owned!.health}/{owned!.currentThreshold}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
-                            <div
-                              className="h-full rounded-full bg-black/70 transition-all duration-300"
-                              style={{
-                                width: `${Math.min(100, (owned!.health / owned!.currentThreshold) * 100)}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    ) : isLocked ? (
-                      <>
-                        {/* Lost due to streak drop */}
-                        <div className="text-[13px] font-semibold text-black/50">
-                          🔒 streak lost
-                        </div>
-                        <div className="w-[80%]">
-                          <div className="mb-0.5 flex justify-between text-[11px] text-black/35">
-                            <span>need</span>
-                            <span>
-                              {streakProgress}/{streakNeeded}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
-                            <div
-                              className="h-full rounded-full bg-black/30 transition-all duration-300"
-                              style={{
-                                width:
-                                  streakNeeded > 0
-                                    ? `${(streakProgress / streakNeeded) * 100}%`
-                                    : "0%",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* Not yet unlocked */}
-                        <div className="text-[13px] font-semibold text-black/50">
-                          🔥 {streakNeeded} day streak
-                        </div>
-                        <div className="w-[80%]">
-                          <div className="mb-0.5 flex justify-between text-[11px] text-black/35">
-                            <span>progress</span>
-                            <span>
-                              {streakProgress}/{streakNeeded}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
-                            <div
-                              className="h-full rounded-full bg-black/30 transition-all duration-300"
-                              style={{
-                                width:
-                                  streakNeeded > 0
-                                    ? `${(streakProgress / streakNeeded) * 100}%`
-                                    : "0%",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Select / Active button */}
-                    {isAccessible ? (
-                      <button
-                        type="button"
-                        onClick={() => !isActive && onSelectActive(species.id)}
-                        className="mt-1 rounded-full px-4 py-1 text-[12px] font-semibold transition-all duration-150"
-                        style={{
-                          backgroundColor: isActive
-                            ? "var(--app-ink)"
-                            : "color-mix(in srgb, var(--app-ink) 12%, transparent)",
-                          color: isActive
-                            ? "var(--app-surface)"
-                            : "var(--app-ink)",
-                          cursor: isActive ? "default" : "pointer",
-                        }}
-                      >
-                        {isActive ? "✓ Active" : "Set Active"}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {/* Name + rename */}
-                  <div className="flex items-center justify-between px-1">
-                    {isRenaming ? (
-                      <form
-                        className="flex w-full items-center gap-1"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          onRename(species.id, renameValue);
-                          setRenamingSpecies(null);
-                        }}
-                      >
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") setRenamingSpecies(null);
-                          }}
-                          onBlur={() => setRenamingSpecies(null)}
-                          className="w-full rounded-md border border-black/20 bg-transparent px-2 py-0.5 text-[15px] text-black outline-none focus:border-black/40"
-                          placeholder={species.name}
-                          maxLength={24}
-                        />
-                      </form>
-                    ) : (
-                      <>
-                        <span
-                          className="text-[15px] font-medium leading-tight text-black"
-                          style={{ opacity: isAccessible ? 1 : 0.5 }}
-                        >
-                          {isActive ? (
-                            <span className="inline-flex items-center gap-1.5">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black text-[9px] font-bold text-white">
-                                ✓
-                              </span>
-                              {displayName}
-                            </span>
-                          ) : (
-                            displayName
-                          )}
-                        </span>
-                        {isAccessible ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRenameValue(displayName);
-                              setRenamingSpecies(species.id);
-                            }}
-                            className="ml-2 shrink-0 text-[14px] text-black/30 transition-opacity hover:text-black/60"
-                            title="Rename"
-                          >
-                            ✎
-                          </button>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+      {/* Global XP bar */}
+      <div className="mt-5">
+        <div className="mb-1.5 flex items-center justify-between text-[13px] font-medium text-black/50">
+          <span>✨ XP</span>
+          <span>{globalXp} / {MAX_XP}</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
+          <div
+            className="h-full rounded-full bg-black/40 transition-all duration-500"
+            style={{ width: `${(globalXp / MAX_XP) * 100}%` }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[11px] text-black/25">
+          {[0, 250, 450, 650, 1000, 1200].map((v) => (
+            <span key={v} style={{ position: "relative", left: v === 0 ? 0 : v === 1200 ? 0 : undefined }}>
+              {v}
+            </span>
+          ))}
+        </div>
       </div>
+
+      {/* Evolution lines */}
+      <div className="mt-8">
+        <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-black/35">
+          Evolution Lines
+        </h2>
+        <div className="grid grid-cols-5 gap-3">
+          {EVOLUTION_LINES.map((line) => (
+            <div key={line.id} className="flex flex-col gap-1">
+              {/* Line name */}
+              <div className="mb-2 text-center text-[12px] font-semibold text-black/50">
+                {line.name}
+              </div>
+
+              {/* Tiers: highest first (top) → lowest last (bottom) */}
+              {[...line.tiers].reverse().map((tier, reversedIdx) => {
+                const tierIdx = line.tiers.length - 1 - reversedIdx;
+                const prevTier = tierIdx > 0 ? line.tiers[tierIdx - 1] : null;
+
+                return (
+                  <div key={tier.id}>
+                    {/* XP threshold between tiers */}
+                    {reversedIdx > 0 && prevTier && (
+                      <div className="my-1.5 flex items-center gap-1.5 text-[10px] text-black/30">
+                        <div className="h-px flex-1 bg-black/10" />
+                        <span>{tier.xpThreshold} XP</span>
+                        <div className="h-px flex-1 bg-black/10" />
+                      </div>
+                    )}
+                    <TierCard
+                      speciesId={tier.id}
+                      name={tier.name}
+                      idleGif={tier.idleGif}
+                      xpThreshold={tier.xpThreshold}
+                    />
+                  </div>
+                );
+              })}
+
+              {/* Entry threshold for the line */}
+              {line.tiers[0].xpThreshold > 0 && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-black/30">
+                  <div className="h-px flex-1 bg-black/10" />
+                  <span>{line.tiers[0].xpThreshold} XP to unlock</span>
+                  <div className="h-px flex-1 bg-black/10" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Special pets */}
+      <div className="mt-10">
+        <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-black/35">
+          Special Companions
+        </h2>
+        <p className="mb-4 text-[13px] text-black/40">
+          Unlocked by completing milestones — check your profile page for progress.
+        </p>
+        <div className="grid grid-cols-3 gap-3" style={{ maxWidth: "440px" }}>
+          {SPECIAL_PETS.map((pet) => (
+            <TierCard
+              key={pet.id}
+              speciesId={pet.id}
+              name={pet.name}
+              idleGif={pet.idleGif}
+              isSpecialPet
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Happiness summary */}
+      {status.tamagotchis.length > 0 && (
+        <div className="mt-10 border-t border-black/8 pt-6">
+          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-widest text-black/35">
+            Happiness
+          </h2>
+          <div className="flex flex-wrap gap-4">
+            {status.tamagotchis.map((t) => (
+              <div key={t.species} className="flex min-w-[120px] flex-col gap-1">
+                <span className="text-[12px] font-medium text-black/60">
+                  {t.displayName ?? getSpeciesName(t.species)}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-[80px] overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-black/60 transition-all duration-300"
+                      style={{ width: `${(t.happiness / 10) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-black/35">{t.happiness}/10</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1519,6 +1607,33 @@ function FolderGridCard({
   );
 }
 
+function useSavedToast() {
+  const [showSavedToast, setShowSavedToast] = useState(false);
+  const [savedToastKey, setSavedToastKey] = useState(0);
+  const [savedToastText, setSavedToastText] = useState("Saved");
+  const hideSavedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hideSavedTimerRef.current) window.clearTimeout(hideSavedTimerRef.current);
+    };
+  }, []);
+
+  const triggerSavedToast = useCallback((text = "Saved") => {
+    setSavedToastText(text);
+    setSavedToastKey((current) => current + 1);
+    setShowSavedToast(true);
+    if (hideSavedTimerRef.current) {
+      window.clearTimeout(hideSavedTimerRef.current);
+    }
+    hideSavedTimerRef.current = window.setTimeout(() => {
+      setShowSavedToast(false);
+    }, 1800);
+  }, []);
+
+  return { showSavedToast, savedToastKey, savedToastText, triggerSavedToast };
+}
+
 function AllItemsComponent({
   refreshToken,
   onOpenNote,
@@ -1599,21 +1714,21 @@ function AllItemsComponent({
     return () => { cancelled = true; };
   }, [refreshToken]);
 
-  const sortedNotes = [...notes].sort((left, right) => {
+  const sortedNotes = useMemo(() => [...notes].sort((left, right) => {
     if (sortMode === "date-desc") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
     if (sortMode === "date-asc") return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
     if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
     if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
     return stripHtml(right.content).length - stripHtml(left.content).length;
-  });
+  }), [notes, sortMode]);
 
-  const sortedFolders = [...folders].sort((left, right) => {
+  const sortedFolders = useMemo(() => [...folders].sort((left, right) => {
     if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
     if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
     // default: date-desc / date-asc by updatedAt
     if (sortMode === "date-asc") return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
     return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-  });
+  }), [folders, sortMode]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1625,7 +1740,7 @@ function AllItemsComponent({
     }
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFoldersKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleFoldersKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (sortedFolders.length === 0) return;
     const columnCount = 4;
 
@@ -1653,9 +1768,9 @@ function AllItemsComponent({
       return;
     }
     if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - columnCount)); }
-  };
+  }, [sortedFolders, sortedNotes, activeIndex, notes, onOpenFolder]);
 
-  const handleNotesKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleNotesKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (sortedNotes.length === 0) return;
     const columnCount = 4;
 
@@ -1679,9 +1794,9 @@ function AllItemsComponent({
         foldersGridRef.current?.focus();
       }
     }
-  };
+  }, [sortedNotes, sortedFolders, activeIndex, onOpenNote]);
 
-  const skeletons = Array.from({ length: 8 }).map((_, index) => (
+  const skeletons = useMemo(() => Array.from({ length: 8 }).map((_, index) => (
     <div
       key={`skeleton-${index}`}
       className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
@@ -1694,7 +1809,7 @@ function AllItemsComponent({
       </div>
       <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
     </div>
-  ));
+  )), []);
 
   return (
     <div className="min-h-screen w-full bg-white px-6 py-8">
@@ -1823,7 +1938,6 @@ function NoteComponent({
 }) {
   const isConvertingMathRef = useRef(false);
   const isSavingRef = useRef(false);
-  const hideSavedTimerRef = useRef<number | null>(null);
   const [mathEditor, setMathEditor] = useState<MathEditorState | null>(null);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
@@ -1833,9 +1947,7 @@ function NoteComponent({
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [bodyPlaceholder, setBodyPlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
-  const [showSavedToast, setShowSavedToast] = useState(false);
-  const [savedToastKey, setSavedToastKey] = useState(0);
-  const [savedToastText, setSavedToastText] = useState("Saved");
+  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } = useSavedToast();
   const mathInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const shouldAnimatePlaceholders = title.trim().length === 0 && isEditorEmpty;
@@ -1846,18 +1958,6 @@ function NoteComponent({
       initialNote?.content ?? "<p></p>",
     ),
   );
-
-  const triggerSavedToast = (text = "Saved") => {
-    setSavedToastText(text);
-    setSavedToastKey((current) => current + 1);
-    setShowSavedToast(true);
-    if (hideSavedTimerRef.current) {
-      window.clearTimeout(hideSavedTimerRef.current);
-    }
-    hideSavedTimerRef.current = window.setTimeout(() => {
-      setShowSavedToast(false);
-    }, 1800);
-  };
 
   const saveNote = useCallback(
     async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
@@ -1921,7 +2021,7 @@ function NoteComponent({
         isSavingRef.current = false;
       }
     },
-    [content, noteId, onNoteSaved, onNoteUsageCountChange, title],
+    [content, noteId, onNoteSaved, onNoteUsageCountChange, title, triggerSavedToast],
   );
 
   const triggerManualSave = useCallback(() => {
@@ -1933,7 +2033,7 @@ function NoteComponent({
     }
 
     void saveNote({ showToastOnNoop: true });
-  }, [saveNote, title]);
+  }, [saveNote, title, triggerSavedToast]);
 
   const handleCloseNoteShortcut = useCallback(
     (event: { preventDefault(): void }) => {
@@ -2103,7 +2203,7 @@ function NoteComponent({
     if (!shouldAnimatePlaceholders) {
       setArePlaceholdersVisible(true);
       setTitlePlaceholder("Name your note…");
-      setBodyPlaceholder(PLACEHOLDERS[4]);
+      setBodyPlaceholder(BODY_PLACEHOLDER);
       return;
     }
 
@@ -2143,7 +2243,7 @@ function NoteComponent({
       setArePlaceholdersVisible(true);
       void Promise.all([
         typeMessage("Name your note…", setTitlePlaceholder),
-        typeMessage(PLACEHOLDERS[4], setBodyPlaceholder),
+        typeMessage(BODY_PLACEHOLDER, setBodyPlaceholder),
       ]);
     }, 150);
 
@@ -2219,14 +2319,6 @@ function NoteComponent({
       mathInputRef.current.value.length,
     );
   }, [mathEditor]);
-
-  useEffect(() => {
-    return () => {
-      if (hideSavedTimerRef.current) {
-        window.clearTimeout(hideSavedTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const trimmedTitle = title.trim();
@@ -2408,7 +2500,6 @@ function FolderComponent({
   initialFolder?: InitialFolder | null;
 }) {
   const isSavingRef = useRef(false);
-  const hideSavedTimerRef = useRef<number | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState(initialFolder?.name ?? "");
@@ -2423,9 +2514,7 @@ function FolderComponent({
     initialFolder?.selectedNoteIds ?? [],
   );
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showSavedToast, setShowSavedToast] = useState(false);
-  const [savedToastKey, setSavedToastKey] = useState(0);
-  const [savedToastText, setSavedToastText] = useState("Saved");
+  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } = useSavedToast();
   const lastSavedSignatureRef = useRef(
     createFolderSignature(
       initialFolder?.id ?? null,
@@ -2533,32 +2622,12 @@ function FolderComponent({
     };
   }, [initialFolder?.selectedNoteIds]);
 
-  useEffect(() => {
-    return () => {
-      if (hideSavedTimerRef.current) {
-        window.clearTimeout(hideSavedTimerRef.current);
-      }
-    };
-  }, []);
-
   const toggleSelectedNote = (noteId: string) => {
     setSelectedNoteIds((current) =>
       current.includes(noteId)
         ? current.filter((id) => id !== noteId)
         : [...current, noteId],
     );
-  };
-
-  const triggerSavedToast = (text = "Saved") => {
-    setSavedToastText(text);
-    setSavedToastKey((current) => current + 1);
-    setShowSavedToast(true);
-    if (hideSavedTimerRef.current) {
-      window.clearTimeout(hideSavedTimerRef.current);
-    }
-    hideSavedTimerRef.current = window.setTimeout(() => {
-      setShowSavedToast(false);
-    }, 1800);
   };
 
   const saveFolder = useCallback(
@@ -2622,7 +2691,7 @@ function FolderComponent({
         isSavingRef.current = false;
       }
     },
-    [folderId, selectedNoteIds, title],
+    [folderId, selectedNoteIds, title, triggerSavedToast],
   );
 
   const triggerManualFolderSave = useCallback(() => {
@@ -2634,7 +2703,7 @@ function FolderComponent({
     }
 
     void saveFolder({ showToastOnNoop: true });
-  }, [saveFolder, title]);
+  }, [saveFolder, title, triggerSavedToast]);
 
   useGlobalSaveShortcut(() => {
     triggerManualFolderSave();
@@ -2949,12 +3018,24 @@ export default function RootHomeShell({
     document.documentElement.setAttribute("data-theme", themeId);
     localStorage.setItem("noted-theme", themeId);
     setCurrentTheme(themeId);
+    // Track first style change for Snorlax unlock
+    void fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "hasMadeFirstStyleChange" }),
+    }).catch(() => {});
   }, []);
 
   const applyFont = useCallback((fontId: string) => {
     document.body.setAttribute("data-font", fontId);
     localStorage.setItem("noted-font", fontId);
     setCurrentFont(fontId);
+    // Track first font change for Snorlax unlock
+    void fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "hasMadeFirstFontChange" }),
+    }).catch(() => {});
   }, []);
 
   const handleMenuItemSelect = useCallback(
@@ -3054,7 +3135,7 @@ export default function RootHomeShell({
   }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view, closingOverlay, closingView, closeOverlay, closeView, router]);
 
   const activeTamagotchi =
-    tamagotchiStatus?.tamagotchis?.find((t) => t.isActive && !t.isLocked) ?? null;
+    tamagotchiStatus?.tamagotchis?.find((t) => t.isActive) ?? null;
 
   return (
     <>
@@ -3062,7 +3143,30 @@ export default function RootHomeShell({
         <div className="view-enter">
         <HomeComponent
           activeTamagotchi={activeTamagotchi}
-          onTamagotchiClick={() => setIsTamagotchiOpen(true)}
+          globalXp={tamagotchiStatus?.globalXp ?? 0}
+          onTamagotchiClick={() => {
+            // Fire click API (happiness boost) — non-blocking
+            void fetch("/api/tamagotchi/click", { method: "POST" })
+              .then(async (res) => {
+                if (!res.ok) return;
+                const data = (await res.json()) as { happiness?: number };
+                if (typeof data.happiness === "number") {
+                  setTamagotchiStatus((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          tamagotchis: prev.tamagotchis.map((t) =>
+                            t.isActive
+                              ? { ...t, happiness: data.happiness! }
+                              : t,
+                          ),
+                        }
+                      : prev,
+                  );
+                }
+              })
+              .catch(() => {});
+          }}
           onRename={(name) => {
             const active = activeTamagotchi;
             if (!active) return;
@@ -3195,23 +3299,34 @@ export default function RootHomeShell({
           animationClass={closingOverlay === "tamagotchi" ? "overlay-exit" : "overlay-enter"}
           onClose={() => closeOverlay("tamagotchi")}
           status={tamagotchiStatus}
-          onSelectActive={(species) => {
-            void fetch("/api/tamagotchi/select", {
+          onSelectSpecies={(speciesId) => {
+            if (!speciesId) {
+              // Deselect all — show homepage GIF
+              void fetch("/api/tamagotchi/select", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ species: null }),
+              }).then(() => {
+                setTamagotchiStatus((prev) =>
+                  prev ? { ...prev, tamagotchis: prev.tamagotchis.map((t) => ({ ...t, isActive: false })) } : prev,
+                );
+              });
+              return;
+            }
+            // Use upgrade endpoint (creates record if needed, sets active)
+            void fetch("/api/tamagotchi/upgrade", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ species }),
-            }).then(() => {
-              setTamagotchiStatus((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      tamagotchis: prev.tamagotchis.map((t) => ({
-                        ...t,
-                        isActive: species ? t.species === species : false,
-                      })),
-                    }
-                  : prev,
-              );
+              body: JSON.stringify({ speciesId }),
+            }).then(async (res) => {
+              if (!res.ok) return;
+              // Refresh full tamagotchi state from server
+              const freshRes = await fetch("/api/tamagotchi");
+              if (!freshRes.ok) return;
+              const freshData: unknown = await freshRes.json();
+              if (isTamagotchiStatus(freshData)) {
+                setTamagotchiStatus(freshData);
+              }
             });
           }}
           onRename={(species, name) => {
@@ -3244,16 +3359,17 @@ export default function RootHomeShell({
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   key={s}
-                  src={`/tamagotchi/${s}.gif`}
-                  alt={s}
+                  src={getSpeciesIdleGif(s)}
+                  alt={getSpeciesName(s)}
                   className="h-10 w-10 rounded-full bg-white/10 object-contain"
+                  style={{ imageRendering: "pixelated" }}
                 />
               ))}
             </div>
             <div>
               <div className="text-[16px] font-bold leading-tight">
                 {newUnlockToast.length === 1
-                  ? `${TAMAGOTCHI_SPECIES.find((sp) => sp.id === newUnlockToast[0])?.name ?? newUnlockToast[0]} unlocked!`
+                  ? `${getSpeciesName(newUnlockToast[0] ?? "")} unlocked!`
                   : `${newUnlockToast.length} new companions unlocked!`}
               </div>
               <button

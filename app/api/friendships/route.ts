@@ -5,6 +5,21 @@ import {
   getFriendshipStateFromRecords,
   type ProfileFriendshipState,
 } from "@/lib/friendship-state";
+import { getOrCreateProgress, checkAndUnlockTamagotchis, awardXpAndCheckUnlocks } from "@/lib/progress-utils";
+
+async function trackFirstFriend(userId: string) {
+  const progress = await getOrCreateProgress(userId);
+  if (!progress.hasAddedFirstFriend) {
+    const updated = await prisma.userProgress.upsert({
+      where: { userId },
+      update: { hasAddedFirstFriend: true },
+      create: { userId, hasAddedFirstFriend: true },
+    });
+    await checkAndUnlockTamagotchis(userId, updated);
+  }
+  // Award 2 XP for an accepted friendship
+  await awardXpAndCheckUnlocks(userId, 2);
+}
 
 type CreateFriendshipBody = {
   targetUserId?: string;
@@ -364,6 +379,14 @@ export async function POST(request: Request) {
       };
     });
 
+    // Track first-friend milestone if friendship was accepted
+    if (result.friendshipState === "accepted") {
+      void trackFirstFriend(viewer.id);
+    } else if (result.friendshipState === "pending_outgoing") {
+      // 5 XP for sending a friend request
+      void awardXpAndCheckUnlocks(viewer.id, 5);
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     const message =
@@ -423,6 +446,7 @@ export async function PATCH(request: Request) {
         },
       });
 
+      void trackFirstFriend(viewer.id);
       return NextResponse.json({
         friendshipState: "accepted" as ProfileFriendshipState,
       });

@@ -11,6 +11,12 @@ import type {
   ProfileViewData,
   ProfileViewerData,
 } from "@/lib/profile-data";
+import { stripHtml, getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
+import {
+  TAMAGOTCHI_SPECIES,
+  type ProgressKey,
+  type UserProgressData,
+} from "@/lib/tamagotchi-config";
 
 type ProfileViewProps = {
   profile: ProfileViewData;
@@ -47,28 +53,6 @@ type ProfileContentSection = "notes" | "friends" | "folders";
 const DISMISSED_ACCEPTED_NOTIFICATION_STORAGE_KEY =
   "noted-dismissed-accepted-friend-notifications";
 
-function stripHtml(html: string) {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getPreviewText(content: string, maxWords = 26) {
-  return stripHtml(content)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(" ");
-}
-
-function formatAuthoredDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
 
 function formatJoinedDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -77,6 +61,16 @@ function formatJoinedDate(value: string) {
     year: "numeric",
   }).format(new Date(value));
 }
+
+const PROGRESS_KEY_LABELS: Record<ProgressKey, string> = {
+  hasSavedFirstNote: "Save your first note",
+  hasSavedFirstFolder: "Save your first folder",
+  hasAddedFirstFriend: "Add your first friend",
+  hasAddedFirstCommunity: "Join a community",
+  hasAddedAnotherSchoolCommunity: "Explore another school",
+  hasMadeFirstStyleChange: "Change your theme",
+  hasMadeFirstFontChange: "Change your font",
+};
 
 function getInitials(fullName: string) {
   const tokens = fullName
@@ -546,6 +540,7 @@ export default function ProfileView({
   >(null);
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
+  const [progress, setProgress] = useState<UserProgressData | null>(null);
 
   const changeSection = useCallback(
     (section: ProfileContentSection, tabIdx: number) => {
@@ -570,6 +565,16 @@ export default function ProfileView({
     if (!viewer.isOwnProfile) {
       setActiveSection("notes");
     }
+  }, [viewer.isOwnProfile]);
+
+  useEffect(() => {
+    if (!viewer.isOwnProfile) return;
+    fetch("/api/progress")
+      .then((r) => r.json())
+      .then((data: { progress?: UserProgressData }) => {
+        if (data.progress) setProgress(data.progress);
+      })
+      .catch(() => null);
   }, [viewer.isOwnProfile]);
 
   useEffect(() => {
@@ -1394,6 +1399,59 @@ export default function ProfileView({
             </div>
           </div>
         </div>
+
+        {viewer.isOwnProfile && progress ? (
+          <div className="mt-10">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-black/40 mb-4">
+              Pet Unlock Progress
+            </div>
+            <div className="flex flex-col gap-3 max-w-sm">
+              {TAMAGOTCHI_SPECIES.filter((s) => s.unlockRequirements !== null).map((species) => {
+                const requirements = species.unlockRequirements!;
+                const allDone = requirements.every((k) => progress[k]);
+                return (
+                  <div key={species.id} className="rounded-2xl border border-black/8 bg-white px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[13px] font-semibold text-black">
+                        {species.name}
+                      </span>
+                      {allDone ? (
+                        <span className="text-[11px] font-semibold text-green-600">Unlocked</span>
+                      ) : (
+                        <span className="text-[11px] text-black/40">
+                          {requirements.filter((k) => progress[k]).length}/{requirements.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {requirements.map((key) => {
+                        const done = progress[key];
+                        return (
+                          <div key={key} className="flex items-center gap-2">
+                            <span
+                              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                                done
+                                  ? "bg-black text-white"
+                                  : "border border-black/20 text-transparent"
+                              }`}
+                            >
+                              ✓
+                            </span>
+                            <span
+                              className={`text-[12px] ${done ? "text-black/50 line-through" : "text-black/55"}`}
+                            >
+                              {PROGRESS_KEY_LABELS[key]}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-20">
           <div className="grid max-w-4xl gap-x-0 gap-y-6 md:grid-cols-3">

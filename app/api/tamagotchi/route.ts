@@ -1,68 +1,31 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { TAMAGOTCHI_SPECIES, toDateStr } from "@/lib/tamagotchi-config";
-
-async function getOrCreateDbUser() {
-  const clerkUser = await currentUser();
-  if (!clerkUser) return null;
-
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) throw new Error("User has no email.");
-
-  const fullName =
-    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
-    clerkUser.username ||
-    email;
-
-  return prisma.user.upsert({
-    where: { clerkId: clerkUser.id },
-    update: { email, fullName },
-    create: { clerkId: clerkUser.id, email, fullName },
-  });
-}
+import { toDateStr } from "@/lib/tamagotchi-config";
+import { getOrCreateDbUser } from "@/lib/api-auth";
+import { getOrCreateProgress, checkAndUnlockTamagotchis } from "@/lib/progress-utils";
 
 export async function GET() {
   try {
     const dbUser = await getOrCreateDbUser();
-    if (!dbUser) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
+    if (!dbUser) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const bearSpecies = TAMAGOTCHI_SPECIES.find((s) => s.id === "bear")!;
+    const progress = await getOrCreateProgress(dbUser.id);
+    await checkAndUnlockTamagotchis(dbUser.id, progress);
 
     const [streak, tamagotchis] = await Promise.all([
       prisma.userStreak.findUnique({ where: { userId: dbUser.id } }),
-      // Ensure Bear is always unlocked before fetching
-      prisma.userTamagotchi
-        .upsert({
-          where: { userId_species: { userId: dbUser.id, species: "bear" } },
-          update: {},
-          create: {
-            userId: dbUser.id,
-            species: "bear",
-            health: 0,
-            level: 1,
-            currentThreshold: bearSpecies.startingThreshold,
-            isActive: false,
-          },
-        })
-        .then(() =>
-          prisma.userTamagotchi.findMany({
-            where: { userId: dbUser.id },
-            orderBy: { createdAt: "asc" },
-          }),
-        ),
+      prisma.userTamagotchi.findMany({
+        where: { userId: dbUser.id },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
 
     const todayStr = toDateStr(new Date());
     const checkedInToday =
-      streak?.lastCheckinAt != null &&
-      toDateStr(streak.lastCheckinAt) === todayStr;
+      streak?.lastCheckinAt != null && toDateStr(streak.lastCheckinAt) === todayStr;
 
     return NextResponse.json({
+      globalXp: progress.globalXp,
       streak: {
         current: streak?.currentStreak ?? 0,
         longest: streak?.longestStreak ?? 0,
@@ -71,21 +34,12 @@ export async function GET() {
       },
       tamagotchis: tamagotchis.map((t) => ({
         species: t.species,
+        lineId: t.lineId,
         displayName: t.displayName,
-        health: t.health,
-        level: t.level,
-        currentThreshold: t.currentThreshold,
+        happiness: t.happiness,
         isActive: t.isActive,
-        isLocked: t.isLocked,
+        lastClickAt: t.lastClickAt?.toISOString() ?? null,
       })),
-      // species the user has met the streak requirement for but hasn't been given yet
-      // (useful if they load the page without triggering a checkin)
-      unlockable: TAMAGOTCHI_SPECIES.filter(
-        (s) =>
-          s.unlockStreakDays !== null &&
-          (streak?.currentStreak ?? 0) >= s.unlockStreakDays &&
-          !tamagotchis.some((t) => t.species === s.id),
-      ).map((s) => s.id),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load tamagotchi state.";

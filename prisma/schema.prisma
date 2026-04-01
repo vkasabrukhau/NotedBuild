@@ -7,19 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ShareAccessLevel {
-  VIEW
-  EDIT
-}
-
 enum FriendshipStatus {
   PENDING
   ACCEPTED
   REJECTED
-}
-
-enum PetType {
-  TAMAGOTCHI
 }
 
 model User {
@@ -30,8 +21,6 @@ model User {
   age             Int?
   joinedAt        DateTime  @default(now())
   profilePhotoUrl String?
-  phoneNumber     String?
-  lastDayMissed   DateTime?
 
   schoolId        String?
   school          School?   @relation(fields: [schoolId], references: [id], onDelete: SetNull)
@@ -40,20 +29,12 @@ model User {
   notesOwnedCount   Int @default(0)
   foldersOwnedCount Int @default(0)
 
-  // ownership
   notes           Note[]
   folders         Folder[]
-  comments        Comment[]
-  pets            Pet[]
   streak          UserStreak?
   tamagotchis     UserTamagotchi[]
+  progress        UserProgress?
 
-  // interactions
-  noteLikes       NoteLike[]
-  noteShares      NoteShare[]
-  folderShares    FolderShare[]
-
-  // friendship self-relations
   sentFriendships     Friendship[] @relation("FriendshipRequester")
   receivedFriendships Friendship[] @relation("FriendshipAddressee")
 
@@ -76,16 +57,9 @@ model Note {
   folderId      String?
   folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
-  likeCount     Int       @default(0)
-  commentCount  Int       @default(0)
-
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
-
-  comments      Comment[]
-  likes         NoteLike[]
-  shares        NoteShare[]
 
   @@index([ownerId, createdAt])
   @@index([folderId])
@@ -106,66 +80,10 @@ model Folder {
   deletedAt     DateTime?
 
   notes         Note[]
-  shares        FolderShare[]
 
   @@index([ownerId, createdAt])
   @@index([deletedAt])
   @@index([name])
-}
-
-model Comment {
-  id          String   @id @default(cuid())
-  content     String   @db.Text
-
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-
-  noteId      String
-  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([authorId, createdAt])
-  @@index([noteId, createdAt])
-}
-
-model NoteLike {
-  userId      String
-  noteId      String
-  createdAt   DateTime @default(now())
-
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-
-  @@id([userId, noteId])
-  @@index([noteId])
-}
-
-model NoteShare {
-  noteId       String
-  userId       String
-  accessLevel  ShareAccessLevel
-  createdAt    DateTime @default(now())
-
-  note         Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([noteId, userId])
-  @@index([userId])
-}
-
-model FolderShare {
-  folderId     String
-  userId       String
-  accessLevel  ShareAccessLevel
-  createdAt    DateTime @default(now())
-
-  folder       Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([folderId, userId])
-  @@index([userId])
 }
 
 model Friendship {
@@ -184,56 +102,18 @@ model Friendship {
 }
 
 model School {
-  id            String   @id @default(cuid())
-  name          String
-  location      String?
-  studentCount  Int?
-  noteRanking   Int?
-  primaryColor  String?
-  accentColor   String?
+  id           String   @id @default(cuid())
+  name         String
+  location     String?
+  primaryColor String?
+  accentColor  String?
 
-  users         User[]
+  users        User[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([name])
-  @@index([noteRanking])
-}
-
-model Pet {
-  id            String   @id @default(cuid())
-  ownerId       String
-  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  
-  type          PetType
-  name          String
-  purchaseDate  DateTime?
-  happiness     Int      @default(0)
-
-  tamagotchi    TamagotchiPet?
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  
-
-  @@index([ownerId, createdAt])
-}
-
-model TamagotchiPet {
-  petId                   String   @id
-  pet                     Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
-
-  modelName               String
-  purchaseThreshold       Int
-  startingHealth          Int     @default(100)
-
-  healthUpgradeThreshold  Int?
-  healthUpgradeBump       Int?
-
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
 }
 
 // ─── Tamagotchi System ───
@@ -253,23 +133,51 @@ model UserStreak {
 }
 
 model UserTamagotchi {
-  id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  species          String   // "bear" | "ghost" | "bonely" | "lugia" | "mewtwo" | "charizard" | "snorlax"
-  displayName      String?  // user-customizable; null = use species default name
+  species     String    // current tier ID: "skeleton_spearman" | "bear" | "mewtwo" | etc.
+  lineId      String?   // evolution line: "skeleton"|"wizard"|"ninja"|"karasu"|"samurai"; null = special pet
+  displayName String?   // user-customizable; null = use species default name
 
-  health           Int      @default(0)
-  level            Int      @default(1)
-  currentThreshold Int      // health needed to level up; starts at species startingThreshold
+  happiness   Int       @default(10) // 0–10; drops when days are missed, recovers with daily clicks
 
-  isActive         Boolean  @default(false)
-  isLocked         Boolean  @default(false)
+  isActive    Boolean   @default(false)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  lastClickAt DateTime? // tracks whether the user has clicked today
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, species])
   @@index([userId])
+  @@index([userId, lineId])
+}
+
+model UserProgress {
+  userId      String  @id
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Global XP (0–1200) — unlocks evolution line tiers
+  globalXp    Int @default(0)
+
+  // Bear unlock conditions
+  hasSavedFirstNote              Boolean @default(false)
+  hasSavedFirstFolder            Boolean @default(false)
+
+  // Mewtwo unlock conditions
+  hasAddedFirstFriend            Boolean @default(false)
+  hasAddedFirstCommunity         Boolean @default(false)
+  hasAddedAnotherSchoolCommunity Boolean @default(false)
+
+  // Snorlax unlock conditions
+  hasMadeFirstStyleChange        Boolean @default(false)
+  hasMadeFirstFontChange         Boolean @default(false)
+
+  // One-time XP achievement flags
+  hasTriedAllColors              Boolean @default(false)
+  hasTriedAllFonts               Boolean @default(false)
+
+  updatedAt   DateTime @updatedAt
 }

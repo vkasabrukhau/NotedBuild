@@ -1,27 +1,6 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-async function getOrCreateDbUser() {
-  const clerkUser = await currentUser();
-  if (!clerkUser) return null;
-
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress;
-  if (!email) throw new Error("User has no email.");
-
-  const fullName =
-    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ").trim() ||
-    clerkUser.username ||
-    email;
-
-  return prisma.user.upsert({
-    where: { clerkId: clerkUser.id },
-    update: { email, fullName },
-    create: { clerkId: clerkUser.id, email, fullName },
-  });
-}
+import { getOrCreateDbUser } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
   try {

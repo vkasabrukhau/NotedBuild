@@ -1,104 +1,52 @@
+@keyframes floatHeart {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  50%  { opacity: 1; transform: translateY(-30px) scale(1.25); }
+  100% { opacity: 0; transform: translateY(-60px) scale(0.8); }
+}
+
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes fadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 @keyframes zoomIn {
-  from {
-    transform: scale(0.95);
-  }
-  to {
-    transform: scale(1);
-  }
+  from { transform: scale(0.95); }
+  to   { transform: scale(1); }
 }
 
 @keyframes zoomOut {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(0.95);
-  }
-}
-
-@keyframes zoom {
-  0% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { transform: scale(1); }
+  to   { transform: scale(0.95); }
 }
 
 @keyframes slideFromTop {
-  from {
-    transform: translateY(-0.5rem);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(-0.5rem); }
+  to   { transform: translateY(0); }
 }
 
 @keyframes slideFromRight {
-  from {
-    transform: translateX(0.5rem);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(0.5rem); }
+  to   { transform: translateX(0); }
 }
 
 @keyframes slideFromLeft {
-  from {
-    transform: translateX(-0.5rem);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(-0.5rem); }
+  to   { transform: translateX(0); }
 }
 
 @keyframes slideFromBottom {
-  from {
-    transform: translateY(0.5rem);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: translateY(0.5rem); }
+  to   { transform: translateY(0); }
 }
 
 @keyframes profileSectionEnter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .profile-section-enter {
@@ -107,14 +55,8 @@
 
 /* ── View transitions ── */
 @keyframes viewEnter {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .view-enter {
@@ -122,14 +64,8 @@
 }
 
 @keyframes viewExit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(10px); }
 }
 
 .view-exit {
@@ -137,27 +73,15 @@
   pointer-events: none;
 }
 
-/* ── Menu panel open / close ── */
+/* ── Menu panel open / close (used via inline style) ── */
 @keyframes menuPanelEnter {
-  from {
-    opacity: 0;
-    transform: translateX(-24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes menuPanelExit {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateX(-24px);
-  }
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-24px); }
 }
 
 @keyframes backdropEnter {
@@ -170,44 +94,15 @@
   to   { opacity: 0; }
 }
 
-.menu-backdrop-enter {
-  animation: backdropEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05);
-}
-
-.menu-backdrop-exit {
-  animation: backdropExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
-  pointer-events: none;
-}
-
-.menu-panel-enter {
-  animation: menuPanelEnter 280ms cubic-bezier(0.22, 0.68, 0, 1.05);
-}
-
-.menu-panel-exit {
-  animation: menuPanelExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
 /* ── Overlay open / close ── */
 @keyframes overlayEnter {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes overlayExit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(12px);
-  }
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(12px); }
 }
 
 .overlay-enter {
@@ -218,4 +113,3 @@
   animation: overlayExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
   pointer-events: none;
 }
-

@@ -1,17 +1,7 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { syncClerkUserToDb } from "@/lib/sync-clerk-user";
-
-async function getOrCreateDbUser() {
-  const clerkUser = await currentUser();
-
-  if (!clerkUser) {
-    return null;
-  }
-
-  return syncClerkUserToDb(clerkUser);
-}
+import { getOrCreateDbUser } from "@/lib/api-auth";
+import { getOrCreateProgress, checkAndUnlockTamagotchis, awardXpAndCheckUnlocks } from "@/lib/progress-utils";
 
 export async function GET() {
   try {
@@ -181,8 +171,6 @@ export async function POST(request: Request) {
           name: trimmedTitle,
           content: body.content ?? "<p></p>",
           ownerId: dbUser.id,
-          likeCount: 0,
-          commentCount: 0,
         },
         include: {
           owner: {
@@ -213,6 +201,30 @@ export async function POST(request: Request) {
 
       return { note: createdNote, noteUsageCount };
     });
+
+    // Track first-note milestone + award XP for characters written (fire-and-forget)
+    void (async () => {
+      const progress = await getOrCreateProgress(dbUser.id);
+      let currentProgress = progress;
+
+      if (!progress.hasSavedFirstNote) {
+        const updated = await prisma.userProgress.upsert({
+          where: { userId: dbUser.id },
+          update: { hasSavedFirstNote: true },
+          create: { userId: dbUser.id, hasSavedFirstNote: true },
+        });
+        await checkAndUnlockTamagotchis(dbUser.id, updated);
+        currentProgress = updated;
+      }
+
+      // Award 1 XP per 100 characters of content saved
+      const charCount = (body.content ?? "").replace(/<[^>]*>/g, "").length;
+      const xpEarned = Math.floor(charCount / 100);
+      if (xpEarned > 0) {
+        await awardXpAndCheckUnlocks(dbUser.id, xpEarned);
+      }
+      void currentProgress; // suppress unused warning
+    })();
 
     return NextResponse.json({
       note: {

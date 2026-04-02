@@ -1405,7 +1405,7 @@ export default function ProfileView({
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-black/40 mb-4">
               Pet Unlock Progress
             </div>
-            <div className="flex flex-col gap-3 max-w-sm">
+            <div className="flex flex-wrap gap-3">
               {TAMAGOTCHI_SPECIES.filter((s) => s.unlockRequirements !== null).map((species) => {
                 const requirements = species.unlockRequirements!;
                 const allDone = requirements.every((k) => progress[k]);

@@ -1211,10 +1211,59 @@ function TamagotchiPreferencesOverlay({
   );
   const activeTama = status.tamagotchis.find((t) => t.isActive);
 
+  // Flat ordered list of selectable items (unlocked tiers + owned special pets)
+  const navigableItems = useMemo(() => {
+    const items: string[] = [];
+    for (const line of EVOLUTION_LINES) {
+      for (const tier of line.tiers) {
+        if (globalXp >= tier.xpThreshold) items.push(tier.id);
+      }
+    }
+    for (const pet of SPECIAL_PETS) {
+      if (ownedMap.has(pet.id)) items.push(pet.id);
+    }
+    return items;
+  }, [globalXp, ownedMap]);
+
+  const [focusedIndex, setFocusedIndex] = useState(() =>
+    Math.max(0, navigableItems.indexOf(activeTama?.species ?? "")),
+  );
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  // Auto-scroll focused card into view
+  useEffect(() => {
+    const speciesId = navigableItems[focusedIndex];
+    if (!speciesId) return;
+    const el = cardRefs.current.get(speciesId);
+    if (el && scrollRef.current) {
+      el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }, [focusedIndex, navigableItems]);
+
+  // Arrow key + Enter navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!["ArrowLeft", "ArrowRight", "Enter"].includes(e.key)) return;
+      e.preventDefault();
+      if (e.key === "ArrowRight") {
+        setFocusedIndex((prev) => Math.min(navigableItems.length - 1, prev + 1));
+      } else if (e.key === "ArrowLeft") {
+        setFocusedIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === "Enter") {
+        const speciesId = navigableItems[focusedIndex];
+        if (speciesId) onSelectSpecies(speciesId);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedIndex, navigableItems, onSelectSpecies]);
+
   const [renamingSpecies, setRenamingSpecies] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     if (renamingSpecies && renameInputRef.current) {
       renameInputRef.current.focus();
@@ -1222,305 +1271,440 @@ function TamagotchiPreferencesOverlay({
     }
   }, [renamingSpecies]);
 
-  // Tier card component used in both evolution lines and special pets
-  function TierCard({
-    speciesId,
-    name,
-    idleGif,
-    xpThreshold,
-    isSpecialPet = false,
-  }: {
-    speciesId: string;
-    name: string;
-    idleGif: string;
-    xpThreshold?: number;
-    isSpecialPet?: boolean;
-  }) {
-    const unlocked = isSpecialPet ? ownedMap.has(speciesId) : globalXp >= (xpThreshold ?? 0);
-    const isActive = activeTama?.species === speciesId;
-    const owned = ownedMap.get(speciesId);
-    const displayName = owned?.displayName ?? name;
-    const isRenaming = renamingSpecies === speciesId;
+  // ── Layout constants ──────────────────────────────────────────────────────
+  const SCALE = 5.0;           // px per XP unit — determines horizontal spacing
+  const PAD_X = 220;           // left/right padding in the scrollable canvas
+  const CARD_W = 150;          // card width
+  const CARD_H = 150;          // card height
+  const IMG_SIZE = 100;        // character image size inside card
+  const DOT_NEW = 24;          // dot diameter for new-line starts
+  const DOT_EVO = 16;          // dot diameter for evolutions
+  const TICK_H = 18;           // vertical tick below track before XP label
+  const TIMELINE_Y = 340;      // y-position of the horizontal track line (px from scroll area top)
+  const CANVAS_H = 560;        // total height of the scrollable canvas
+  const GAP_CARD_TRACK = 28;   // gap between card bottom and track line
+  const GAP_TRACK_LABEL = 6;   // gap between track dot edge and tick start
+  const totalW = PAD_X * 2 + MAX_XP * SCALE;
 
-    // For evolution line tiers: check if this tier is currently "held" by the user
-    const line = !isSpecialPet ? EVOLUTION_LINES.find((l) => l.tiers.some((t) => t.id === speciesId)) : null;
-    const lineOwned = line ? lineOwnedMap.get(line.id) : null;
-    const isLineCurrentTier = lineOwned?.species === speciesId;
+  const xpToX = (xp: number) => PAD_X + xp * SCALE;
 
-    const canSelect = unlocked && !isActive;
-    const isSelected = isActive || isLineCurrentTier;
-
-    return (
-      <div className="flex flex-col gap-1.5">
-        <div
-          className="relative flex h-[140px] w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[20px] transition-all duration-150"
-          style={{
-            backgroundColor: unlocked
-              ? "var(--app-card)"
-              : "color-mix(in srgb, var(--app-card) 50%, transparent)",
-            outline: isActive
-              ? "3px solid var(--app-ink)"
-              : isSelected && !isActive
-                ? "2px solid color-mix(in srgb, var(--app-ink) 35%, transparent)"
-                : "2px solid transparent",
-            outlineOffset: "2px",
-            boxShadow: isActive
-              ? "0 6px 20px color-mix(in srgb, var(--app-ink) 14%, transparent)"
-              : "0 2px 6px rgba(0,0,0,0.05)",
-            opacity: unlocked ? 1 : 0.45,
-            cursor: canSelect ? "pointer" : "default",
-          }}
-          onClick={() => {
-            if (!unlocked || isActive) return;
-            onSelectSpecies(speciesId);
-          }}
-        >
-          {unlocked ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={idleGif}
-                alt={name}
-                className="h-16 w-16 object-contain"
-                style={{ imageRendering: "pixelated", transform: speciesId === "bear" ? "scale(1.4)" : undefined }}
-              />
-              {isActive && (
-                <span className="rounded-full bg-black px-2 py-0.5 text-[10px] font-bold text-white">
-                  ✓ Active
-                </span>
-              )}
-              {!isActive && isLineCurrentTier && (
-                <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-medium text-black/60">
-                  Selected
-                </span>
-              )}
-              {!isActive && !isLineCurrentTier && (
-                <span className="rounded-full bg-black/8 px-2 py-0.5 text-[10px] font-medium text-black/40">
-                  {isSpecialPet ? "Set Active" : "Switch"}
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-[28px] text-black/20">?</span>
-          )}
-        </div>
-
-        {/* Name + rename */}
-        {isRenaming ? (
-          <form
-            className="flex w-full items-center gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              onRename(speciesId, renameValue);
-              setRenamingSpecies(null);
-            }}
-          >
-            <input
-              ref={renameInputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
-              onBlur={() => setRenamingSpecies(null)}
-              className="w-full rounded-md border border-black/20 bg-transparent px-1.5 py-0.5 text-[13px] text-black outline-none focus:border-black/40"
-              placeholder={name}
-              maxLength={24}
-            />
-          </form>
-        ) : (
-          <div className="flex items-center justify-between px-0.5">
-            <span
-              className="text-[13px] font-medium leading-tight text-black"
-              style={{ opacity: unlocked ? 1 : 0.4 }}
-            >
-              {unlocked && !isSpecialPet ? (
-                isLineCurrentTier ? (
-                  <span className="inline-flex items-center gap-1">
-                    {displayName}
-                  </span>
-                ) : displayName
-              ) : unlocked ? displayName : name}
-            </span>
-            {unlocked && (isActive || isLineCurrentTier) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setRenameValue(displayName);
-                  setRenamingSpecies(speciesId);
-                }}
-                className="ml-1 shrink-0 text-[13px] text-black/30 transition-opacity hover:text-black/60"
-                title="Rename"
-              >
-                ✎
-              </button>
-            ) : null}
-            {!unlocked && xpThreshold !== undefined && (
-              <span className="text-[11px] text-black/30">{xpThreshold} XP</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  // All 15 evolution checkpoints in XP order
+  const checkpoints = EVOLUTION_LINES.flatMap((line) =>
+    line.tiers.map((tier, tierIdx) => ({
+      tier,
+      line,
+      isNewLine: tierIdx === 0,
+      isUnlocked: globalXp >= tier.xpThreshold,
+    })),
+  );
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col overflow-y-auto bg-white px-6 py-8 ${animationClass}`}
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex flex-col bg-white ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Tamagotchi Preferences"
     >
-      {/* Header */}
-      <div className="flex items-baseline gap-4">
-        <h1 className="text-[40px] font-bold leading-none text-black">
-          たまごっち
-        </h1>
-        {status.streak.current > 0 ? (
-          <span className="text-[20px] font-medium text-black/50">
-            🔥 {status.streak.current} day streak
-          </span>
-        ) : null}
-      </div>
-
-      {/* Active pet info + deselect */}
-      <p className="mt-1 text-[15px] text-black/45">
-        {activeTama ? (
-          <>
-            <span className="font-medium text-black/60">
-              {activeTama.displayName ?? getSpeciesName(activeTama.species)}
+      {/* ── Header ────────────────────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-black/8 px-8 py-5">
+        <div className="flex items-baseline gap-4">
+          <h1 className="text-[36px] font-bold leading-none text-black">
+            たまごっち
+          </h1>
+          {status.streak.current > 0 && (
+            <span className="text-[18px] font-medium text-black/45">
+              🔥 {status.streak.current} day streak
             </span>
-            {" is on your home screen · "}
-            <button
-              type="button"
-              onClick={() => onSelectSpecies(null)}
-              className="underline transition-colors hover:text-black/70"
-            >
-              show homepage GIF
-            </button>
-          </>
-        ) : (
-          "No tamagotchi on home screen — select one below"
-        )}
-      </p>
-
-      {/* Global XP bar */}
-      <div className="mt-5">
-        <div className="mb-1.5 flex items-center justify-between text-[13px] font-medium text-black/50">
-          <span>✨ XP</span>
-          <span>{globalXp} / {MAX_XP}</span>
+          )}
+          <div className="ml-auto text-[14px] font-medium text-black/45">
+            ✨ {globalXp} / {MAX_XP} XP
+          </div>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
+
+        {/* Global XP bar */}
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-black/8">
           <div
-            className="h-full rounded-full bg-black/40 transition-all duration-500"
+            className="h-full rounded-full bg-black/35 transition-all duration-500"
             style={{ width: `${(globalXp / MAX_XP) * 100}%` }}
           />
         </div>
-        <div className="mt-1 flex justify-between text-[11px] text-black/25">
-          {[0, 250, 450, 650, 1000, 1200].map((v) => (
-            <span key={v} style={{ position: "relative", left: v === 0 ? 0 : v === 1200 ? 0 : undefined }}>
-              {v}
-            </span>
-          ))}
-        </div>
-      </div>
 
-      {/* Evolution lines */}
-      <div className="mt-8">
-        <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-black/35">
-          Evolution Lines
-        </h2>
-        <div className="grid grid-cols-5 gap-3">
-          {EVOLUTION_LINES.map((line) => (
-            <div key={line.id} className="flex flex-col gap-1">
-              {/* Line name */}
-              <div className="mb-2 text-center text-[12px] font-semibold text-black/50">
-                {line.name}
-              </div>
-
-              {/* Tiers: highest first (top) → lowest last (bottom) */}
-              {[...line.tiers].reverse().map((tier, reversedIdx) => {
-                const tierIdx = line.tiers.length - 1 - reversedIdx;
-                const prevTier = tierIdx > 0 ? line.tiers[tierIdx - 1] : null;
-
-                return (
-                  <div key={tier.id}>
-                    {/* XP threshold between tiers */}
-                    {reversedIdx > 0 && prevTier && (
-                      <div className="my-1.5 flex items-center gap-1.5 text-[10px] text-black/30">
-                        <div className="h-px flex-1 bg-black/10" />
-                        <span>{tier.xpThreshold} XP</span>
-                        <div className="h-px flex-1 bg-black/10" />
-                      </div>
-                    )}
-                    <TierCard
-                      speciesId={tier.id}
-                      name={tier.name}
-                      idleGif={tier.idleGif}
-                      xpThreshold={tier.xpThreshold}
-                    />
-                  </div>
-                );
-              })}
-
-              {/* Entry threshold for the line */}
-              {line.tiers[0].xpThreshold > 0 && (
-                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-black/30">
-                  <div className="h-px flex-1 bg-black/10" />
-                  <span>{line.tiers[0].xpThreshold} XP to unlock</span>
-                  <div className="h-px flex-1 bg-black/10" />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Special pets */}
-      <div className="mt-10">
-        <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-black/35">
-          Special Companions
-        </h2>
-        <p className="mb-4 text-[13px] text-black/40">
-          Unlocked by completing milestones — check your profile page for progress.
+        {/* Active pet callout */}
+        <p className="mt-2 text-[13px] text-black/40">
+          {activeTama ? (
+            <>
+              <span className="font-medium text-black/60">
+                {activeTama.displayName ?? getSpeciesName(activeTama.species)}
+              </span>
+              {" is on your home screen · "}
+              <button
+                type="button"
+                onClick={() => onSelectSpecies(null)}
+                className="underline transition-colors hover:text-black/70"
+              >
+                deselect
+              </button>
+            </>
+          ) : (
+            "Select a character below to place it on your home screen"
+          )}
         </p>
-        <div className="grid grid-cols-3 gap-3" style={{ maxWidth: "440px" }}>
-          {SPECIAL_PETS.map((pet) => (
-            <TierCard
-              key={pet.id}
-              speciesId={pet.id}
-              name={pet.name}
-              idleGif={pet.idleGif}
-              isSpecialPet
-            />
-          ))}
+      </div>
+
+      {/* ── Horizontal scrollable timeline ────────────────────────────────── */}
+      <div ref={scrollRef} className="flex-1 overflow-x-auto overflow-y-hidden">
+        <div
+          className="relative select-none"
+          style={{ width: totalW, height: CANVAS_H, minHeight: CANVAS_H }}
+        >
+          {/* ── Track: background (unfilled) */}
+          <div
+            className="absolute rounded-full bg-black/8"
+            style={{ top: TIMELINE_Y - 1, left: PAD_X, width: MAX_XP * SCALE, height: 3 }}
+          />
+          {/* ── Track: progress fill */}
+          <div
+            className="absolute rounded-full bg-black/30 transition-all duration-700"
+            style={{
+              top: TIMELINE_Y - 1,
+              left: PAD_X,
+              width: Math.min(globalXp, MAX_XP) * SCALE,
+              height: 3,
+            }}
+          />
+          {/* ── Current XP position marker */}
+          {globalXp > 0 && globalXp < MAX_XP && (
+            <div
+              className="absolute"
+              style={{
+                top: TIMELINE_Y - 7,
+                left: xpToX(Math.min(globalXp, MAX_XP)),
+                transform: "translateX(-50%)",
+              }}
+            >
+              <div className="h-[15px] w-[15px] rounded-full bg-black shadow-lg ring-[3px] ring-white" />
+            </div>
+          )}
+
+          {/* ── Checkpoint nodes ─────────────────────────────────────────── */}
+          {checkpoints.map(({ tier, line, isNewLine, isUnlocked }) => {
+            const x = xpToX(tier.xpThreshold);
+            const lineOwned = lineOwnedMap.get(line.id);
+            const isThisTierActive = activeTama?.species === tier.id;
+            const isThisTierSelected = lineOwned?.species === tier.id;
+            const dotSize = isNewLine ? DOT_NEW : DOT_EVO;
+            const cardTop = TIMELINE_Y - GAP_CARD_TRACK - CARD_H - 36; // extra 36px for name area above card
+            const dotTop = TIMELINE_Y - dotSize / 2;
+            const tickTop = TIMELINE_Y + dotSize / 2 + GAP_TRACK_LABEL;
+            const labelTop = tickTop + TICK_H + 6;
+
+            const isRenaming = renamingSpecies === tier.id;
+            const displayName = lineOwned?.species === tier.id
+              ? (lineOwned.displayName ?? tier.name)
+              : tier.name;
+
+            return (
+              <div
+                key={tier.id}
+                className="absolute"
+                style={{ left: x, top: 0, width: 0 }}
+              >
+                {/* ── Card + name ─────────────────────────────────────────── */}
+                <div
+                  className="absolute flex flex-col items-center gap-3"
+                  style={{
+                    top: cardTop,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: CARD_W + 40,
+                  }}
+                >
+                  <button
+                    ref={(el) => { if (el) cardRefs.current.set(tier.id, el); }}
+                    type="button"
+                    onClick={() => isUnlocked && onSelectSpecies(tier.id)}
+                    className="flex items-center justify-center rounded-[22px] transition-all duration-150"
+                    style={{
+                      width: CARD_W,
+                      height: CARD_H,
+                      backgroundColor: isUnlocked
+                        ? "var(--app-card)"
+                        : "color-mix(in srgb, var(--app-card) 38%, transparent)",
+                      outline: isThisTierActive
+                        ? "3px solid var(--app-ink)"
+                        : navigableItems[focusedIndex] === tier.id
+                          ? "3px solid color-mix(in srgb, var(--app-ink) 55%, transparent)"
+                          : isThisTierSelected
+                            ? "2px solid color-mix(in srgb, var(--app-ink) 40%, transparent)"
+                            : "2px solid transparent",
+                      outlineOffset: "3px",
+                      boxShadow: isThisTierActive
+                        ? "0 8px 30px color-mix(in srgb, var(--app-ink) 18%, transparent)"
+                        : navigableItems[focusedIndex] === tier.id
+                          ? "0 6px 22px color-mix(in srgb, var(--app-ink) 14%, transparent)"
+                          : isUnlocked
+                            ? "0 3px 12px rgba(0,0,0,0.09)"
+                            : "none",
+                      cursor: isUnlocked && !isThisTierActive ? "pointer" : "default",
+                    }}
+                  >
+                    {isUnlocked ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={tier.idleGif}
+                        alt={tier.name}
+                        style={{
+                          height: IMG_SIZE,
+                          width: IMG_SIZE,
+                          objectFit: "contain",
+                          imageRendering: "pixelated",
+                        }}
+                      />
+                    ) : (
+                      <span className="select-none text-[32px] font-light text-black/12">?</span>
+                    )}
+                  </button>
+
+                  {/* Name + rename (unlocked only) */}
+                  {isUnlocked && (
+                    <>
+                      {isRenaming ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            onRename(tier.id, renameValue);
+                            setRenamingSpecies(null);
+                          }}
+                        >
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
+                            onBlur={() => setRenamingSpecies(null)}
+                            className="w-full rounded-md border border-black/20 bg-transparent px-2 py-0.5 text-center text-[14px] text-black outline-none focus:border-black/50"
+                            style={{ maxWidth: CARD_W + 20 }}
+                            placeholder={tier.name}
+                            maxLength={24}
+                          />
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="text-center text-[14px] font-semibold leading-tight text-black/70"
+                            style={{ maxWidth: CARD_W + 20 }}
+                          >
+                            {displayName}
+                          </span>
+                          {(isThisTierActive || isThisTierSelected) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRenameValue(displayName);
+                                setRenamingSpecies(tier.id);
+                              }}
+                              className="shrink-0 text-[13px] text-black/25 transition-colors hover:text-black/55"
+                              title="Rename"
+                            >
+                              ✎
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {isThisTierActive && (
+                        <span className="rounded-full bg-black px-3 py-0.5 text-[11px] font-bold text-white">
+                          ✓ Active
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* ── Timeline dot ─────────────────────────────────────────── */}
+                <div
+                  className="absolute rounded-full transition-all duration-300"
+                  style={{
+                    top: dotTop,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: dotSize,
+                    height: dotSize,
+                    backgroundColor: isUnlocked
+                      ? isThisTierActive || isThisTierSelected
+                        ? "var(--app-ink)"
+                        : "color-mix(in srgb, var(--app-ink) 60%, transparent)"
+                      : "#d0d0d0",
+                    boxShadow: isNewLine && isUnlocked
+                      ? "0 0 0 6px color-mix(in srgb, var(--app-ink) 10%, transparent)"
+                      : undefined,
+                  }}
+                />
+
+                {/* ── Vertical tick line below track ────────────────────────── */}
+                <div
+                  className="absolute"
+                  style={{
+                    top: tickTop,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 1.5,
+                    height: TICK_H,
+                    backgroundColor: isNewLine
+                      ? "color-mix(in srgb, var(--app-ink) 25%, transparent)"
+                      : "color-mix(in srgb, var(--app-ink) 12%, transparent)",
+                  }}
+                />
+
+                {/* ── XP label ─────────────────────────────────────────────── */}
+                <div
+                  className="absolute"
+                  style={{
+                    top: labelTop,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span
+                    className="rounded-full px-3 py-1 font-mono font-bold"
+                    style={{
+                      fontSize: isNewLine ? 14 : 12,
+                      backgroundColor: isNewLine
+                        ? "color-mix(in srgb, var(--app-ink) 8%, transparent)"
+                        : "transparent",
+                      color: isNewLine
+                        ? "color-mix(in srgb, var(--app-ink) 65%, transparent)"
+                        : "color-mix(in srgb, var(--app-ink) 35%, transparent)",
+                    }}
+                  >
+                    {tier.xpThreshold} xp
+                  </span>
+                </div>
+
+                {/* ── "New line" badge ─────────────────────────────────────── */}
+                {isNewLine && tier.xpThreshold > 0 && (
+                  <div
+                    className="absolute rounded-full border border-black/10 px-2.5 py-px text-center text-[10px] font-semibold uppercase tracking-widest text-black/35"
+                    style={{
+                      top: labelTop + 32,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    new line
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Happiness summary */}
-      {status.tamagotchis.length > 0 && (
-        <div className="mt-10 border-t border-black/8 pt-6">
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-widest text-black/35">
-            Happiness
-          </h2>
-          <div className="flex flex-wrap gap-4">
-            {status.tamagotchis.map((t) => (
-              <div key={t.species} className="flex min-w-[120px] flex-col gap-1">
-                <span className="text-[12px] font-medium text-black/60">
-                  {t.displayName ?? getSpeciesName(t.species)}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-[80px] overflow-hidden rounded-full bg-black/10">
-                    <div
-                      className="h-full rounded-full bg-black/60 transition-all duration-300"
-                      style={{ width: `${(t.happiness / 10) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-[11px] text-black/35">{t.happiness}/10</span>
+      {/* ── Special pets strip ────────────────────────────────────────────── */}
+      <div className="shrink-0 border-t border-black/8 px-8 py-5">
+        <div className="flex items-center gap-8">
+          <div className="shrink-0">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-black/28">Special</div>
+            <div className="mt-0.5 text-[11px] text-black/30">Unlocked via milestones</div>
+          </div>
+          <div className="flex items-end gap-6">
+            {SPECIAL_PETS.map((pet) => {
+              const owned = ownedMap.get(pet.id);
+              const isActive = activeTama?.species === pet.id;
+              const petDisplayName = owned?.displayName ?? pet.name;
+              const isRenaming = renamingSpecies === pet.id;
+              return (
+                <div key={pet.id} className="flex flex-col items-center gap-2">
+                  <button
+                    ref={(el) => { if (el) cardRefs.current.set(pet.id, el); }}
+                    type="button"
+                    onClick={() => owned && onSelectSpecies(pet.id)}
+                    className="flex h-[72px] w-[72px] items-center justify-center rounded-[18px] transition-all duration-150"
+                    style={{
+                      backgroundColor: owned
+                        ? "var(--app-card)"
+                        : "color-mix(in srgb, var(--app-card) 38%, transparent)",
+                      outline: isActive
+                        ? "3px solid var(--app-ink)"
+                        : navigableItems[focusedIndex] === pet.id
+                          ? "3px solid color-mix(in srgb, var(--app-ink) 55%, transparent)"
+                          : "2px solid transparent",
+                      outlineOffset: "3px",
+                      boxShadow: isActive
+                        ? "0 6px 20px color-mix(in srgb, var(--app-ink) 16%, transparent)"
+                        : navigableItems[focusedIndex] === pet.id
+                          ? "0 4px 16px color-mix(in srgb, var(--app-ink) 14%, transparent)"
+                          : owned ? "0 2px 8px rgba(0,0,0,0.07)" : "none",
+                      cursor: owned ? "pointer" : "default",
+                    }}
+                  >
+                    {owned ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={pet.idleGif}
+                        alt={pet.name}
+                        style={{
+                          height: 48,
+                          width: 48,
+                          objectFit: "contain",
+                          imageRendering: "pixelated",
+                          transform: pet.id === "bear" ? "scale(1.35)" : undefined,
+                        }}
+                      />
+                    ) : (
+                      <span className="select-none text-[26px] text-black/12">?</span>
+                    )}
+                  </button>
+                  {owned && (
+                    <>
+                      {isRenaming ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            onRename(pet.id, renameValue);
+                            setRenamingSpecies(null);
+                          }}
+                        >
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
+                            onBlur={() => setRenamingSpecies(null)}
+                            className="w-[80px] rounded-md border border-black/20 bg-transparent px-1.5 py-0.5 text-center text-[13px] text-black outline-none"
+                            placeholder={pet.name}
+                            maxLength={24}
+                          />
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[13px] font-semibold text-black/60">{petDisplayName}</span>
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={() => { setRenameValue(petDisplayName); setRenamingSpecies(pet.id); }}
+                              className="text-[13px] text-black/25 transition-colors hover:text-black/55"
+                              title="Rename"
+                            >
+                              ✎
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {isActive && (
+                        <span className="rounded-full bg-black px-2.5 py-px text-[10px] font-bold text-white">
+                          ✓ Active
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

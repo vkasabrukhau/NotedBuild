@@ -18,6 +18,8 @@ import type {
   SetStateAction,
 } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR, { mutate as swrMutate } from "swr";
+import { swrFetcher } from "@/lib/swr-fetcher";
 import { useUser } from "@clerk/nextjs";
 import {
   SPECIAL_PETS,
@@ -1819,11 +1821,9 @@ function useSavedToast() {
 }
 
 function AllItemsComponent({
-  refreshToken,
   onOpenNote,
   onOpenFolder,
 }: {
-  refreshToken: number;
   onOpenNote: (note: InitialNote) => void;
   onOpenFolder: (folder: InitialFolder) => void;
 }) {
@@ -1831,13 +1831,32 @@ function AllItemsComponent({
   const [sortMode, setSortMode] = useState<
     "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc"
   >("date-desc");
-  const [notes, setNotes] = useState<NoteSummary[]>([]);
-  const [folders, setFolders] = useState<FolderSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<"folders" | "notes">("folders");
   const [activeIndex, setActiveIndex] = useState(0);
   const foldersGridRef = useRef<HTMLDivElement | null>(null);
   const notesGridRef = useRef<HTMLDivElement | null>(null);
+  const hasInitializedSection = useRef(false);
+
+  const { data: notesData, isLoading: notesLoading } = useSWR<{ notes: NoteSummary[] }>("/api/notes", swrFetcher);
+  const { data: foldersData, isLoading: foldersLoading } = useSWR<{ folders: FolderSummary[] }>("/api/folders?view=folders", swrFetcher);
+  const notes = notesData?.notes ?? [];
+  const folders = foldersData?.folders ?? [];
+  const isLoading = notesLoading || foldersLoading;
+
+  // Set initial active section once data first arrives
+  useEffect(() => {
+    if (isLoading || hasInitializedSection.current) return;
+    hasInitializedSection.current = true;
+    if (folders.length > 0) {
+      setActiveSection("folders");
+      setActiveIndex(0);
+    } else if (notes.length > 0) {
+      setActiveSection("notes");
+      setActiveIndex(0);
+    } else {
+      setActiveIndex(-1);
+    }
+  }, [isLoading, folders.length, notes.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1855,48 +1874,6 @@ function AllItemsComponent({
     void run();
     return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadAll = async () => {
-      setIsLoading(true);
-
-      try {
-        const [notesRes, foldersRes] = await Promise.all([
-          fetch("/api/notes"),
-          fetch("/api/folders?view=folders"),
-        ]);
-
-        const notesData = (await notesRes.json().catch(() => null)) as { notes?: NoteSummary[] } | null;
-        const foldersData = (await foldersRes.json().catch(() => null)) as { folders?: FolderSummary[] } | null;
-
-        if (cancelled) return;
-
-        const loadedNotes = notesData?.notes ?? [];
-        const loadedFolders = foldersData?.folders ?? [];
-        setNotes(loadedNotes);
-        setFolders(loadedFolders);
-
-        if (loadedFolders.length > 0) {
-          setActiveSection("folders");
-          setActiveIndex(0);
-        } else if (loadedNotes.length > 0) {
-          setActiveSection("notes");
-          setActiveIndex(0);
-        } else {
-          setActiveIndex(-1);
-        }
-      } catch (error) {
-        console.error("failed to load items", error);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    void loadAll();
-    return () => { cancelled = true; };
-  }, [refreshToken]);
 
   const sortedNotes = useMemo(() => [...notes].sort((left, right) => {
     if (sortMode === "date-desc") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
@@ -3125,7 +3102,10 @@ export default function RootHomeShell({
   const [noteReturnView, setNoteReturnView] = useState<"home" | "all-notes">(
     "home",
   );
-  const [allNotesRefreshToken, setAllNotesRefreshToken] = useState(0);
+  const refreshNotesAndFolders = useCallback(() => {
+    void swrMutate("/api/notes");
+    void swrMutate("/api/folders?view=folders");
+  }, []);
   const [noteUsageCount, setNoteUsageCount] = useState(initialNoteUsageCount);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
@@ -3377,7 +3357,6 @@ export default function RootHomeShell({
       {(view === "all-notes" || closingView === "all-notes") ? (
         <div className={closingView === "all-notes" ? "view-exit" : "view-enter"}>
           <AllItemsComponent
-            refreshToken={allNotesRefreshToken}
             onOpenNote={(note) => {
               setActiveNote(note);
               setNoteReturnView("all-notes");
@@ -3398,7 +3377,7 @@ export default function RootHomeShell({
             initialNote={activeNote}
             onNoteUsageCountChange={setNoteUsageCount}
             onNoteSaved={() => {
-              setAllNotesRefreshToken((current) => current + 1);
+              refreshNotesAndFolders();
             }}
             onRequestClose={() => {
               if (noteTransitionTimerRef.current) {
@@ -3414,7 +3393,7 @@ export default function RootHomeShell({
 
               noteTransitionTimerRef.current = window.setTimeout(() => {
                 setView(noteReturnView);
-                setAllNotesRefreshToken((current) => current + 1);
+                refreshNotesAndFolders();
                 setNoteViewAnimationClass("");
                 if (window.location.pathname !== "/") {
                   router.push("/");
@@ -3504,10 +3483,8 @@ export default function RootHomeShell({
               body: JSON.stringify({ speciesId }),
             }).then(async (res) => {
               if (!res.ok) return;
-              // Refresh full tamagotchi state from server
-              const freshRes = await fetch("/api/tamagotchi");
-              if (!freshRes.ok) return;
-              const freshData: unknown = await freshRes.json();
+              // Revalidate tamagotchi state via SWR cache
+              const freshData: unknown = await swrMutate("/api/tamagotchi");
               if (isTamagotchiStatus(freshData)) {
                 setTamagotchiStatus(freshData);
               }

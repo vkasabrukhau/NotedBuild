@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import useSWR, { mutate as swrMutate } from "swr";
+import { swrFetcher } from "@/lib/swr-fetcher";
 import ProfileEditor from "@/components/profile/profile-editor";
 import PixelatedSchoolLogo from "@/components/profile/pixelated-school-logo";
 import type {
@@ -501,8 +503,6 @@ export default function ProfileView({
   const [sectionAnimKey, setSectionAnimKey] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isFriendFinderOpen, setIsFriendFinderOpen] = useState(false);
-  const [profileNotes, setProfileNotes] = useState(profile.notes);
-  const [isLoadingProfileNotes, setIsLoadingProfileNotes] = useState(false);
   const [friendshipState, setFriendshipState] = useState(
     viewer.friendshipState,
   );
@@ -523,24 +523,45 @@ export default function ProfileView({
     FriendshipNotification[]
   >([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-  const [notificationError, setNotificationError] = useState<string | null>(
-    null,
-  );
   const [friends, setFriends] = useState<FriendshipPerson[]>([]);
-  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
-  const [friendDirectoryError, setFriendDirectoryError] = useState<
-    string | null
-  >(null);
   const [folders, setFolders] = useState<ProfileFolderSummary[]>([]);
-  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
-  const [folderError, setFolderError] = useState<string | null>(null);
   const [pendingSearchTargetId, setPendingSearchTargetId] = useState<
     string | null
   >(null);
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
-  const [progress, setProgress] = useState<UserProgressData | null>(null);
+
+  // ── SWR data fetching ────────────────────────────────────────────────────
+  const swrKey = viewer.isOwnProfile;
+  const { data: notesData, isLoading: isLoadingProfileNotes } = useSWR<{ notes: typeof profile.notes }>(
+    swrKey ? "/api/notes" : null,
+    swrFetcher,
+  );
+  const { data: friendsData, isLoading: isLoadingFriends, error: friendsError } = useSWR<{ friends: FriendshipPerson[] }>(
+    swrKey ? "/api/friendships?view=friends" : null,
+    swrFetcher,
+  );
+  const { data: notificationsData, isLoading: isLoadingNotifications, error: notificationsError } = useSWR<{
+    incomingRequests: FriendshipNotification[];
+    acceptedRequests: FriendshipNotification[];
+  }>(
+    swrKey ? "/api/friendships?view=notifications" : null,
+    swrFetcher,
+  );
+  const { data: foldersData, isLoading: isLoadingFolders, error: foldersError } = useSWR<{ folders: ProfileFolderSummary[] }>(
+    swrKey ? "/api/folders?view=folders" : null,
+    swrFetcher,
+  );
+  const { data: progressData } = useSWR<{ progress: UserProgressData }>(
+    swrKey ? "/api/progress" : null,
+    swrFetcher,
+  );
+
+  const profileNotes = notesData?.notes ?? profile.notes;
+  const progress = progressData?.progress ?? null;
+  const notificationError = notificationsError instanceof Error ? notificationsError.message : notificationsError ? "Failed to load notifications." : null;
+  const friendDirectoryError = friendsError instanceof Error ? friendsError.message : friendsError ? "Failed to load friends." : null;
+  const folderError = foldersError instanceof Error ? foldersError.message : foldersError ? "Failed to load folders." : null;
 
   const changeSection = useCallback(
     (section: ProfileContentSection, tabIdx: number) => {
@@ -554,10 +575,6 @@ export default function ProfileView({
   );
 
   useEffect(() => {
-    setProfileNotes(profile.notes);
-  }, [profile.notes]);
-
-  useEffect(() => {
     setFriendshipState(viewer.friendshipState);
   }, [viewer.friendshipState]);
 
@@ -567,15 +584,6 @@ export default function ProfileView({
     }
   }, [viewer.isOwnProfile]);
 
-  useEffect(() => {
-    if (!viewer.isOwnProfile) return;
-    fetch("/api/progress")
-      .then((r) => r.json())
-      .then((data: { progress?: UserProgressData }) => {
-        if (data.progress) setProgress(data.progress);
-      })
-      .catch(() => null);
-  }, [viewer.isOwnProfile]);
 
   useEffect(() => {
     if (!viewer.isOwnProfile) return;
@@ -667,125 +675,25 @@ export default function ProfileView({
     changeSection,
   ]);
 
+
+  // Seed local friends state from SWR
   useEffect(() => {
-    if (!viewer.isOwnProfile) {
-      return;
-    }
+    if (friendsData?.friends) setFriends(friendsData.friends);
+  }, [friendsData]);
 
-    let cancelled = false;
-
-    const loadProfileNotes = async () => {
-      setIsLoadingProfileNotes(true);
-
-      try {
-        const response = await fetch("/api/notes");
-        const data = (await response.json().catch(() => null)) as {
-          notes?: Array<{
-            content: string;
-            createdAt: string;
-            id: string;
-            name: string;
-            ownerEmail: string;
-          }>;
-        } | null;
-
-        if (!response.ok || !data?.notes || cancelled) {
-          return;
-        }
-
-        setProfileNotes(
-          data.notes.map((note) => ({
-            content: note.content,
-            createdAt: note.createdAt,
-            id: note.id,
-            name: note.name,
-            ownerEmail: note.ownerEmail,
-          })),
-        );
-      } catch (error) {
-        console.error("failed to load profile notes", error);
-      } finally {
-        if (!cancelled) {
-          setIsLoadingProfileNotes(false);
-        }
-      }
-    };
-
-    void loadProfileNotes();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [viewer.isOwnProfile]);
-
+  // Seed local folders state from SWR
   useEffect(() => {
-    if (!viewer.isOwnProfile) {
-      return;
-    }
+    if (foldersData?.folders) setFolders(foldersData.folders);
+  }, [foldersData]);
 
-    let cancelled = false;
-
-    const loadProfileCollections = async () => {
-      setIsLoadingNotifications(true);
-      setIsLoadingFriends(true);
-      setIsLoadingFolders(true);
-
-      try {
-        const [notificationsData, friendsData, foldersData] = await Promise.all(
-          [
-            fetchFriendNotifications(),
-            fetchFriendsDirectory(),
-            fetchProfileFolders(),
-          ],
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        const filteredAcceptedRequests = filterAcceptedNotifications(
-          notificationsData.acceptedRequests ?? [],
-        );
-
-        setIncomingRequests(notificationsData.incomingRequests ?? []);
-        setAcceptedRequests(filteredAcceptedRequests);
-        setUnreadNotificationCount(
-          (notificationsData.incomingRequests?.length ?? 0) +
-            filteredAcceptedRequests.length,
-        );
-        setNotificationError(null);
-        setFriends(friendsData);
-        setFriendDirectoryError(null);
-        setFolders(foldersData);
-        setFolderError(null);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to load profile data.";
-
-        setNotificationError(message);
-        setFriendDirectoryError(message);
-        setFolderError(message);
-      } finally {
-        if (!cancelled) {
-          setIsLoadingNotifications(false);
-          setIsLoadingFriends(false);
-          setIsLoadingFolders(false);
-        }
-      }
-    };
-
-    void loadProfileCollections();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [viewer.isOwnProfile]);
+  // Seed notifications state from SWR (keep local so dismiss works without re-fetch)
+  useEffect(() => {
+    if (!notificationsData) return;
+    const filtered = filterAcceptedNotifications(notificationsData.acceptedRequests ?? []);
+    setIncomingRequests(notificationsData.incomingRequests ?? []);
+    setAcceptedRequests(filtered);
+    setUnreadNotificationCount((notificationsData.incomingRequests?.length ?? 0) + filtered.length);
+  }, [notificationsData]);
 
   useEffect(() => {
     if (!viewer.isOwnProfile) {
@@ -843,61 +751,18 @@ export default function ProfileView({
   }, [searchQuery, viewer.isOwnProfile]);
 
   async function reloadFriendNotifications() {
-    if (!viewer.isOwnProfile) {
-      return;
-    }
-
-    try {
-      const data = await fetchFriendNotifications();
-      const filteredAcceptedRequests = filterAcceptedNotifications(
-        data.acceptedRequests ?? [],
-      );
-
-      setIncomingRequests(data.incomingRequests ?? []);
-      setAcceptedRequests(filteredAcceptedRequests);
-      setUnreadNotificationCount(
-        (data.incomingRequests?.length ?? 0) + filteredAcceptedRequests.length,
-      );
-      setNotificationError(null);
-    } catch (error) {
-      setNotificationError(
-        error instanceof Error
-          ? error.message
-          : "Failed to load notifications.",
-      );
-    }
+    if (!viewer.isOwnProfile) return;
+    await swrMutate("/api/friendships?view=notifications");
   }
 
   async function reloadFriendsDirectory() {
-    if (!viewer.isOwnProfile) {
-      return;
-    }
-
-    try {
-      const nextFriends = await fetchFriendsDirectory();
-      setFriends(nextFriends);
-      setFriendDirectoryError(null);
-    } catch (error) {
-      setFriendDirectoryError(
-        error instanceof Error ? error.message : "Failed to load friends.",
-      );
-    }
+    if (!viewer.isOwnProfile) return;
+    await swrMutate("/api/friendships?view=friends");
   }
 
   async function reloadFolders() {
-    if (!viewer.isOwnProfile) {
-      return;
-    }
-
-    try {
-      const nextFolders = await fetchProfileFolders();
-      setFolders(nextFolders);
-      setFolderError(null);
-    } catch (error) {
-      setFolderError(
-        error instanceof Error ? error.message : "Failed to load folders.",
-      );
-    }
+    if (!viewer.isOwnProfile) return;
+    await swrMutate("/api/folders?view=folders");
   }
 
   async function reloadSearchResults() {

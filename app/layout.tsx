@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import {
-  ClerkProvider,
-  Show,
-  UserButton,
-} from "@clerk/nextjs";
+import { ClerkProvider, Show } from "@clerk/nextjs";
+import ClerkUserButton from "@/components/clerk-user-button";
 import {
   Bitcount_Grid_Double_Ink,
   Cabin,
@@ -78,7 +75,7 @@ export default function RootLayout({
         <ClerkProvider>
           <Show when="signed-in">
             <header className="flex h-16 items-center justify-end gap-4 p-4">
-              <UserButton />
+              <ClerkUserButton />
             </header>
           </Show>
           {children}

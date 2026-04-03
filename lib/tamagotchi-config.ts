@@ -214,6 +214,38 @@ export function getSpecialPet(id: string): SpecialPet | undefined {
   return SPECIAL_PETS.find((p) => p.id === id);
 }
 
+/** Click/action GIF for each evolution tier — played on tap, then reverts to idle */
+const SPECIES_CLICK_GIFS: Record<string, string> = {
+  // Skeleton line
+  skeleton_spearman: "/tamagotchi/skeleton/Skeleton_Spearman/Run+attack.gif",
+  skeleton_warrior:  "/tamagotchi/skeleton/Skeleton_Warrior/Run+attack.gif",
+  skeleton_archer:   "/tamagotchi/skeleton/Skeleton_Archer/Shot_1.gif",
+  // Wizard line
+  lightning_mage:    "/tamagotchi/wizard/Lightning Mage/Light_ball.gif",
+  fire_wizard:       "/tamagotchi/wizard/Fire Wizard/Fireball.gif",
+  wanderer_magician: "/tamagotchi/wizard/Wanderer Magican/Magic_sphere.gif",
+  // Ninja line
+  kunoichi:          "/tamagotchi/ninja/Kunoichi/Attack_1.gif",
+  ninja_monk:        "/tamagotchi/ninja/Ninja_Monk/Attack_1.gif",
+  ninja_peasant:     "/tamagotchi/ninja/Ninja_Peasant/Attack_1.gif",
+  // Karasu line
+  karasu_tengu:      "/tamagotchi/karasu/Karasu_tengu/Attack_1.gif",
+  kitsune:           "/tamagotchi/karasu/Kitsune/Attack_1.gif",
+  yamabushi_tengu:   "/tamagotchi/karasu/Yamabushi_tengu/Attack_1.gif",
+  // Samurai line
+  samurai:           "/tamagotchi/samurai/Samurai/attack1.gif",
+  samurai_archer:    "/tamagotchi/samurai/Samurai_Archer/Attack_1.gif",
+  samurai_commander: "/tamagotchi/samurai/Samurai_Commander/Attack_1.gif",
+};
+
+/**
+ * Returns the click/action GIF for a species, or null if the species only
+ * has a single GIF (e.g. special pets bear/mewtwo/snorlax).
+ */
+export function getSpeciesClickGif(speciesId: string): string | null {
+  return SPECIES_CLICK_GIFS[speciesId] ?? null;
+}
+
 /** Resolve the idle GIF path for any species ID (evolution tier or special pet) */
 export function getSpeciesIdleGif(speciesId: string): string {
   const tier = getTier(speciesId);

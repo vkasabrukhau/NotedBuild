@@ -24,6 +24,7 @@ import { useUser } from "@clerk/nextjs";
 import {
   SPECIAL_PETS,
   EVOLUTION_LINES,
+  getSpeciesClickGif,
   getSpeciesIdleGif,
   getSpeciesName,
   getTier,
@@ -477,6 +478,9 @@ function HomeComponent({
   const [isRenaming, setIsRenaming] = useState(false);
   const [heartVisible, setHeartVisible] = useState(false);
   const heartTimerRef = useRef<number | null>(null);
+  const [clickGifUrl, setClickGifUrl] = useState<string | null>(null);
+  const [clickKey, setClickKey] = useState(0);
+  const clickTimerRef = useRef<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -711,12 +715,23 @@ function HomeComponent({
                   if (heartTimerRef.current) window.clearTimeout(heartTimerRef.current);
                   heartTimerRef.current = window.setTimeout(() => setHeartVisible(false), 900);
                   onTamagotchiClick();
+
+                  const actionGif = getSpeciesClickGif(activeTamagotchi.species);
+                  if (actionGif) {
+                    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+                    setClickGifUrl(actionGif);
+                    setClickKey((k) => k + 1);
+                    clickTimerRef.current = window.setTimeout(() => {
+                      setClickGifUrl(null);
+                    }, 1400);
+                  }
                 }}
                 className="relative flex h-[70%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={getSpeciesIdleGif(activeTamagotchi.species)}
+                  key={clickGifUrl ? `click-${clickKey}` : `idle-${activeTamagotchi.species}`}
+                  src={clickGifUrl ?? getSpeciesIdleGif(activeTamagotchi.species)}
                   alt={activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species)}
                   className="h-[98%] w-auto object-contain drop-shadow-lg"
                   style={{

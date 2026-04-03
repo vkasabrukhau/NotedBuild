@@ -9,6 +9,7 @@ import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 export type ProfileViewData = {
   id: string;
   age: number | null;
+  bio: string | null;
   email: string;
   friendCount: number;
   folderCount: number;
@@ -47,6 +48,7 @@ export type ProfileSchoolOption = {
 export const profileUserSelect = {
   id: true,
   age: true,
+  bio: true,
   email: true,
   foldersOwnedCount: true,
   fullName: true,
@@ -93,6 +95,7 @@ export function toProfileViewData(
   return {
     id: user.id,
     age: user.age,
+    bio: user.bio,
     email: user.email,
     friendCount,
     folderCount: user.foldersOwnedCount,

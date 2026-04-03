@@ -87,6 +87,7 @@ export default async function NotePage({
   const profile: ProfileViewData = {
     id: note.ownerId,
     age: note.owner.age,
+    bio: null,
     email: note.owner.email,
     friendCount,
     folderCount,

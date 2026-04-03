@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate as swrMutate } from "swr";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import ProfileEditor from "@/components/profile/profile-editor";
-import PixelatedSchoolLogo from "@/components/profile/pixelated-school-logo";
 import type {
   ProfileFriendshipState,
   ProfileSchoolOption,
@@ -152,27 +151,29 @@ function filterAcceptedNotifications(notifications: FriendshipNotification[]) {
   );
 }
 
-function InlineSchoolMark({ profile }: { profile: ProfileViewData }) {
-  const schoolLabel = profile.schoolName ?? "School";
-  const badgeText = getInitials(schoolLabel).slice(0, 2);
+function SchoolTag({ profile }: { profile: ProfileViewData }) {
+  if (!profile.schoolName) return null;
 
   return (
-    <div className="relative h-[56px] w-[56px] shrink-0 overflow-hidden">
+    <div className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm">
       {profile.schoolLogoUrl ? (
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.03)_1px,transparent_1px)] bg-[size:5px_5px] opacity-30" />
-      ) : null}
-      {profile.schoolLogoUrl ? (
-        <PixelatedSchoolLogo
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={profile.schoolLogoUrl}
-          alt={schoolLabel}
-          size={56}
-          className="absolute inset-0 h-full w-full object-contain p-1"
+          alt=""
+          width={16}
+          height={16}
+          className="h-4 w-4 object-contain"
+          style={{ imageRendering: "pixelated" }}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center rounded-[14px] border border-black/10 bg-white text-[18px] font-bold uppercase tracking-[-0.06em] text-black/70">
-          {badgeText}
-        </div>
+        <span className="text-[10px] font-bold text-black/55">
+          {getInitials(profile.schoolName).slice(0, 2)}
+        </span>
       )}
+      <span className="max-w-[160px] truncate text-[11px] font-medium text-black/65">
+        {profile.schoolName}
+      </span>
     </div>
   );
 }
@@ -531,6 +532,12 @@ export default function ProfileView({
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
 
+  // ── Typing animation ─────────────────────────────────────────────────────
+  const [displayedTitle, setDisplayedTitle] = useState("");
+  const [isTitleDone, setIsTitleDone] = useState(false);
+  const [displayedName, setDisplayedName] = useState("");
+  const [isNameDone, setIsNameDone] = useState(false);
+
   // ── SWR data fetching ────────────────────────────────────────────────────
   const swrKey = viewer.isOwnProfile;
   const { data: notesData, isLoading: isLoadingProfileNotes } = useSWR<{ notes: typeof profile.notes }>(
@@ -583,6 +590,45 @@ export default function ProfileView({
       setActiveSection("notes");
     }
   }, [viewer.isOwnProfile]);
+
+  // Title typing animation
+  useEffect(() => {
+    let i = 0;
+    setDisplayedTitle("");
+    setIsTitleDone(false);
+    const timer = setInterval(() => {
+      i++;
+      setDisplayedTitle("Profile".slice(0, i));
+      if (i >= "Profile".length) {
+        clearInterval(timer);
+        setIsTitleDone(true);
+      }
+    }, 55);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Name typing animation (starts after a short delay)
+  useEffect(() => {
+    const target = profile.fullName;
+    let i = 0;
+    setDisplayedName("");
+    setIsNameDone(false);
+    let innerTimer: ReturnType<typeof setInterval> | null = null;
+    const delay = setTimeout(() => {
+      innerTimer = setInterval(() => {
+        i++;
+        setDisplayedName(target.slice(0, i));
+        if (i >= target.length) {
+          if (innerTimer) clearInterval(innerTimer);
+          setIsNameDone(true);
+        }
+      }, 40);
+    }, 250);
+    return () => {
+      clearTimeout(delay);
+      if (innerTimer) clearInterval(innerTimer);
+    };
+  }, [profile.fullName]);
 
 
   useEffect(() => {
@@ -903,14 +949,15 @@ export default function ProfileView({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[40px] font-bold leading-none tracking-[-0.05em] text-black">
-            Profile
+            {displayedTitle}
+            {!isTitleDone && <span className="typing-cursor">|</span>}
           </h1>
         </div>
 
         <div className="flex items-start gap-3">
           {viewer.isOwnProfile ? (
             <>
-              <div className="relative">
+              <div className="relative hidden">
                 <FindFriendsButton
                   isOpen={isFriendFinderOpen}
                   onToggle={() => setIsFriendFinderOpen((current) => !current)}
@@ -1028,7 +1075,7 @@ export default function ProfileView({
                 ) : null}
               </div>
 
-              <div className="relative">
+              <div className="relative hidden">
                 <PaperNotificationButton
                   isOpen={isNotificationsOpen}
                   onToggle={() => setIsNotificationsOpen((current) => !current)}
@@ -1214,6 +1261,7 @@ export default function ProfileView({
                   </div>
                 ) : null}
               </div>
+              <EditButton onClick={() => setIsEditorOpen(true)} />
             </>
           ) : (
             <button
@@ -1235,28 +1283,34 @@ export default function ProfileView({
       <section className="mt-10">
         <div className="mt-4">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex items-end gap-5">
-              {profile.profilePhotoUrl ? (
-                <img
-                  src={profile.profilePhotoUrl}
-                  alt={profile.fullName}
-                  width={112}
-                  height={112}
-                  className="h-[112px] w-[112px] rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-full bg-black text-[34px] font-bold text-white">
-                  {getInitials(profile.fullName)}
-                </div>
-              )}
+            <div className="flex items-start gap-5">
+              <div className="flex flex-col items-center gap-2.5">
+                {profile.profilePhotoUrl ? (
+                  <img
+                    src={profile.profilePhotoUrl}
+                    alt={profile.fullName}
+                    width={112}
+                    height={112}
+                    className="h-[112px] w-[112px] rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-[112px] w-[112px] items-center justify-center rounded-full bg-black text-[34px] font-bold text-white">
+                    {getInitials(profile.fullName)}
+                  </div>
+                )}
+                <SchoolTag profile={profile} />
+              </div>
 
-              <div className="pb-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-[36px] font-bold leading-none tracking-[-0.04em] text-black">
-                    {profile.fullName}
-                  </h2>
-                  <InlineSchoolMark profile={profile} />
-                </div>
+              <div className="pt-2">
+                <h2 className="text-[36px] font-bold leading-none tracking-[-0.04em] text-black">
+                  {displayedName}
+                  {!isNameDone && <span className="typing-cursor">|</span>}
+                </h2>
+                {profile.bio ? (
+                  <p className="mt-2 max-w-[480px] text-[15px] leading-relaxed text-black/65">
+                    {profile.bio}
+                  </p>
+                ) : null}
                 <p className="mt-3 text-[12px] uppercase tracking-[0.22em] text-black/48">
                   Joined {formatJoinedDate(profile.joinedAt)}
                 </p>

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 type UpdateProfileBody = {
   age?: number | null;
+  bio?: string | null;
   fullName?: string;
   schoolId?: string | null;
 };
@@ -71,12 +72,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const bioValue = body.bio === null || body.bio === undefined ? null : body.bio.trim().slice(0, 500) || null;
+
     const user = await prisma.user.update({
       where: {
         clerkId: userId,
       },
       data: {
         age: ageValue,
+        bio: bioValue,
         email: primaryEmail,
         fullName,
         profilePhotoUrl: clerkUser.imageUrl,

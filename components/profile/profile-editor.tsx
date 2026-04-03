@@ -15,6 +15,7 @@ type ProfileEditorProps = {
 
 async function syncProfileToServer(payload: {
   age: number | null;
+  bio: string | null;
   fullName: string;
   schoolId: string | null;
 }) {
@@ -46,6 +47,7 @@ export default function ProfileEditor({
   const [fullName, setFullName] = useState(profile.fullName);
   const [email, setEmail] = useState(profile.email);
   const [age, setAge] = useState(profile.age?.toString() ?? "");
+  const [bio, setBio] = useState(profile.bio ?? "");
   const [schoolId, setSchoolId] = useState(profile.schoolId ?? "");
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
@@ -64,6 +66,7 @@ export default function ProfileEditor({
     setFullName(profile.fullName);
     setEmail(profile.email);
     setAge(profile.age?.toString() ?? "");
+    setBio(profile.bio ?? "");
     setSchoolId(profile.schoolId ?? "");
     setProfilePhoto(null);
     setVerificationCode("");
@@ -81,6 +84,7 @@ export default function ProfileEditor({
 
     await syncProfileToServer({
       age: parsedAge,
+      bio: bio.trim() || null,
       fullName: fullName.trim(),
       schoolId: schoolId || null,
     });
@@ -272,6 +276,21 @@ export default function ProfileEditor({
             </select>
           </label>
         </div>
+
+        <label className="mt-4 block sm:col-span-2">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-black/45">
+            Bio
+          </span>
+          <textarea
+            value={bio}
+            onChange={(event) => setBio(event.target.value)}
+            maxLength={500}
+            rows={3}
+            placeholder="Tell people a little about yourself…"
+            className="mt-2 w-full resize-none rounded-[18px] border border-black/12 px-4 py-3 text-[15px] text-black outline-none transition focus:border-black/30"
+          />
+          <p className="mt-1 text-right text-xs text-black/35">{bio.length}/500</p>
+        </label>
 
         <label className="mt-4 block">
           <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-black/45">

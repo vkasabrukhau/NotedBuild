@@ -19,6 +19,7 @@ type DbStatus = {
   matchedUser: {
     id: string;
     age: number | null;
+    bio: string | null;
     email: string;
     friendCount: number;
     folderCount: number;
@@ -53,6 +54,7 @@ async function getDbStatus(
           select: {
             id: true,
             age: true,
+            bio: true,
             email: true,
             foldersOwnedCount: true,
             fullName: true,
@@ -98,6 +100,7 @@ async function getDbStatus(
           ? {
               id: existingUser.id,
               age: existingUser.age,
+              bio: existingUser.bio,
               email: existingUser.email,
               friendCount: existingFriendCount,
               folderCount: existingUser.foldersOwnedCount,
@@ -146,6 +149,7 @@ async function getDbStatus(
       select: {
         id: true,
         age: true,
+        bio: true,
         email: true,
         foldersOwnedCount: true,
         fullName: true,
@@ -188,6 +192,7 @@ async function getDbStatus(
       matchedUser: {
         id: matchedUser.id,
         age: matchedUser.age,
+        bio: matchedUser.bio,
         email: matchedUser.email,
         friendCount,
         folderCount: matchedUser.foldersOwnedCount,
@@ -271,6 +276,7 @@ export default async function Home() {
   const profile: ProfileViewData = {
     id: dbStatus.matchedUser.id,
     age: dbStatus.matchedUser.age,
+    bio: dbStatus.matchedUser.bio,
     email,
     friendCount: dbStatus.matchedUser.friendCount,
     folderCount: dbStatus.matchedUser.folderCount,

@@ -74,7 +74,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${doto.variable} ${bitcount.variable} ${roboto.variable} ${sueEllen.variable} ${merriweather.variable} ${lora.variable} ${sourceCodePro.variable} ${cabin.variable} antialiased`}>
+      <body suppressHydrationWarning className={`${doto.variable} ${bitcount.variable} ${roboto.variable} ${sueEllen.variable} ${merriweather.variable} ${lora.variable} ${sourceCodePro.variable} ${cabin.variable} antialiased`}>
         <ClerkProvider>
           <Show when="signed-in">
             <header className="flex h-16 items-center justify-end gap-4 p-4">

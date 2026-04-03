@@ -159,7 +159,8 @@ body[data-font="cabin"] { --font-body: var(--font-cabin); }
 }
 
 .valtest-menu-overlay {
-  animation: valtest-menu-overlay-fade 180ms ease-out;
+  /* enter/exit animations are applied via .overlay-enter / .overlay-exit classes.
+     the menu backdrop uses an inline style, so it's unaffected by this removal. */
 }
 
 .valtest-menu-panel {

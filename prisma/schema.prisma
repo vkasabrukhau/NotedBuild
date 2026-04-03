@@ -19,6 +19,7 @@ model User {
   email           String    @unique
   fullName        String
   age             Int?
+  bio             String?   @db.Text
   joinedAt        DateTime  @default(now())
   profilePhotoUrl String?
 

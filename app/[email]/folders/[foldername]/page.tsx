@@ -98,6 +98,7 @@ export default async function FolderPage({
   const profile: ProfileViewData = {
     id: folder.ownerId,
     age: folder.owner.age,
+    bio: null,
     email: folder.owner.email,
     friendCount,
     folderCount,

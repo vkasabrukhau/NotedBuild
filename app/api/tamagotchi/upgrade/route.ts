@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDbUser } from "@/lib/api-auth";
 import { getOrCreateProgress } from "@/lib/progress-utils";
-import { EVOLUTION_LINES, SPECIAL_PETS, getTier, getLineForTier } from "@/lib/tamagotchi-config";
+import { DEV_UNLOCK_ALL, EVOLUTION_LINES, SPECIAL_PETS, getTier, getLineForTier } from "@/lib/tamagotchi-config";
 
 /**
  * POST /api/tamagotchi/upgrade
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     // ── Case 1: evolution line tier ────────────────────────────────────────────
     const tier = getTier(speciesId);
     if (tier) {
-      if (progress.globalXp < tier.xpThreshold) {
+      if (!DEV_UNLOCK_ALL && progress.globalXp < tier.xpThreshold) {
         return NextResponse.json(
           { error: `Need ${tier.xpThreshold} XP to unlock ${tier.name}.` },
           { status: 403 },
@@ -98,18 +98,21 @@ export async function POST(request: Request) {
       const owned = await prisma.userTamagotchi.findUnique({
         where: { userId_species: { userId: dbUser.id, species: speciesId } },
       });
-      if (!owned) {
+      if (!owned && !DEV_UNLOCK_ALL) {
         return NextResponse.json({ error: "Pet not yet unlocked." }, { status: 403 });
       }
 
       if (setActive) {
+        const record = owned ?? await prisma.userTamagotchi.create({
+          data: { userId: dbUser.id, species: speciesId, lineId: null, happiness: 10, isActive: false },
+        });
         await prisma.$transaction([
           prisma.userTamagotchi.updateMany({
             where: { userId: dbUser.id },
             data: { isActive: false },
           }),
           prisma.userTamagotchi.update({
-            where: { id: owned.id },
+            where: { id: record.id },
             data: { isActive: true },
           }),
         ]);

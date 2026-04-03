@@ -22,6 +22,7 @@ import useSWR, { mutate as swrMutate } from "swr";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import { useUser } from "@clerk/nextjs";
 import {
+  DEV_UNLOCK_ALL,
   SPECIAL_PETS,
   EVOLUTION_LINES,
   getSpeciesClickGif,
@@ -1233,11 +1234,11 @@ function TamagotchiPreferencesOverlay({
     const items: string[] = [];
     for (const line of EVOLUTION_LINES) {
       for (const tier of line.tiers) {
-        if (globalXp >= tier.xpThreshold) items.push(tier.id);
+        if (DEV_UNLOCK_ALL || globalXp >= tier.xpThreshold) items.push(tier.id);
       }
     }
     for (const pet of SPECIAL_PETS) {
-      if (ownedMap.has(pet.id)) items.push(pet.id);
+      if (DEV_UNLOCK_ALL || ownedMap.has(pet.id)) items.push(pet.id);
     }
     return items;
   }, [globalXp, ownedMap]);
@@ -1245,6 +1246,12 @@ function TamagotchiPreferencesOverlay({
   const [focusedIndex, setFocusedIndex] = useState(() =>
     Math.max(0, navigableItems.indexOf(activeTama?.species ?? "")),
   );
+  const focusSpecies = useCallback((speciesId: string) => {
+    const nextIndex = navigableItems.indexOf(speciesId);
+    if (nextIndex >= 0) {
+      setFocusedIndex(nextIndex);
+    }
+  }, [navigableItems]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -1311,7 +1318,7 @@ function TamagotchiPreferencesOverlay({
       tier,
       line,
       isNewLine: tierIdx === 0,
-      isUnlocked: globalXp >= tier.xpThreshold,
+      isUnlocked: DEV_UNLOCK_ALL || globalXp >= tier.xpThreshold,
     })),
   );
 
@@ -1439,7 +1446,13 @@ function TamagotchiPreferencesOverlay({
                   <button
                     ref={(el) => { if (el) cardRefs.current.set(tier.id, el); }}
                     type="button"
-                    onClick={() => isUnlocked && onSelectSpecies(tier.id)}
+                    onClick={() => {
+                      if (!isUnlocked) return;
+                      focusSpecies(tier.id);
+                      onSelectSpecies(tier.id);
+                    }}
+                    onFocus={() => focusSpecies(tier.id)}
+                    onMouseEnter={() => focusSpecies(tier.id)}
                     className="flex items-center justify-center rounded-[22px] transition-all duration-150"
                     style={{
                       width: CARD_W,
@@ -1627,7 +1640,7 @@ function TamagotchiPreferencesOverlay({
           </div>
           <div className="flex items-end gap-6">
             {SPECIAL_PETS.map((pet) => {
-              const owned = ownedMap.get(pet.id);
+              const owned = DEV_UNLOCK_ALL ? (ownedMap.get(pet.id) ?? { species: pet.id, displayName: null, happiness: 10, isActive: false, lineId: null, lastClickAt: null }) : ownedMap.get(pet.id);
               const isActive = activeTama?.species === pet.id;
               const petDisplayName = owned?.displayName ?? pet.name;
               const isRenaming = renamingSpecies === pet.id;
@@ -1636,7 +1649,13 @@ function TamagotchiPreferencesOverlay({
                   <button
                     ref={(el) => { if (el) cardRefs.current.set(pet.id, el); }}
                     type="button"
-                    onClick={() => owned && onSelectSpecies(pet.id)}
+                    onClick={() => {
+                      if (!owned) return;
+                      focusSpecies(pet.id);
+                      onSelectSpecies(pet.id);
+                    }}
+                    onFocus={() => focusSpecies(pet.id)}
+                    onMouseEnter={() => focusSpecies(pet.id)}
                     className="flex h-[72px] w-[72px] items-center justify-center rounded-[18px] transition-all duration-150"
                     style={{
                       backgroundColor: owned
@@ -3160,6 +3179,21 @@ export default function RootHomeShell({
   const [newUnlockToast, setNewUnlockToast] = useState<string[]>([]);
   const [noteViewAnimationClass, setNoteViewAnimationClass] = useState("");
   const noteTransitionTimerRef = useRef<number | null>(null);
+  const reloadTamagotchiStatus = useCallback(async () => {
+    const response = await fetch("/api/tamagotchi", { cache: "no-store" });
+
+    if (!response.ok) {
+      throw new Error("Failed to reload tamagotchi state.");
+    }
+
+    const data: unknown = await response.json();
+    if (!isTamagotchiStatus(data)) {
+      throw new Error("Invalid tamagotchi status.");
+    }
+
+    setTamagotchiStatus(data);
+    return data;
+  }, []);
 
   // Init theme + font from localStorage on mount
   useEffect(() => {
@@ -3321,6 +3355,7 @@ export default function RootHomeShell({
       {view === "home" ? (
         <div className="view-enter">
         <HomeComponent
+          key={activeTamagotchi?.species ?? "homepage-default"}
           activeTamagotchi={activeTamagotchi}
           globalXp={tamagotchiStatus?.globalXp ?? 0}
           onTamagotchiClick={() => {
@@ -3474,6 +3509,7 @@ export default function RootHomeShell({
       ) : null}
       {(isTamagotchiOpen || closingOverlay === "tamagotchi") && tamagotchiStatus ? (
         <TamagotchiPreferencesOverlay
+          key={activeTamagotchi?.species ?? "tamagotchi-none"}
           animationClass={closingOverlay === "tamagotchi" ? "overlay-exit" : "overlay-enter"}
           onClose={() => closeOverlay("tamagotchi")}
           status={tamagotchiStatus}
@@ -3484,11 +3520,15 @@ export default function RootHomeShell({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ species: null }),
-              }).then(() => {
-                setTamagotchiStatus((prev) =>
-                  prev ? { ...prev, tamagotchis: prev.tamagotchis.map((t) => ({ ...t, isActive: false })) } : prev,
-                );
-              });
+              })
+                .then(async (response) => {
+                  if (!response.ok) {
+                    return;
+                  }
+
+                  await reloadTamagotchiStatus();
+                })
+                .catch(() => {});
               return;
             }
             // Use upgrade endpoint (creates record if needed, sets active)
@@ -3496,14 +3536,15 @@ export default function RootHomeShell({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ speciesId }),
-            }).then(async (res) => {
-              if (!res.ok) return;
-              // Revalidate tamagotchi state via SWR cache
-              const freshData: unknown = await swrMutate("/api/tamagotchi");
-              if (isTamagotchiStatus(freshData)) {
-                setTamagotchiStatus(freshData);
-              }
-            });
+            })
+              .then(async (response) => {
+                if (!response.ok) {
+                  return;
+                }
+
+                await reloadTamagotchiStatus();
+              })
+              .catch(() => {});
           }}
           onRename={(species, name) => {
             void fetch("/api/tamagotchi/rename", {

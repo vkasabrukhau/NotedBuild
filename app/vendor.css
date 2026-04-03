@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+/* Remap Tailwind's white/black tokens to theme vars so every
+   bg-white / text-black class in the app picks up the active theme */
+@theme inline {
+  --color-white: var(--app-surface);
+  --color-black: var(--app-ink);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-body);
+}

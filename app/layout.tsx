@@ -11,6 +11,7 @@ import {
   Source_Code_Pro,
   Sue_Ellen_Francisco,
 } from "next/font/google";
+import "./vendor.css";
 import "./globals.scss";
 
 const doto = Doto({

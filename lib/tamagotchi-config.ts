@@ -300,6 +300,9 @@ export function isSpeciesUnlocked(
 
 export const MAX_XP = 1200;
 
+/** Set true to bypass all XP/ownership gates during development. */
+export const DEV_UNLOCK_ALL = true;
+
 /** UTC date string "YYYY-MM-DD" */
 export function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);

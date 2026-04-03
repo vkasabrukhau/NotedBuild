@@ -61,7 +61,6 @@ function CompletionTypewriter({
       await sleep(160);
       await typeInto("Enter to start ", setMessagePrefix);
       await typeInto("noting.", setMessageNoting);
-      await typeInto("", setMessageNoting);
       onComplete();
     };
 

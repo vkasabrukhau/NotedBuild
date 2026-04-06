@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import CompletionOverlay from "@/components/sign-up/completion-overlay";
 import ReasonView from "@/components/sign-up/reason-view";
@@ -35,6 +35,9 @@ export default function SignUpView({
   const schoolInputRef = useRef<HTMLInputElement | null>(null);
   const activeSchoolRowRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
+  const handleTypingComplete = useCallback(() => {
+    setCompletionReady(true);
+  }, [setCompletionReady]);
 
   const normalizedQuery = schoolQuery.trim().toLowerCase();
   const matchingSchools =
@@ -330,7 +333,7 @@ export default function SignUpView({
         </div>
       </div>
       <CompletionOverlay
-        onTypingComplete={() => setCompletionReady(true)}
+        onTypingComplete={handleTypingComplete}
         phase={completionPhase}
       />
       <SignUpStyles />

@@ -151,11 +151,19 @@ function filterAcceptedNotifications(notifications: FriendshipNotification[]) {
   );
 }
 
-function SchoolTag({ profile }: { profile: ProfileViewData }) {
+function SchoolTag({
+  className = "",
+  profile,
+}: {
+  className?: string;
+  profile: ProfileViewData;
+}) {
   if (!profile.schoolName) return null;
 
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm">
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm ${className}`}
+    >
       {profile.schoolLogoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -174,7 +182,7 @@ function SchoolTag({ profile }: { profile: ProfileViewData }) {
       <span className="max-w-[160px] truncate text-[11px] font-medium text-black/65">
         {profile.schoolName}
       </span>
-    </div>
+    </span>
   );
 }
 
@@ -1283,7 +1291,7 @@ export default function ProfileView({
       <section className="mt-10">
         <div className="mt-4">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex items-start gap-5">
+              <div className="flex items-start gap-5">
               <div className="flex flex-col items-center gap-2.5">
                 {profile.profilePhotoUrl ? (
                   <img
@@ -1298,7 +1306,6 @@ export default function ProfileView({
                     {getInitials(profile.fullName)}
                   </div>
                 )}
-                <SchoolTag profile={profile} />
               </div>
 
               <div className="pt-2">
@@ -1308,8 +1315,16 @@ export default function ProfileView({
                 </h2>
                 {profile.bio ? (
                   <p className="mt-2 max-w-[480px] text-[15px] leading-relaxed text-black/65">
-                    {profile.bio}
+                    <span>{profile.bio}</span>
+                    <SchoolTag
+                      profile={profile}
+                      className="ml-2 translate-y-[-0.05em] align-middle"
+                    />
                   </p>
+                ) : profile.schoolName ? (
+                  <div className="mt-2">
+                    <SchoolTag profile={profile} />
+                  </div>
                 ) : null}
                 <p className="mt-3 text-[12px] uppercase tracking-[0.22em] text-black/48">
                   Joined {formatJoinedDate(profile.joinedAt)}

@@ -9,26 +9,20 @@ export async function POST() {
     const dbUser = await getOrCreateDbUser();
     if (!dbUser) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const now = new Date();
-      const todayStr = toDateStr(now);
+    const now = new Date();
+    const todayStr = toDateStr(now);
 
-      // ── 1. Get or create streak ──────────────────────────────────────────────
+    // ── 1–4. Update streak atomically (small, fast transaction) ─────────────────
+    const streakResult = await prisma.$transaction(async (tx) => {
       let streak = await tx.userStreak.findUnique({ where: { userId: dbUser.id } });
       if (!streak) {
         streak = await tx.userStreak.create({ data: { userId: dbUser.id } });
       }
 
-      // ── 2. Already checked in today? ──────────────────────────────────────────
       if (streak.lastCheckinAt != null && toDateStr(streak.lastCheckinAt) === todayStr) {
-        const tamagotchis = await tx.userTamagotchi.findMany({
-          where: { userId: dbUser.id },
-          orderBy: { createdAt: "asc" },
-        });
-        return { streak, tamagotchis, alreadyCheckedIn: true, daysMissed: 0 };
+        return { streak, alreadyCheckedIn: true, daysMissed: 0 };
       }
 
-      // ── 3. Days missed since last check-in ─────────────────────────────────────
       let daysMissed = 0;
       if (streak.lastCheckinAt != null) {
         const lastMs = new Date(toDateStr(streak.lastCheckinAt)).getTime();
@@ -36,44 +30,42 @@ export async function POST() {
         daysMissed = Math.max(0, Math.round((todayMs - lastMs) / 86_400_000) - 1);
       }
 
-      // ── 4. Update streak ────────────────────────────────────────────────────────
       const newStreakValue = daysMissed === 0 ? streak.currentStreak + 1 : 1;
-      const newLongest = Math.max(streak.longestStreak, newStreakValue);
-
       const updatedStreak = await tx.userStreak.update({
         where: { userId: dbUser.id },
         data: {
           currentStreak: newStreakValue,
-          longestStreak: newLongest,
+          longestStreak: Math.max(streak.longestStreak, newStreakValue),
           lastCheckinAt: now,
           totalCheckins: streak.totalCheckins + 1,
         },
       });
 
-      // ── 5. Update happiness for all owned tamagotchis ──────────────────────────
-      const tamagotchisBeforeUpdate = await tx.userTamagotchi.findMany({
-        where: { userId: dbUser.id },
-        orderBy: { createdAt: "asc" },
-      });
-
-      const updatedTamas = [];
-      for (const tama of tamagotchisBeforeUpdate) {
-        let { happiness } = tama;
-        if (daysMissed > 0) {
-          happiness = Math.max(0, happiness - daysMissed);
-        } else {
-          // Consecutive check-in reinforces happiness
-          happiness = Math.min(10, happiness + 1);
-        }
-        const updated = await tx.userTamagotchi.update({
-          where: { id: tama.id },
-          data: { happiness },
-        });
-        updatedTamas.push(updated);
-      }
-
-      return { streak: updatedStreak, tamagotchis: updatedTamas, alreadyCheckedIn: false, daysMissed };
+      return { streak: updatedStreak, alreadyCheckedIn: false, daysMissed };
     });
+
+    // ── 5. Update happiness outside the transaction (parallel) ───────────────────
+    const tamagotchisBeforeUpdate = await prisma.userTamagotchi.findMany({
+      where: { userId: dbUser.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    let updatedTamas = tamagotchisBeforeUpdate;
+    if (!streakResult.alreadyCheckedIn) {
+      updatedTamas = await Promise.all(
+        tamagotchisBeforeUpdate.map((tama) => {
+          const happiness = streakResult.daysMissed > 0
+            ? Math.max(0, tama.happiness - streakResult.daysMissed)
+            : Math.min(10, tama.happiness + 1);
+          return prisma.userTamagotchi.update({
+            where: { id: tama.id },
+            data: { happiness },
+          });
+        }),
+      );
+    }
+
+    const result = { ...streakResult, tamagotchis: updatedTamas };
 
     // ── 6. Award 2 global XP (only on first check-in of the day) ──────────────
     let globalXp: number;
@@ -95,7 +87,6 @@ export async function POST() {
         })
       : result.tamagotchis;
 
-    const todayStr = toDateStr(new Date());
     const checkedInToday =
       result.streak.lastCheckinAt != null &&
       toDateStr(result.streak.lastCheckinAt) === todayStr;

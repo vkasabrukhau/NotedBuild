@@ -953,7 +953,7 @@ export default function ProfileView({
     : `${profile.fullName.split(" ")[0]}'s Notes`;
 
   return (
-    <div className="min-h-screen w-full bg-white px-6 py-8">
+    <div className="h-screen overflow-hidden w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[40px] font-bold leading-none tracking-[-0.05em] text-black">
@@ -1313,19 +1313,16 @@ export default function ProfileView({
                   {displayedName}
                   {!isNameDone && <span className="typing-cursor">|</span>}
                 </h2>
-                {profile.bio ? (
-                  <p className="mt-2 max-w-[480px] text-[15px] leading-relaxed text-black/65">
-                    <span>{profile.bio}</span>
-                    <SchoolTag
-                      profile={profile}
-                      className="ml-2 translate-y-[-0.05em] align-middle"
-                    />
-                  </p>
-                ) : profile.schoolName ? (
+                {profile.schoolName && (
                   <div className="mt-2">
                     <SchoolTag profile={profile} />
                   </div>
-                ) : null}
+                )}
+                {profile.bio && (
+                  <p className="mt-2 max-w-120 text-[15px] leading-relaxed text-black/65">
+                    {profile.bio}
+                  </p>
+                )}
                 <p className="mt-3 text-[12px] uppercase tracking-[0.22em] text-black/48">
                   Joined {formatJoinedDate(profile.joinedAt)}
                 </p>

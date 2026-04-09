@@ -17,7 +17,7 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   SetStateAction,
 } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 import useSWR, { mutate as swrMutate } from "swr";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import { useUser } from "@clerk/nextjs";
@@ -31,7 +31,11 @@ import {
   getTier,
   MAX_XP,
 } from "@/lib/tamagotchi-config";
-import { stripHtml, getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
+import {
+  stripHtml,
+  getPreviewText,
+  formatAuthoredDate,
+} from "@/lib/text-utils";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const BODY_PLACEHOLDER = "Start typing your genius here...";
@@ -258,10 +262,12 @@ function isOwnedTamagotchi(value: unknown): value is OwnedTamagotchi {
   return (
     typeof candidate.species === "string" &&
     (typeof candidate.lineId === "string" || candidate.lineId === null) &&
-    (typeof candidate.displayName === "string" || candidate.displayName === null) &&
+    (typeof candidate.displayName === "string" ||
+      candidate.displayName === null) &&
     typeof candidate.happiness === "number" &&
     typeof candidate.isActive === "boolean" &&
-    (typeof candidate.lastClickAt === "string" || candidate.lastClickAt === null)
+    (typeof candidate.lastClickAt === "string" ||
+      candidate.lastClickAt === null)
   );
 }
 
@@ -273,7 +279,11 @@ function isTamagotchiStatus(value: unknown): value is TamagotchiStatus {
   const candidate = value as Record<string, unknown>;
   const streak = candidate.streak;
 
-  if (!streak || typeof streak !== "object" || !Array.isArray(candidate.tamagotchis)) {
+  if (
+    !streak ||
+    typeof streak !== "object" ||
+    !Array.isArray(candidate.tamagotchis)
+  ) {
     return false;
   }
 
@@ -288,7 +298,9 @@ function isTamagotchiStatus(value: unknown): value is TamagotchiStatus {
   );
 }
 
-function isTamagotchiCheckinResponse(value: unknown): value is TamagotchiCheckinResponse {
+function isTamagotchiCheckinResponse(
+  value: unknown,
+): value is TamagotchiCheckinResponse {
   if (!isTamagotchiStatus(value)) {
     return false;
   }
@@ -334,7 +346,6 @@ function createFolderSignature(
     selectedNoteIds: [...selectedNoteIds].sort(),
   });
 }
-
 
 function sanitizeLatex(latex: string) {
   return latex
@@ -438,30 +449,33 @@ async function convertMathPromptToLatex(
     .trim();
 }
 
-const TAMAGOTCHI_DISPLAY: Record<string, { scale: number; translateY: string }> = {
+const TAMAGOTCHI_DISPLAY: Record<
+  string,
+  { scale: number; translateY: string }
+> = {
   // Special pets
-  bear:      { scale: 1.869, translateY: "-10%" },
-  mewtwo:    { scale: 0.740, translateY: "0%" },
-  snorlax:   { scale: 0.627, translateY: "0%" },
+  bear: { scale: 1.869, translateY: "-10%" },
+  mewtwo: { scale: 0.74, translateY: "0%" },
+  snorlax: { scale: 0.627, translateY: "0%" },
   // Skeleton line
   skeleton_spearman: { scale: 1.0, translateY: "0%" },
-  skeleton_warrior:  { scale: 1.0, translateY: "0%" },
-  skeleton_archer:   { scale: 1.0, translateY: "0%" },
+  skeleton_warrior: { scale: 1.0, translateY: "0%" },
+  skeleton_archer: { scale: 1.0, translateY: "0%" },
   // Wizard line
-  lightning_mage:    { scale: 1.0, translateY: "0%" },
-  fire_wizard:       { scale: 1.0, translateY: "0%" },
+  lightning_mage: { scale: 1.0, translateY: "0%" },
+  fire_wizard: { scale: 1.0, translateY: "0%" },
   wanderer_magician: { scale: 1.0, translateY: "0%" },
   // Ninja line
-  kunoichi:          { scale: 1.0, translateY: "0%" },
-  ninja_monk:        { scale: 1.0, translateY: "0%" },
-  ninja_peasant:     { scale: 1.0, translateY: "0%" },
+  kunoichi: { scale: 1.0, translateY: "0%" },
+  ninja_monk: { scale: 1.0, translateY: "0%" },
+  ninja_peasant: { scale: 1.0, translateY: "0%" },
   // Karasu line
-  karasu_tengu:      { scale: 1.0, translateY: "0%" },
-  kitsune:           { scale: 1.0, translateY: "0%" },
-  yamabushi_tengu:   { scale: 1.0, translateY: "0%" },
+  karasu_tengu: { scale: 1.0, translateY: "0%" },
+  kitsune: { scale: 1.0, translateY: "0%" },
+  yamabushi_tengu: { scale: 1.0, translateY: "0%" },
   // Samurai line
-  samurai:           { scale: 1.0, translateY: "0%" },
-  samurai_archer:    { scale: 1.0, translateY: "0%" },
+  samurai: { scale: 1.0, translateY: "0%" },
+  samurai_archer: { scale: 1.0, translateY: "0%" },
   samurai_commander: { scale: 1.0, translateY: "0%" },
 };
 
@@ -611,7 +625,7 @@ function HomeComponent({
   }, [firstName]);
 
   return (
-    <div className="min-h-screen w-full bg-white px-6 py-8">
+    <div className="h-screen overflow-hidden w-full bg-white px-6 py-8">
       <h1 className="text-[40px] font-normal leading-none text-black">
         {headingGreeting}
         <span className="font-bold italic">{headingName}</span>
@@ -622,7 +636,7 @@ function HomeComponent({
         </span>
       </h1>
 
-      <div className="mt-10 grid min-h-[calc(100vh-120px)] gap-10 lg:grid-cols-3">
+      <div className="mt-10 grid gap-10 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <div className="grid grid-cols-[180px_1fr] gap-x-8">
             <div
@@ -713,13 +727,20 @@ function HomeComponent({
                 type="button"
                 onClick={() => {
                   setHeartVisible(true);
-                  if (heartTimerRef.current) window.clearTimeout(heartTimerRef.current);
-                  heartTimerRef.current = window.setTimeout(() => setHeartVisible(false), 900);
+                  if (heartTimerRef.current)
+                    window.clearTimeout(heartTimerRef.current);
+                  heartTimerRef.current = window.setTimeout(
+                    () => setHeartVisible(false),
+                    900,
+                  );
                   onTamagotchiClick();
 
-                  const actionGif = getSpeciesClickGif(activeTamagotchi.species);
+                  const actionGif = getSpeciesClickGif(
+                    activeTamagotchi.species,
+                  );
                   if (actionGif) {
-                    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+                    if (clickTimerRef.current)
+                      window.clearTimeout(clickTimerRef.current);
                     setClickGifUrl(actionGif);
                     setClickKey((k) => k + 1);
                     clickTimerRef.current = window.setTimeout(() => {
@@ -727,13 +748,22 @@ function HomeComponent({
                     }, 1400);
                   }
                 }}
-                className="relative flex h-[70%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
+                className="relative flex h-[80%] w-full flex-col items-center justify-center overflow-hidden rounded-[40px] transition-opacity duration-150 hover:opacity-90"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  key={clickGifUrl ? `click-${clickKey}` : `idle-${activeTamagotchi.species}`}
-                  src={clickGifUrl ?? getSpeciesIdleGif(activeTamagotchi.species)}
-                  alt={activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species)}
+                  key={
+                    clickGifUrl
+                      ? `click-${clickKey}`
+                      : `idle-${activeTamagotchi.species}`
+                  }
+                  src={
+                    clickGifUrl ?? getSpeciesIdleGif(activeTamagotchi.species)
+                  }
+                  alt={
+                    activeTamagotchi.displayName ??
+                    getSpeciesName(activeTamagotchi.species)
+                  }
                   className="h-[98%] w-auto object-contain drop-shadow-lg"
                   style={{
                     imageRendering: "pixelated",
@@ -767,7 +797,9 @@ function HomeComponent({
                         ref={renameInputRef}
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Escape") setIsRenaming(false); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setIsRenaming(false);
+                        }}
                         onBlur={() => setIsRenaming(false)}
                         className="w-full bg-transparent text-[22px] font-medium text-black outline-none border-b border-black/30 focus:border-black/60"
                         placeholder={getSpeciesName(activeTamagotchi.species)}
@@ -777,13 +809,15 @@ function HomeComponent({
                   ) : (
                     <>
                       <span className="text-[22px] font-medium text-black">
-                        {activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species)}
+                        {activeTamagotchi.displayName ??
+                          getSpeciesName(activeTamagotchi.species)}
                       </span>
                       <button
                         type="button"
                         onClick={() => {
                           setRenameValue(
-                            activeTamagotchi.displayName ?? getSpeciesName(activeTamagotchi.species),
+                            activeTamagotchi.displayName ??
+                              getSpeciesName(activeTamagotchi.species),
                           );
                           setIsRenaming(true);
                         }}
@@ -805,7 +839,9 @@ function HomeComponent({
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
                     <div
                       className="h-full rounded-full bg-black/50 transition-all duration-500"
-                      style={{ width: `${(activeTamagotchi.happiness / 10) * 100}%` }}
+                      style={{
+                        width: `${(activeTamagotchi.happiness / 10) * 100}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -814,7 +850,9 @@ function HomeComponent({
                 <div className="mt-2">
                   <div className="mb-1 flex justify-between text-[12px] font-medium text-black/40">
                     <span>✨ XP</span>
-                    <span>{globalXp}/{MAX_XP}</span>
+                    <span>
+                      {globalXp}/{MAX_XP}
+                    </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10">
                     <div
@@ -929,9 +967,7 @@ function MenuOverlay({
                   <span className="w-6 font-mono font-medium text-black">
                     {focusedIndex === index ? ">" : ""}
                   </span>
-                  <span className="font-medium">
-                    {option}
-                  </span>
+                  <span className="font-medium">{option}</span>
                 </button>
               ))}
             </div>
@@ -966,8 +1002,11 @@ function AppearanceOverlay({
   onThemeSelect: (themeId: string) => void;
   animationClass?: string;
 }) {
-  const [focusedIndex, setFocusedIndex] = useState(
-    () => Math.max(0, THEMES.findIndex((t) => t.id === currentTheme)),
+  const [focusedIndex, setFocusedIndex] = useState(() =>
+    Math.max(
+      0,
+      THEMES.findIndex((t) => t.id === currentTheme),
+    ),
   );
 
   useEffect(() => {
@@ -978,14 +1017,10 @@ function AppearanceOverlay({
         setFocusedIndex((prev) => (prev + 1) % THEMES.length);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setFocusedIndex(
-          (prev) => (prev - 1 + THEMES.length) % THEMES.length,
-        );
+        setFocusedIndex((prev) => (prev - 1 + THEMES.length) % THEMES.length);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setFocusedIndex(
-          (prev) => (prev + cols) % THEMES.length,
-        );
+        setFocusedIndex((prev) => (prev + cols) % THEMES.length);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setFocusedIndex(
@@ -1005,7 +1040,7 @@ function AppearanceOverlay({
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex h-full flex-col overflow-hidden bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Appearance"
@@ -1041,7 +1076,8 @@ function AppearanceOverlay({
                         : isFocused
                           ? `0 4px 14px ${theme.accent}22`
                           : "0 2px 6px rgba(0,0,0,0.06)",
-                      transition: "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
+                      transition:
+                        "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
                     }}
                     onMouseEnter={() => setFocusedIndex(index)}
                     onClick={() => onThemeSelect(theme.id)}
@@ -1093,8 +1129,11 @@ function FontOverlay({
   onFontSelect: (fontId: string) => void;
   animationClass?: string;
 }) {
-  const [focusedIndex, setFocusedIndex] = useState(
-    () => Math.max(0, FONTS.findIndex((f) => f.id === currentFont)),
+  const [focusedIndex, setFocusedIndex] = useState(() =>
+    Math.max(
+      0,
+      FONTS.findIndex((f) => f.id === currentFont),
+    ),
   );
 
   useEffect(() => {
@@ -1126,14 +1165,12 @@ function FontOverlay({
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 flex min-h-screen w-full flex-col bg-white px-6 py-8 ${animationClass}`}
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex h-full flex-col overflow-hidden bg-white px-6 py-8 ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Font"
     >
-      <h1 className="text-[40px] font-bold leading-none text-black">
-        Font
-      </h1>
+      <h1 className="text-[40px] font-bold leading-none text-black">Font</h1>
 
       <div className="flex flex-1 flex-col justify-evenly">
         {rows.map((row, rowIndex) => (
@@ -1161,7 +1198,8 @@ function FontOverlay({
                         : isFocused
                           ? "0 4px 14px color-mix(in srgb, var(--app-ink) 8%, transparent)"
                           : "0 2px 6px rgba(0,0,0,0.06)",
-                      transition: "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
+                      transition:
+                        "box-shadow 180ms ease, outline-color 180ms ease, outline-width 180ms ease",
                     }}
                     onMouseEnter={() => setFocusedIndex(index)}
                     onClick={() => onFontSelect(font.id)}
@@ -1224,7 +1262,10 @@ function TamagotchiPreferencesOverlay({
     [status.tamagotchis],
   );
   const lineOwnedMap = useMemo(
-    () => new Map(status.tamagotchis.filter((t) => t.lineId).map((t) => [t.lineId!, t])),
+    () =>
+      new Map(
+        status.tamagotchis.filter((t) => t.lineId).map((t) => [t.lineId!, t]),
+      ),
     [status.tamagotchis],
   );
   const activeTama = status.tamagotchis.find((t) => t.isActive);
@@ -1246,12 +1287,15 @@ function TamagotchiPreferencesOverlay({
   const [focusedIndex, setFocusedIndex] = useState(() =>
     Math.max(0, navigableItems.indexOf(activeTama?.species ?? "")),
   );
-  const focusSpecies = useCallback((speciesId: string) => {
-    const nextIndex = navigableItems.indexOf(speciesId);
-    if (nextIndex >= 0) {
-      setFocusedIndex(nextIndex);
-    }
-  }, [navigableItems]);
+  const focusSpecies = useCallback(
+    (speciesId: string) => {
+      const nextIndex = navigableItems.indexOf(speciesId);
+      if (nextIndex >= 0) {
+        setFocusedIndex(nextIndex);
+      }
+    },
+    [navigableItems],
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -1262,28 +1306,54 @@ function TamagotchiPreferencesOverlay({
     if (!speciesId) return;
     const el = cardRefs.current.get(speciesId);
     if (el && scrollRef.current) {
-      el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      el.scrollIntoView({
+        behavior: "smooth",
+        inline: "center",
+        block: "nearest",
+      });
     }
   }, [focusedIndex, navigableItems]);
 
-  // Arrow key + Enter navigation
+  const navigableItemsRef = useRef(navigableItems);
+  const focusedIndexRef = useRef(focusedIndex);
+  const onSelectSpeciesRef = useRef(onSelectSpecies);
+
+  useEffect(() => {
+    navigableItemsRef.current = navigableItems;
+    focusedIndexRef.current = focusedIndex;
+    onSelectSpeciesRef.current = onSelectSpecies;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (!["ArrowLeft", "ArrowRight", "Enter"].includes(e.key)) return;
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(e.key)) return;
       e.preventDefault();
+      e.stopPropagation();
+      const items = navigableItemsRef.current;
+      const cur = focusedIndexRef.current;
+      const tierCount = EVOLUTION_LINES.reduce((n, l) => n + l.tiers.length, 0);
       if (e.key === "ArrowRight") {
-        setFocusedIndex((prev) => Math.min(navigableItems.length - 1, prev + 1));
+        setFocusedIndex(Math.min(items.length - 1, cur + 1));
       } else if (e.key === "ArrowLeft") {
-        setFocusedIndex((prev) => Math.max(0, prev - 1));
+        setFocusedIndex(Math.max(0, cur - 1));
+      } else if (e.key === "ArrowDown") {
+        if (cur < tierCount && items.length > tierCount) {
+          setFocusedIndex(tierCount);
+        }
+      } else if (e.key === "ArrowUp") {
+        if (cur >= tierCount && tierCount > 0) {
+          setFocusedIndex(tierCount - 1);
+        }
       } else if (e.key === "Enter") {
-        const speciesId = navigableItems[focusedIndex];
-        if (speciesId) onSelectSpecies(speciesId);
+        const speciesId = items[cur];
+        if (speciesId) onSelectSpeciesRef.current(speciesId);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedIndex, navigableItems, onSelectSpecies]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [renamingSpecies, setRenamingSpecies] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -1296,18 +1366,18 @@ function TamagotchiPreferencesOverlay({
   }, [renamingSpecies]);
 
   // ── Layout constants ──────────────────────────────────────────────────────
-  const SCALE = 5.0;           // px per XP unit — determines horizontal spacing
-  const PAD_X = 220;           // left/right padding in the scrollable canvas
-  const CARD_W = 150;          // card width
-  const CARD_H = 150;          // card height
-  const IMG_SIZE = 100;        // character image size inside card
-  const DOT_NEW = 24;          // dot diameter for new-line starts
-  const DOT_EVO = 16;          // dot diameter for evolutions
-  const TICK_H = 18;           // vertical tick below track before XP label
-  const TIMELINE_Y = 340;      // y-position of the horizontal track line (px from scroll area top)
-  const CANVAS_H = 560;        // total height of the scrollable canvas
-  const GAP_CARD_TRACK = 28;   // gap between card bottom and track line
-  const GAP_TRACK_LABEL = 6;   // gap between track dot edge and tick start
+  const SCALE = 5.0; // px per XP unit — determines horizontal spacing
+  const PAD_X = 220; // left/right padding in the scrollable canvas
+  const CARD_W = 150; // card width
+  const CARD_H = 150; // card height
+  const IMG_SIZE = 135; // character image size inside card
+  const DOT_NEW = 24; // dot diameter for new-line starts
+  const DOT_EVO = 16; // dot diameter for evolutions
+  const TICK_H = 18; // vertical tick below track before XP label
+  const TIMELINE_Y = 340; // y-position of the horizontal track line (px from scroll area top)
+  const CANVAS_H = 560; // total height of the scrollable canvas
+  const GAP_CARD_TRACK = 28; // gap between card bottom and track line
+  const GAP_TRACK_LABEL = 6; // gap between track dot edge and tick start
   const totalW = PAD_X * 2 + MAX_XP * SCALE;
 
   const xpToX = (xp: number) => PAD_X + xp * SCALE;
@@ -1324,7 +1394,7 @@ function TamagotchiPreferencesOverlay({
 
   return (
     <div
-      className={`valtest-menu-overlay fixed inset-0 z-50 flex flex-col bg-white ${animationClass}`}
+      className={`valtest-menu-overlay fixed inset-0 z-50 flex flex-col bg-white outline-none ${animationClass}`}
       role="dialog"
       aria-modal="true"
       aria-label="Tamagotchi Preferences"
@@ -1376,7 +1446,13 @@ function TamagotchiPreferencesOverlay({
       </div>
 
       {/* ── Horizontal scrollable timeline ────────────────────────────────── */}
-      <div ref={scrollRef} className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-x-auto overflow-y-hidden"
+        onKeyDown={(e) => {
+          if (["ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
+        }}
+      >
         <div
           className="relative select-none"
           style={{ width: totalW, height: CANVAS_H, minHeight: CANVAS_H }}
@@ -1384,7 +1460,12 @@ function TamagotchiPreferencesOverlay({
           {/* ── Track: background (unfilled) */}
           <div
             className="absolute rounded-full bg-black/8"
-            style={{ top: TIMELINE_Y - 1, left: PAD_X, width: MAX_XP * SCALE, height: 3 }}
+            style={{
+              top: TIMELINE_Y - 1,
+              left: PAD_X,
+              width: MAX_XP * SCALE,
+              height: 3,
+            }}
           />
           {/* ── Track: progress fill */}
           <div
@@ -1423,9 +1504,10 @@ function TamagotchiPreferencesOverlay({
             const labelTop = tickTop + TICK_H + 6;
 
             const isRenaming = renamingSpecies === tier.id;
-            const displayName = lineOwned?.species === tier.id
-              ? (lineOwned.displayName ?? tier.name)
-              : tier.name;
+            const displayName =
+              lineOwned?.species === tier.id
+                ? (lineOwned.displayName ?? tier.name)
+                : tier.name;
 
             return (
               <div
@@ -1444,7 +1526,9 @@ function TamagotchiPreferencesOverlay({
                   }}
                 >
                   <button
-                    ref={(el) => { if (el) cardRefs.current.set(tier.id, el); }}
+                    ref={(el) => {
+                      if (el) cardRefs.current.set(tier.id, el);
+                    }}
                     type="button"
                     onClick={() => {
                       if (!isUnlocked) return;
@@ -1475,7 +1559,8 @@ function TamagotchiPreferencesOverlay({
                           : isUnlocked
                             ? "0 3px 12px rgba(0,0,0,0.09)"
                             : "none",
-                      cursor: isUnlocked && !isThisTierActive ? "pointer" : "default",
+                      cursor:
+                        isUnlocked && !isThisTierActive ? "pointer" : "default",
                     }}
                   >
                     {isUnlocked ? (
@@ -1491,7 +1576,9 @@ function TamagotchiPreferencesOverlay({
                         }}
                       />
                     ) : (
-                      <span className="select-none text-[32px] font-light text-black/12">?</span>
+                      <span className="select-none text-[32px] font-light text-black/12">
+                        ?
+                      </span>
                     )}
                   </button>
 
@@ -1510,7 +1597,9 @@ function TamagotchiPreferencesOverlay({
                             ref={renameInputRef}
                             value={renameValue}
                             onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setRenamingSpecies(null);
+                            }}
                             onBlur={() => setRenamingSpecies(null)}
                             className="w-full rounded-md border border-black/20 bg-transparent px-2 py-0.5 text-center text-[14px] text-black outline-none focus:border-black/50"
                             style={{ maxWidth: CARD_W + 20 }}
@@ -1564,9 +1653,10 @@ function TamagotchiPreferencesOverlay({
                         ? "var(--app-ink)"
                         : "color-mix(in srgb, var(--app-ink) 60%, transparent)"
                       : "#d0d0d0",
-                    boxShadow: isNewLine && isUnlocked
-                      ? "0 0 0 6px color-mix(in srgb, var(--app-ink) 10%, transparent)"
-                      : undefined,
+                    boxShadow:
+                      isNewLine && isUnlocked
+                        ? "0 0 0 6px color-mix(in srgb, var(--app-ink) 10%, transparent)"
+                        : undefined,
                   }}
                 />
 
@@ -1634,20 +1724,27 @@ function TamagotchiPreferencesOverlay({
       {/* ── Special pets strip ────────────────────────────────────────────── */}
       <div className="shrink-0 border-t border-black/8 px-8 py-5">
         <div className="flex items-center gap-8">
-          <div className="shrink-0">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-black/28">Special</div>
-            <div className="mt-0.5 text-[11px] text-black/30">Unlocked via milestones</div>
-          </div>
           <div className="flex items-end gap-6">
             {SPECIAL_PETS.map((pet) => {
-              const owned = DEV_UNLOCK_ALL ? (ownedMap.get(pet.id) ?? { species: pet.id, displayName: null, happiness: 10, isActive: false, lineId: null, lastClickAt: null }) : ownedMap.get(pet.id);
+              const owned = DEV_UNLOCK_ALL
+                ? (ownedMap.get(pet.id) ?? {
+                    species: pet.id,
+                    displayName: null,
+                    happiness: 10,
+                    isActive: false,
+                    lineId: null,
+                    lastClickAt: null,
+                  })
+                : ownedMap.get(pet.id);
               const isActive = activeTama?.species === pet.id;
               const petDisplayName = owned?.displayName ?? pet.name;
               const isRenaming = renamingSpecies === pet.id;
               return (
                 <div key={pet.id} className="flex flex-col items-center gap-2">
                   <button
-                    ref={(el) => { if (el) cardRefs.current.set(pet.id, el); }}
+                    ref={(el) => {
+                      if (el) cardRefs.current.set(pet.id, el);
+                    }}
                     type="button"
                     onClick={() => {
                       if (!owned) return;
@@ -1656,7 +1753,7 @@ function TamagotchiPreferencesOverlay({
                     }}
                     onFocus={() => focusSpecies(pet.id)}
                     onMouseEnter={() => focusSpecies(pet.id)}
-                    className="flex h-[72px] w-[72px] items-center justify-center rounded-[18px] transition-all duration-150"
+                    className="flex h-[96px] w-[96px] items-center justify-center rounded-[22px] transition-all duration-150"
                     style={{
                       backgroundColor: owned
                         ? "var(--app-card)"
@@ -1671,7 +1768,9 @@ function TamagotchiPreferencesOverlay({
                         ? "0 6px 20px color-mix(in srgb, var(--app-ink) 16%, transparent)"
                         : navigableItems[focusedIndex] === pet.id
                           ? "0 4px 16px color-mix(in srgb, var(--app-ink) 14%, transparent)"
-                          : owned ? "0 2px 8px rgba(0,0,0,0.07)" : "none",
+                          : owned
+                            ? "0 2px 8px rgba(0,0,0,0.07)"
+                            : "none",
                       cursor: owned ? "pointer" : "default",
                     }}
                   >
@@ -1681,15 +1780,18 @@ function TamagotchiPreferencesOverlay({
                         src={pet.idleGif}
                         alt={pet.name}
                         style={{
-                          height: 48,
-                          width: 48,
+                          height: 82,
+                          width: 82,
                           objectFit: "contain",
                           imageRendering: "pixelated",
-                          transform: pet.id === "bear" ? "scale(1.35)" : undefined,
+                          transform:
+                            pet.id === "bear" ? "scale(1.55)" : undefined,
                         }}
                       />
                     ) : (
-                      <span className="select-none text-[26px] text-black/12">?</span>
+                      <span className="select-none text-[26px] text-black/12">
+                        ?
+                      </span>
                     )}
                   </button>
                   {owned && (
@@ -1706,7 +1808,9 @@ function TamagotchiPreferencesOverlay({
                             ref={renameInputRef}
                             value={renameValue}
                             onChange={(e) => setRenameValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Escape") setRenamingSpecies(null); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") setRenamingSpecies(null);
+                            }}
                             onBlur={() => setRenamingSpecies(null)}
                             className="w-[80px] rounded-md border border-black/20 bg-transparent px-1.5 py-0.5 text-center text-[13px] text-black outline-none"
                             placeholder={pet.name}
@@ -1715,11 +1819,16 @@ function TamagotchiPreferencesOverlay({
                         </form>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <span className="text-[13px] font-semibold text-black/60">{petDisplayName}</span>
+                          <span className="text-[13px] font-semibold text-black/60">
+                            {petDisplayName}
+                          </span>
                           {isActive && (
                             <button
                               type="button"
-                              onClick={() => { setRenameValue(petDisplayName); setRenamingSpecies(pet.id); }}
+                              onClick={() => {
+                                setRenameValue(petDisplayName);
+                                setRenamingSpecies(pet.id);
+                              }}
                               className="text-[13px] text-black/25 transition-colors hover:text-black/55"
                               title="Rename"
                             >
@@ -1818,8 +1927,12 @@ function FolderGridCard({
       onClick={onClick}
       onFocus={onFocus}
     >
-      <div className="text-[18px] font-semibold leading-none text-black/40 uppercase tracking-[0.12em]">Folder</div>
-      <div className="mt-3 text-[24px] font-bold leading-tight">{folder.name}</div>
+      <div className="text-[18px] font-semibold leading-none text-black/40 uppercase tracking-[0.12em]">
+        Folder
+      </div>
+      <div className="mt-3 text-[24px] font-bold leading-tight">
+        {folder.name}
+      </div>
       <div className="mt-5 text-[16px] font-medium leading-none text-black/55">
         {folder.noteCount} {folder.noteCount === 1 ? "note" : "notes"}
       </div>
@@ -1835,7 +1948,8 @@ function useSavedToast() {
 
   useEffect(() => {
     return () => {
-      if (hideSavedTimerRef.current) window.clearTimeout(hideSavedTimerRef.current);
+      if (hideSavedTimerRef.current)
+        window.clearTimeout(hideSavedTimerRef.current);
     };
   }, []);
 
@@ -1865,14 +1979,20 @@ function AllItemsComponent({
   const [sortMode, setSortMode] = useState<
     "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc"
   >("date-desc");
-  const [activeSection, setActiveSection] = useState<"folders" | "notes">("folders");
+  const [activeSection, setActiveSection] = useState<"folders" | "notes">(
+    "folders",
+  );
   const [activeIndex, setActiveIndex] = useState(0);
   const foldersGridRef = useRef<HTMLDivElement | null>(null);
   const notesGridRef = useRef<HTMLDivElement | null>(null);
   const hasInitializedSection = useRef(false);
 
-  const { data: notesData, isLoading: notesLoading } = useSWR<{ notes: NoteSummary[] }>("/api/notes", swrFetcher);
-  const { data: foldersData, isLoading: foldersLoading } = useSWR<{ folders: FolderSummary[] }>("/api/folders?view=folders", swrFetcher);
+  const { data: notesData, isLoading: notesLoading } = useSWR<{
+    notes: NoteSummary[];
+  }>("/api/notes", swrFetcher);
+  const { data: foldersData, isLoading: foldersLoading } = useSWR<{
+    folders: FolderSummary[];
+  }>("/api/folders?view=folders", swrFetcher);
   const notes = notesData?.notes ?? [];
   const folders = foldersData?.folders ?? [];
   const isLoading = notesLoading || foldersLoading;
@@ -1906,24 +2026,53 @@ function AllItemsComponent({
     };
 
     void run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const sortedNotes = useMemo(() => [...notes].sort((left, right) => {
-    if (sortMode === "date-desc") return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    if (sortMode === "date-asc") return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-    if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
-    if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
-    return stripHtml(right.content).length - stripHtml(left.content).length;
-  }), [notes, sortMode]);
+  const sortedNotes = useMemo(
+    () =>
+      [...notes].sort((left, right) => {
+        if (sortMode === "date-desc")
+          return (
+            new Date(right.createdAt).getTime() -
+            new Date(left.createdAt).getTime()
+          );
+        if (sortMode === "date-asc")
+          return (
+            new Date(left.createdAt).getTime() -
+            new Date(right.createdAt).getTime()
+          );
+        if (sortMode === "alpha-asc")
+          return left.name.localeCompare(right.name);
+        if (sortMode === "alpha-desc")
+          return right.name.localeCompare(left.name);
+        return stripHtml(right.content).length - stripHtml(left.content).length;
+      }),
+    [notes, sortMode],
+  );
 
-  const sortedFolders = useMemo(() => [...folders].sort((left, right) => {
-    if (sortMode === "alpha-asc") return left.name.localeCompare(right.name);
-    if (sortMode === "alpha-desc") return right.name.localeCompare(left.name);
-    // default: date-desc / date-asc by updatedAt
-    if (sortMode === "date-asc") return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
-    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-  }), [folders, sortMode]);
+  const sortedFolders = useMemo(
+    () =>
+      [...folders].sort((left, right) => {
+        if (sortMode === "alpha-asc")
+          return left.name.localeCompare(right.name);
+        if (sortMode === "alpha-desc")
+          return right.name.localeCompare(left.name);
+        // default: date-desc / date-asc by updatedAt
+        if (sortMode === "date-asc")
+          return (
+            new Date(left.updatedAt).getTime() -
+            new Date(right.updatedAt).getTime()
+          );
+        return (
+          new Date(right.updatedAt).getTime() -
+          new Date(left.updatedAt).getTime()
+        );
+      }),
+    [folders, sortMode],
+  );
 
   useEffect(() => {
     if (!isLoading) {
@@ -1935,83 +2084,133 @@ function AllItemsComponent({
     }
   }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFoldersKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (sortedFolders.length === 0) return;
-    const columnCount = 4;
+  const handleFoldersKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (sortedFolders.length === 0) return;
+      const columnCount = 4;
 
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const folder = sortedFolders[activeIndex];
-      if (folder) {
-        const selectedNoteIds = notes.filter((n) => n.folderId === folder.id).map((n) => n.id);
-        onOpenFolder({ id: folder.id, name: folder.name, ownerEmail: folder.ownerEmail, selectedNoteIds });
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const folder = sortedFolders[activeIndex];
+        if (folder) {
+          const selectedNoteIds = notes
+            .filter((n) => n.folderId === folder.id)
+            .map((n) => n.id);
+          onOpenFolder({
+            id: folder.id,
+            name: folder.name,
+            ownerEmail: folder.ownerEmail,
+            selectedNoteIds,
+          });
+        }
+        return;
       }
-      return;
-    }
-    if (event.key === "ArrowLeft") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - 1)); return; }
-    if (event.key === "ArrowRight") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedFolders.length - 1, c + 1)); return; }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      const next = activeIndex + columnCount;
-      if (next < sortedFolders.length) {
-        setActiveIndex(next);
-      } else if (sortedNotes.length > 0) {
-        setActiveSection("notes");
-        setActiveIndex(0);
-        notesGridRef.current?.focus();
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setActiveIndex((c) => Math.max(0, c - 1));
+        return;
       }
-      return;
-    }
-    if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - columnCount)); }
-  }, [sortedFolders, sortedNotes, activeIndex, notes, onOpenFolder]);
-
-  const handleNotesKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (sortedNotes.length === 0) return;
-    const columnCount = 4;
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const note = sortedNotes[activeIndex];
-      if (note) onOpenNote({ id: note.id, name: note.name, content: note.content, ownerEmail: note.ownerEmail });
-      return;
-    }
-    if (event.key === "ArrowLeft") { event.preventDefault(); setActiveIndex((c) => Math.max(0, c - 1)); return; }
-    if (event.key === "ArrowRight") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedNotes.length - 1, c + 1)); return; }
-    if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((c) => Math.min(sortedNotes.length - 1, c + columnCount)); return; }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      const prev = activeIndex - columnCount;
-      if (prev >= 0) {
-        setActiveIndex(prev);
-      } else if (sortedFolders.length > 0) {
-        setActiveSection("folders");
-        setActiveIndex(Math.min(activeIndex, sortedFolders.length - 1));
-        foldersGridRef.current?.focus();
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setActiveIndex((c) => Math.min(sortedFolders.length - 1, c + 1));
+        return;
       }
-    }
-  }, [sortedNotes, sortedFolders, activeIndex, onOpenNote]);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const next = activeIndex + columnCount;
+        if (next < sortedFolders.length) {
+          setActiveIndex(next);
+        } else if (sortedNotes.length > 0) {
+          setActiveSection("notes");
+          setActiveIndex(0);
+          notesGridRef.current?.focus();
+        }
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((c) => Math.max(0, c - columnCount));
+      }
+    },
+    [sortedFolders, sortedNotes, activeIndex, notes, onOpenFolder],
+  );
 
-  const skeletons = useMemo(() => Array.from({ length: 8 }).map((_, index) => (
-    <div
-      key={`skeleton-${index}`}
-      className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
-    >
-      <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
-      <div className="mt-5 space-y-3">
-        <div className="h-4 rounded-full bg-black/[0.08]" />
-        <div className="h-4 rounded-full bg-black/[0.08]" />
-        <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
-      </div>
-      <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
-    </div>
-  )), []);
+  const handleNotesKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (sortedNotes.length === 0) return;
+      const columnCount = 4;
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const note = sortedNotes[activeIndex];
+        if (note)
+          onOpenNote({
+            id: note.id,
+            name: note.name,
+            content: note.content,
+            ownerEmail: note.ownerEmail,
+          });
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setActiveIndex((c) => Math.max(0, c - 1));
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setActiveIndex((c) => Math.min(sortedNotes.length - 1, c + 1));
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveIndex((c) =>
+          Math.min(sortedNotes.length - 1, c + columnCount),
+        );
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        const prev = activeIndex - columnCount;
+        if (prev >= 0) {
+          setActiveIndex(prev);
+        } else if (sortedFolders.length > 0) {
+          setActiveSection("folders");
+          setActiveIndex(Math.min(activeIndex, sortedFolders.length - 1));
+          foldersGridRef.current?.focus();
+        }
+      }
+    },
+    [sortedNotes, sortedFolders, activeIndex, onOpenNote],
+  );
+
+  const skeletons = useMemo(
+    () =>
+      Array.from({ length: 8 }).map((_, index) => (
+        <div
+          key={`skeleton-${index}`}
+          className="folder-skeleton-card rounded-[28px] border border-black/[0.08] bg-[var(--app-card-alt)] p-5"
+        >
+          <div className="h-7 w-2/3 rounded-full bg-black/[0.08]" />
+          <div className="mt-5 space-y-3">
+            <div className="h-4 rounded-full bg-black/[0.08]" />
+            <div className="h-4 rounded-full bg-black/[0.08]" />
+            <div className="h-4 w-4/5 rounded-full bg-black/[0.08]" />
+          </div>
+          <div className="mt-6 h-4 w-1/3 rounded-full bg-black/[0.08]" />
+        </div>
+      )),
+    [],
+  );
 
   return (
     <div className="min-h-screen w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-6">
         <h1 className="text-[40px] font-bold leading-none text-black">
           {headingText}
-          <span className="typewriter-cursor" aria-hidden="true">|</span>
+          <span className="typewriter-cursor" aria-hidden="true">
+            |
+          </span>
         </h1>
 
         <div className="min-w-[260px]">
@@ -2025,7 +2224,14 @@ function AllItemsComponent({
             id="items-sort"
             value={sortMode}
             onChange={(event) =>
-              setSortMode(event.target.value as "date-desc" | "date-asc" | "alpha-asc" | "alpha-desc" | "size-desc")
+              setSortMode(
+                event.target.value as
+                  | "date-desc"
+                  | "date-asc"
+                  | "alpha-asc"
+                  | "alpha-desc"
+                  | "size-desc",
+              )
             }
             className="w-full rounded-[18px] border border-black/10 bg-[var(--app-card)] px-4 py-3 pr-12 text-[18px] font-medium text-black outline-none"
           >
@@ -2039,7 +2245,7 @@ function AllItemsComponent({
       </div>
 
       {/* Folders section */}
-      {(isLoading || sortedFolders.length > 0) ? (
+      {isLoading || sortedFolders.length > 0 ? (
         <div className="mt-10">
           <h2 className="mb-4 text-[18px] font-semibold uppercase tracking-[0.14em] text-black/40">
             Folders
@@ -2059,15 +2265,27 @@ function AllItemsComponent({
                   <FolderGridCard
                     key={folder.id}
                     folder={folder}
-                    isActive={activeSection === "folders" && index === activeIndex}
+                    isActive={
+                      activeSection === "folders" && index === activeIndex
+                    }
                     animationDelayMs={Math.min(index, 11) * 45}
-                    onFocus={() => { setActiveSection("folders"); setActiveIndex(index); }}
+                    onFocus={() => {
+                      setActiveSection("folders");
+                      setActiveIndex(index);
+                    }}
                     onClick={() => {
                       setActiveSection("folders");
                       setActiveIndex(index);
                       foldersGridRef.current?.focus();
-                      const selectedNoteIds = notes.filter((n) => n.folderId === folder.id).map((n) => n.id);
-                      onOpenFolder({ id: folder.id, name: folder.name, ownerEmail: folder.ownerEmail, selectedNoteIds });
+                      const selectedNoteIds = notes
+                        .filter((n) => n.folderId === folder.id)
+                        .map((n) => n.id);
+                      onOpenFolder({
+                        id: folder.id,
+                        name: folder.name,
+                        ownerEmail: folder.ownerEmail,
+                        selectedNoteIds,
+                      });
                     }}
                   />
                 ))}
@@ -2076,8 +2294,10 @@ function AllItemsComponent({
       ) : null}
 
       {/* Notes section */}
-      {(isLoading || sortedNotes.length > 0) ? (
-        <div className={sortedFolders.length > 0 || isLoading ? "mt-10" : "mt-10"}>
+      {isLoading || sortedNotes.length > 0 ? (
+        <div
+          className={sortedFolders.length > 0 || isLoading ? "mt-10" : "mt-10"}
+        >
           <h2 className="mb-4 text-[18px] font-semibold uppercase tracking-[0.14em] text-black/40">
             Notes
           </h2>
@@ -2096,14 +2316,24 @@ function AllItemsComponent({
                   <NoteGridCard
                     key={note.id}
                     note={note}
-                    isActive={activeSection === "notes" && index === activeIndex}
+                    isActive={
+                      activeSection === "notes" && index === activeIndex
+                    }
                     animationDelayMs={Math.min(index, 11) * 45}
-                    onFocus={() => { setActiveSection("notes"); setActiveIndex(index); }}
+                    onFocus={() => {
+                      setActiveSection("notes");
+                      setActiveIndex(index);
+                    }}
                     onClick={() => {
                       setActiveSection("notes");
                       setActiveIndex(index);
                       notesGridRef.current?.focus();
-                      onOpenNote({ id: note.id, name: note.name, content: note.content, ownerEmail: note.ownerEmail });
+                      onOpenNote({
+                        id: note.id,
+                        name: note.name,
+                        content: note.content,
+                        ownerEmail: note.ownerEmail,
+                      });
                     }}
                   />
                 ))}
@@ -2142,7 +2372,8 @@ function NoteComponent({
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [bodyPlaceholder, setBodyPlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
-  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } = useSavedToast();
+  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } =
+    useSavedToast();
   const mathInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const shouldAnimatePlaceholders = title.trim().length === 0 && isEditorEmpty;
@@ -2216,7 +2447,14 @@ function NoteComponent({
         isSavingRef.current = false;
       }
     },
-    [content, noteId, onNoteSaved, onNoteUsageCountChange, title, triggerSavedToast],
+    [
+      content,
+      noteId,
+      onNoteSaved,
+      onNoteUsageCountChange,
+      title,
+      triggerSavedToast,
+    ],
   );
 
   const triggerManualSave = useCallback(() => {
@@ -2709,7 +2947,8 @@ function FolderComponent({
     initialFolder?.selectedNoteIds ?? [],
   );
   const [activeIndex, setActiveIndex] = useState(0);
-  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } = useSavedToast();
+  const { showSavedToast, savedToastKey, savedToastText, triggerSavedToast } =
+    useSavedToast();
   const lastSavedSignatureRef = useRef(
     createFolderSignature(
       initialFolder?.id ?? null,
@@ -3124,9 +3363,7 @@ export default function RootHomeShell({
   const router = useRouter();
   const [view, setView] = useState<
     "home" | "all-notes" | "note" | "folder" | "profile"
-  >(
-    initialView,
-  );
+  >(initialView);
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
   const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(
     initialFolder,
@@ -3145,35 +3382,52 @@ export default function RootHomeShell({
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isFontOpen, setIsFontOpen] = useState(false);
   const [isTamagotchiOpen, setIsTamagotchiOpen] = useState(false);
-  const [closingOverlay, setClosingOverlay] = useState<"menu" | "appearance" | "font" | "tamagotchi" | null>(null);
-  const closeOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [closingOverlay, setClosingOverlay] = useState<
+    "menu" | "appearance" | "font" | "tamagotchi" | null
+  >(null);
+  const closeOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
-  const closeOverlay = useCallback((name: "menu" | "appearance" | "font" | "tamagotchi") => {
-    if (closeOverlayTimerRef.current) clearTimeout(closeOverlayTimerRef.current);
-    setClosingOverlay(name);
-    closeOverlayTimerRef.current = setTimeout(() => {
-      setClosingOverlay(null);
-      if (name === "menu") setIsMenuOpen(false);
-      else if (name === "appearance") setIsAppearanceOpen(false);
-      else if (name === "font") setIsFontOpen(false);
-      else if (name === "tamagotchi") setIsTamagotchiOpen(false);
-    }, 200);
-  }, []);
+  const closeOverlay = useCallback(
+    (name: "menu" | "appearance" | "font" | "tamagotchi") => {
+      if (closeOverlayTimerRef.current)
+        clearTimeout(closeOverlayTimerRef.current);
+      setClosingOverlay(name);
+      closeOverlayTimerRef.current = setTimeout(() => {
+        setClosingOverlay(null);
+        if (name === "menu") setIsMenuOpen(false);
+        else if (name === "appearance") setIsAppearanceOpen(false);
+        else if (name === "font") setIsFontOpen(false);
+        else if (name === "tamagotchi") setIsTamagotchiOpen(false);
+      }, 200);
+    },
+    [],
+  );
 
-  const [closingView, setClosingView] = useState<"all-notes" | "folder" | "profile" | null>(null);
+  const [closingView, setClosingView] = useState<
+    "all-notes" | "folder" | "profile" | null
+  >(null);
   const closeViewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const closeView = useCallback((name: "all-notes" | "folder" | "profile", andThen?: () => void) => {
-    if (closeViewTimerRef.current) clearTimeout(closeViewTimerRef.current);
-    setClosingView(name);
-    closeViewTimerRef.current = setTimeout(() => {
-      setClosingView(null);
-      setView("home");
-      andThen?.();
-    }, 200);
-  }, []);
-  const [currentTheme, setCurrentTheme] = useState("default");
-  const [currentFont, setCurrentFont] = useState("doto");
+  const closeView = useCallback(
+    (name: "all-notes" | "folder" | "profile", andThen?: () => void) => {
+      if (closeViewTimerRef.current) clearTimeout(closeViewTimerRef.current);
+      setClosingView(name);
+      closeViewTimerRef.current = setTimeout(() => {
+        setClosingView(null);
+        setView("home");
+        andThen?.();
+      }, 200);
+    },
+    [],
+  );
+  const [currentTheme, setCurrentTheme] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("noted-theme") ?? "default") : "default",
+  );
+  const [currentFont, setCurrentFont] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("noted-font") ?? "doto") : "doto",
+  );
   const [tamagotchiStatus, setTamagotchiStatus] =
     useState<TamagotchiStatus | null>(null);
   const [newUnlockToast, setNewUnlockToast] = useState<string[]>([]);
@@ -3251,22 +3505,19 @@ export default function RootHomeShell({
     }).catch(() => {});
   }, []);
 
-  const handleMenuItemSelect = useCallback(
-    (option: string) => {
-      if (option === "Appearance") {
-        setIsMenuOpen(false);
-        setIsAppearanceOpen(true);
-      } else if (option === "Font") {
-        setIsMenuOpen(false);
-        setIsFontOpen(true);
-      } else if (option === "たまごっち Preferences") {
-        setIsMenuOpen(false);
-        setIsTamagotchiOpen(true);
-      }
-      // other menu items: no action yet
-    },
-    [],
-  );
+  const handleMenuItemSelect = useCallback((option: string) => {
+    if (option === "Appearance") {
+      setIsMenuOpen(false);
+      setIsAppearanceOpen(true);
+    } else if (option === "Font") {
+      setIsMenuOpen(false);
+      setIsFontOpen(true);
+    } else if (option === "たまごっち Preferences") {
+      setIsMenuOpen(false);
+      setIsTamagotchiOpen(true);
+    }
+    // other menu items: no action yet
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -3281,7 +3532,11 @@ export default function RootHomeShell({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isAppearanceOpen && closingOverlay !== "appearance") {
+      if (
+        e.key === "Escape" &&
+        isAppearanceOpen &&
+        closingOverlay !== "appearance"
+      ) {
         e.preventDefault();
         closeOverlay("appearance");
         return;
@@ -3293,7 +3548,11 @@ export default function RootHomeShell({
         return;
       }
 
-      if (e.key === "Escape" && isTamagotchiOpen && closingOverlay !== "tamagotchi") {
+      if (
+        e.key === "Escape" &&
+        isTamagotchiOpen &&
+        closingOverlay !== "tamagotchi"
+      ) {
         e.preventDefault();
         closeOverlay("tamagotchi");
         return;
@@ -3345,7 +3604,18 @@ export default function RootHomeShell({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen, isAppearanceOpen, isFontOpen, isTamagotchiOpen, view, closingOverlay, closingView, closeOverlay, closeView, router]);
+  }, [
+    isMenuOpen,
+    isAppearanceOpen,
+    isFontOpen,
+    isTamagotchiOpen,
+    view,
+    closingOverlay,
+    closingView,
+    closeOverlay,
+    closeView,
+    router,
+  ]);
 
   const activeTamagotchi =
     tamagotchiStatus?.tamagotchis?.find((t) => t.isActive) ?? null;
@@ -3354,58 +3624,60 @@ export default function RootHomeShell({
     <>
       {view === "home" ? (
         <div className="view-enter">
-        <HomeComponent
-          key={activeTamagotchi?.species ?? "homepage-default"}
-          activeTamagotchi={activeTamagotchi}
-          globalXp={tamagotchiStatus?.globalXp ?? 0}
-          onTamagotchiClick={() => {
-            // Fire click API (happiness boost) — non-blocking
-            void fetch("/api/tamagotchi/click", { method: "POST" })
-              .then(async (res) => {
-                if (!res.ok) return;
-                const data = (await res.json()) as { happiness?: number };
-                if (typeof data.happiness === "number") {
-                  setTamagotchiStatus((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          tamagotchis: prev.tamagotchis.map((t) =>
-                            t.isActive
-                              ? { ...t, happiness: data.happiness! }
-                              : t,
-                          ),
-                        }
-                      : prev,
-                  );
-                }
-              })
-              .catch(() => {});
-          }}
-          onRename={(name) => {
-            const active = activeTamagotchi;
-            if (!active) return;
-            void fetch("/api/tamagotchi/rename", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ species: active.species, name }),
-            }).then(() => {
-              setTamagotchiStatus((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      tamagotchis: prev.tamagotchis.map((t) =>
-                        t.isActive ? { ...t, displayName: name || null } : t,
-                      ),
-                    }
-                  : prev,
-              );
-            });
-          }}
-        />
+          <HomeComponent
+            key={activeTamagotchi?.species ?? "homepage-default"}
+            activeTamagotchi={activeTamagotchi}
+            globalXp={tamagotchiStatus?.globalXp ?? 0}
+            onTamagotchiClick={() => {
+              // Fire click API (happiness boost) — non-blocking
+              void fetch("/api/tamagotchi/click", { method: "POST" })
+                .then(async (res) => {
+                  if (!res.ok) return;
+                  const data = (await res.json()) as { happiness?: number };
+                  if (typeof data.happiness === "number") {
+                    setTamagotchiStatus((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            tamagotchis: prev.tamagotchis.map((t) =>
+                              t.isActive
+                                ? { ...t, happiness: data.happiness! }
+                                : t,
+                            ),
+                          }
+                        : prev,
+                    );
+                  }
+                })
+                .catch(() => {});
+            }}
+            onRename={(name) => {
+              const active = activeTamagotchi;
+              if (!active) return;
+              void fetch("/api/tamagotchi/rename", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ species: active.species, name }),
+              }).then(() => {
+                setTamagotchiStatus((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        tamagotchis: prev.tamagotchis.map((t) =>
+                          t.isActive ? { ...t, displayName: name || null } : t,
+                        ),
+                      }
+                    : prev,
+                );
+              });
+            }}
+          />
         </div>
       ) : null}
-      {(view === "all-notes" || closingView === "all-notes") ? (
-        <div className={closingView === "all-notes" ? "view-exit" : "view-enter"}>
+      {view === "all-notes" || closingView === "all-notes" ? (
+        <div
+          className={closingView === "all-notes" ? "view-exit" : "view-enter"}
+        >
           <AllItemsComponent
             onOpenNote={(note) => {
               setActiveNote(note);
@@ -3453,7 +3725,7 @@ export default function RootHomeShell({
           />
         </div>
       ) : null}
-      {(view === "folder" || closingView === "folder") ? (
+      {view === "folder" || closingView === "folder" ? (
         <div className={closingView === "folder" ? "view-exit" : "view-enter"}>
           <FolderComponent
             key={activeFolder?.id ?? `new-folder-${folderSessionKey}`}
@@ -3461,18 +3733,16 @@ export default function RootHomeShell({
           />
         </div>
       ) : null}
-      {(view === "profile" || closingView === "profile") ? (
+      {view === "profile" || closingView === "profile" ? (
         <div className={closingView === "profile" ? "view-exit" : "view-enter"}>
-          <ProfileView
-            profile={profile}
-            schools={schools}
-            viewer={viewer}
-          />
+          <ProfileView profile={profile} schools={schools} viewer={viewer} />
         </div>
       ) : null}
-      {(isMenuOpen || closingOverlay === "menu") ? (
+      {isMenuOpen || closingOverlay === "menu" ? (
         <MenuOverlay
-          animationClass={closingOverlay === "menu" ? "overlay-exit" : "overlay-enter"}
+          animationClass={
+            closingOverlay === "menu" ? "overlay-exit" : "overlay-enter"
+          }
           onClose={() => closeOverlay("menu")}
           noteUsageCount={noteUsageCount}
           onSelectOption={(option) => {
@@ -3485,9 +3755,11 @@ export default function RootHomeShell({
           }}
         />
       ) : null}
-      {(isAppearanceOpen || closingOverlay === "appearance") ? (
+      {isAppearanceOpen || closingOverlay === "appearance" ? (
         <AppearanceOverlay
-          animationClass={closingOverlay === "appearance" ? "overlay-exit" : "overlay-enter"}
+          animationClass={
+            closingOverlay === "appearance" ? "overlay-exit" : "overlay-enter"
+          }
           onClose={() => closeOverlay("appearance")}
           currentTheme={currentTheme}
           onThemeSelect={(themeId) => {
@@ -3496,9 +3768,11 @@ export default function RootHomeShell({
           }}
         />
       ) : null}
-      {(isFontOpen || closingOverlay === "font") ? (
+      {isFontOpen || closingOverlay === "font" ? (
         <FontOverlay
-          animationClass={closingOverlay === "font" ? "overlay-exit" : "overlay-enter"}
+          animationClass={
+            closingOverlay === "font" ? "overlay-exit" : "overlay-enter"
+          }
           onClose={() => closeOverlay("font")}
           currentFont={currentFont}
           onFontSelect={(fontId) => {
@@ -3507,10 +3781,13 @@ export default function RootHomeShell({
           }}
         />
       ) : null}
-      {(isTamagotchiOpen || closingOverlay === "tamagotchi") && tamagotchiStatus ? (
+      {(isTamagotchiOpen || closingOverlay === "tamagotchi") &&
+      tamagotchiStatus ? (
         <TamagotchiPreferencesOverlay
           key={activeTamagotchi?.species ?? "tamagotchi-none"}
-          animationClass={closingOverlay === "tamagotchi" ? "overlay-exit" : "overlay-enter"}
+          animationClass={
+            closingOverlay === "tamagotchi" ? "overlay-exit" : "overlay-enter"
+          }
           onClose={() => closeOverlay("tamagotchi")}
           status={tamagotchiStatus}
           onSelectSpecies={(speciesId) => {

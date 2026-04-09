@@ -71,6 +71,12 @@
   --app-card-alt: #e5d7b8;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   --font-body: var(--font-doto);
   background: var(--background);

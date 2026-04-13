@@ -13,6 +13,12 @@ enum FriendshipStatus {
   REJECTED
 }
 
+enum NoteVisibility {
+  PRIVATE
+  SCHOOL
+  PUBLIC
+}
+
 model User {
   id              String    @id @default(cuid())
   clerkId         String    @unique
@@ -32,6 +38,8 @@ model User {
 
   notes           Note[]
   folders         Folder[]
+  noteLikes       NoteLike[]
+  noteComments    NoteComment[]
   streak          UserStreak?
   tamagotchis     UserTamagotchi[]
   progress        UserProgress?
@@ -51,21 +59,29 @@ model Note {
   id            String    @id @default(cuid())
   name          String
   content       String    @db.Text
+  visibility    NoteVisibility @default(PRIVATE)
+  publishedAt   DateTime?
+  likeCount     Int       @default(0)
+  commentCount  Int       @default(0)
 
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   folderId      String?
   folder        Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  likes         NoteLike[]
+  comments      NoteComment[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
   @@index([ownerId, createdAt])
+  @@index([ownerId, visibility, updatedAt])
   @@index([folderId])
   @@index([deletedAt])
   @@index([name])
+  @@index([visibility, publishedAt])
 }
 
 model Folder {
@@ -115,6 +131,36 @@ model School {
   updatedAt    DateTime @updatedAt
 
   @@unique([name])
+}
+
+model NoteLike {
+  noteId      String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, userId])
+  @@index([userId, createdAt])
+  @@index([noteId, createdAt])
+}
+
+model NoteComment {
+  id          String   @id @default(cuid())
+  noteId      String
+  authorId    String
+  body        String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  note        Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([noteId, createdAt])
+  @@index([authorId, createdAt])
+  @@index([deletedAt])
 }
 
 // ─── Tamagotchi System ───

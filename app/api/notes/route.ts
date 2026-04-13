@@ -2,6 +2,42 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDbUser } from "@/lib/api-auth";
 import { getOrCreateProgress, checkAndUnlockTamagotchis, awardXpAndCheckUnlocks } from "@/lib/progress-utils";
+import { isNoteVisibilityId, type NoteVisibilityId } from "@/lib/note-visibility";
+
+type NotePublicationState = {
+  publishedAt: Date | null;
+  visibility: NoteVisibilityId;
+};
+
+type PublicationStateClient = {
+  $executeRaw: typeof prisma.$executeRaw;
+  $queryRaw: typeof prisma.$queryRaw;
+};
+
+async function readNotePublicationState(
+  tx: PublicationStateClient,
+  noteId: string,
+): Promise<NotePublicationState> {
+  const rows = await tx.$queryRaw<
+    Array<{ publishedAt: Date | null; visibility: NoteVisibilityId }>
+  >`SELECT "publishedAt", "visibility" FROM "Note" WHERE "id" = ${noteId} LIMIT 1`;
+
+  return rows[0] ?? { visibility: "PRIVATE", publishedAt: null };
+}
+
+async function writeNotePublicationState(
+  tx: PublicationStateClient,
+  noteId: string,
+  visibility: NoteVisibilityId,
+  publishedAt: Date | null,
+) {
+  await tx.$executeRaw`
+    UPDATE "Note"
+    SET "visibility" = ${visibility}::"NoteVisibility",
+        "publishedAt" = ${publishedAt}
+    WHERE "id" = ${noteId}
+  `;
+}
 
 export async function GET() {
   try {
@@ -36,6 +72,8 @@ export async function GET() {
         createdAt: note.createdAt.toISOString(),
         ownerEmail: note.owner.email,
         folderId: note.folderId,
+        visibility: note.visibility,
+        publishedAt: note.publishedAt?.toISOString() ?? null,
       })),
     });
   } catch (error) {
@@ -58,6 +96,7 @@ export async function POST(request: Request) {
       noteId?: string;
       title?: string;
       content?: string;
+      visibility?: string;
     };
 
     const trimmedTitle = body.title?.trim();
@@ -97,6 +136,18 @@ export async function POST(request: Request) {
           throw new Error("A note with that title already exists.");
         }
 
+        const currentPublicationState = await readNotePublicationState(
+          tx,
+          existingNote.id,
+        );
+        const nextVisibility = isNoteVisibilityId(body.visibility)
+          ? body.visibility
+          : currentPublicationState.visibility;
+        const nextPublishedAt =
+          nextVisibility === "PRIVATE"
+            ? null
+            : currentPublicationState.publishedAt ?? new Date();
+
         const note = await tx.note.update({
           where: {
             id: body.noteId,
@@ -113,6 +164,12 @@ export async function POST(request: Request) {
             },
           },
         });
+        await writeNotePublicationState(
+          tx,
+          note.id,
+          nextVisibility,
+          nextPublishedAt,
+        );
 
         const noteUsageCount = await tx.note.count({
           where: {
@@ -121,7 +178,17 @@ export async function POST(request: Request) {
           },
         });
 
-        return { note, noteUsageCount };
+        return {
+          note: {
+            content: note.content,
+            id: note.id,
+            name: note.name,
+            ownerEmail: note.owner.email,
+            publishedAt: nextPublishedAt,
+            visibility: nextVisibility,
+          },
+          noteUsageCount,
+        };
       }
 
       const existingNote = await tx.note.findFirst({
@@ -140,6 +207,18 @@ export async function POST(request: Request) {
       });
 
       if (existingNote) {
+        const currentPublicationState = await readNotePublicationState(
+          tx,
+          existingNote.id,
+        );
+        const nextVisibility = isNoteVisibilityId(body.visibility)
+          ? body.visibility
+          : currentPublicationState.visibility;
+        const nextPublishedAt =
+          nextVisibility === "PRIVATE"
+            ? null
+            : currentPublicationState.publishedAt ?? new Date();
+
         const note = await tx.note.update({
           where: {
             id: existingNote.id,
@@ -155,6 +234,12 @@ export async function POST(request: Request) {
             },
           },
         });
+        await writeNotePublicationState(
+          tx,
+          note.id,
+          nextVisibility,
+          nextPublishedAt,
+        );
 
         const noteUsageCount = await tx.note.count({
           where: {
@@ -163,8 +248,22 @@ export async function POST(request: Request) {
           },
         });
 
-        return { note, noteUsageCount };
+        return {
+          note: {
+            content: note.content,
+            id: note.id,
+            name: note.name,
+            ownerEmail: note.owner.email,
+            publishedAt: nextPublishedAt,
+            visibility: nextVisibility,
+          },
+          noteUsageCount,
+        };
       }
+
+      const nextVisibility = isNoteVisibilityId(body.visibility)
+        ? body.visibility
+        : "PRIVATE";
 
       const createdNote = await tx.note.create({
         data: {
@@ -180,6 +279,14 @@ export async function POST(request: Request) {
           },
         },
       });
+      const nextPublishedAt =
+        nextVisibility === "PRIVATE" ? null : new Date();
+      await writeNotePublicationState(
+        tx,
+        createdNote.id,
+        nextVisibility,
+        nextPublishedAt,
+      );
 
       await tx.user.update({
         where: {
@@ -199,7 +306,17 @@ export async function POST(request: Request) {
         },
       });
 
-      return { note: createdNote, noteUsageCount };
+      return {
+        note: {
+          content: createdNote.content,
+          id: createdNote.id,
+          name: createdNote.name,
+          ownerEmail: createdNote.owner.email,
+          publishedAt: nextPublishedAt,
+          visibility: nextVisibility,
+        },
+        noteUsageCount,
+      };
     });
 
     // Track first-note milestone + award XP for characters written (fire-and-forget)
@@ -223,6 +340,20 @@ export async function POST(request: Request) {
       if (xpEarned > 0) {
         await awardXpAndCheckUnlocks(dbUser.id, xpEarned);
       }
+
+      if (
+        isNoteVisibilityId(body.visibility) &&
+        body.visibility !== "PRIVATE" &&
+        !currentProgress.hasAddedFirstCommunity
+      ) {
+        const updated = await prisma.userProgress.upsert({
+          where: { userId: dbUser.id },
+          update: { hasAddedFirstCommunity: true },
+          create: { userId: dbUser.id, hasAddedFirstCommunity: true },
+        });
+        await checkAndUnlockTamagotchis(dbUser.id, updated);
+      }
+
       void currentProgress; // suppress unused warning
     })();
 
@@ -231,7 +362,9 @@ export async function POST(request: Request) {
         id: result.note.id,
         name: result.note.name,
         content: result.note.content,
-        ownerEmail: result.note.owner.email,
+        ownerEmail: result.note.ownerEmail,
+        visibility: result.note.visibility,
+        publishedAt: result.note.publishedAt?.toISOString() ?? null,
       },
       noteUsageCount: result.noteUsageCount,
     });

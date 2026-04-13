@@ -36,6 +36,10 @@ import {
   getPreviewText,
   formatAuthoredDate,
 } from "@/lib/text-utils";
+import {
+  NOTE_VISIBILITY_LABELS,
+  type NoteVisibilityId,
+} from "@/lib/note-visibility";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const BODY_PLACEHOLDER = "Start typing your genius here...";
@@ -46,7 +50,7 @@ const HOME_SHORTCUTS = [
   { key: "F", label: "new folder" },
   { key: "M", label: "menu" },
   { key: "S", label: "save" },
-  { key: "L", label: "look" },
+  { key: "L", label: "explore" },
   { key: "D", label: "delete" },
   { key: "T", label: "trash" },
 ] as const;
@@ -57,6 +61,7 @@ const HOME_ACTIONS = [
 ] as const;
 const MENU_OPTIONS = [
   "Account",
+  "Explore",
   "Appearance",
   "Font",
   "Languages",
@@ -64,6 +69,11 @@ const MENU_OPTIONS = [
   "STEM Preferences",
   "たまごっち Preferences",
 ] as const;
+const SAVE_VISIBILITY_OPTIONS: NoteVisibilityId[] = [
+  "PRIVATE",
+  "SCHOOL",
+  "PUBLIC",
+];
 
 const FONTS = [
   {
@@ -203,6 +213,8 @@ type InitialNote = {
   name: string;
   content: string;
   ownerEmail: string;
+  visibility: NoteVisibilityId;
+  publishedAt: string | null;
 };
 
 type NoteSummary = {
@@ -212,6 +224,8 @@ type NoteSummary = {
   createdAt: string;
   ownerEmail: string;
   folderId: string | null;
+  visibility: NoteVisibilityId;
+  publishedAt: string | null;
 };
 
 type FolderSummary = {
@@ -327,11 +341,13 @@ function createNoteSignature(
   noteId: string | null,
   title: string,
   content: string,
+  visibility: NoteVisibilityId,
 ) {
   return JSON.stringify({
     noteId,
     title: title.trim(),
     content,
+    visibility,
   });
 }
 
@@ -962,7 +978,11 @@ function MenuOverlay({
                   onClick={() => onSelectOption(option)}
                   className={`flex items-center gap-3 text-left font-medium transition-opacity duration-150 ${
                     focusedIndex === index ? "opacity-100" : "opacity-45"
-                  } ${option !== "Account" ? "cursor-default" : ""}`}
+                  } ${
+                    option === "Account" || option === "Explore"
+                      ? ""
+                      : "cursor-default"
+                  }`}
                 >
                   <span className="w-6 font-mono font-medium text-black">
                     {focusedIndex === index ? ">" : ""}
@@ -1886,6 +1906,19 @@ function NoteGridCard({
       onClick={onClick}
       onFocus={onFocus}
     >
+      <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em]">
+        <span
+          className={`rounded-full px-3 py-1 ${
+            note.visibility === "PUBLIC"
+              ? "bg-black text-white"
+              : note.visibility === "SCHOOL"
+                ? "bg-black/10 text-black/75"
+                : "bg-black/[0.06] text-black/45"
+          }`}
+        >
+          {NOTE_VISIBILITY_LABELS[note.visibility]}
+        </span>
+      </div>
       <div className="text-[24px] font-bold leading-tight">{note.name}</div>
       <div
         className={`mt-4 text-[18px] leading-[1.45] ${
@@ -2149,6 +2182,8 @@ function AllItemsComponent({
             name: note.name,
             content: note.content,
             ownerEmail: note.ownerEmail,
+            visibility: note.visibility,
+            publishedAt: note.publishedAt,
           });
         return;
       }
@@ -2333,6 +2368,8 @@ function AllItemsComponent({
                         name: note.name,
                         content: note.content,
                         ownerEmail: note.ownerEmail,
+                        visibility: note.visibility,
+                        publishedAt: note.publishedAt,
                       });
                     }}
                   />
@@ -2369,6 +2406,13 @@ function NoteComponent({
   const [title, setTitle] = useState(initialNote?.name ?? "");
   const [noteId, setNoteId] = useState<string | null>(initialNote?.id ?? null);
   const [content, setContent] = useState(initialNote?.content ?? "<p></p>");
+  const [visibility, setVisibility] = useState<NoteVisibilityId>(
+    initialNote?.visibility ?? "PRIVATE",
+  );
+  const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
+  const [focusedSaveOptionIndex, setFocusedSaveOptionIndex] = useState(() =>
+    SAVE_VISIBILITY_OPTIONS.indexOf(initialNote?.visibility ?? "PRIVATE"),
+  );
   const [titlePlaceholder, setTitlePlaceholder] = useState("");
   const [bodyPlaceholder, setBodyPlaceholder] = useState("");
   const [arePlaceholdersVisible, setArePlaceholdersVisible] = useState(false);
@@ -2376,24 +2420,40 @@ function NoteComponent({
     useSavedToast();
   const mathInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const saveMenuRef = useRef<HTMLDivElement | null>(null);
   const shouldAnimatePlaceholders = title.trim().length === 0 && isEditorEmpty;
+  const hasTypedContent =
+    title.trim().length > 0 || stripHtml(content).trim().length > 0;
   const lastSavedSignatureRef = useRef(
     createNoteSignature(
       initialNote?.id ?? null,
       initialNote?.name ?? "",
       initialNote?.content ?? "<p></p>",
+      initialNote?.visibility ?? "PRIVATE",
     ),
   );
 
   const saveNote = useCallback(
-    async ({ showToastOnNoop = false }: { showToastOnNoop?: boolean } = {}) => {
+    async ({
+      showToastOnNoop = false,
+      overrideVisibility,
+    }: {
+      showToastOnNoop?: boolean;
+      overrideVisibility?: NoteVisibilityId;
+    } = {}) => {
       const trimmedTitle = title.trim();
+      const nextVisibility = overrideVisibility ?? visibility;
 
       if (!trimmedTitle || isSavingRef.current) {
         return;
       }
 
-      const signature = createNoteSignature(noteId, trimmedTitle, content);
+      const signature = createNoteSignature(
+        noteId,
+        trimmedTitle,
+        content,
+        nextVisibility,
+      );
       if (signature === lastSavedSignatureRef.current) {
         if (showToastOnNoop) {
           triggerSavedToast();
@@ -2413,6 +2473,7 @@ function NoteComponent({
             noteId,
             title: trimmedTitle,
             content,
+            visibility: nextVisibility,
           }),
         });
 
@@ -2429,6 +2490,7 @@ function NoteComponent({
         }
 
         setNoteId(data.note.id);
+        setVisibility(data.note.visibility);
         if (typeof data.noteUsageCount === "number") {
           onNoteUsageCountChange?.(data.noteUsageCount);
         }
@@ -2437,6 +2499,7 @@ function NoteComponent({
           data.note.id,
           data.note.name,
           data.note.content,
+          data.note.visibility,
         );
 
         triggerSavedToast();
@@ -2454,19 +2517,44 @@ function NoteComponent({
       onNoteUsageCountChange,
       title,
       triggerSavedToast,
+      visibility,
     ],
   );
 
-  const triggerManualSave = useCallback(() => {
-    triggerSavedToast("Saving...");
+  const openSaveMenu = useCallback(() => {
+    if (!hasTypedContent) {
+      return;
+    }
 
     if (!title.trim()) {
       triggerSavedToast("Add a title first");
       return;
     }
 
-    void saveNote({ showToastOnNoop: true });
-  }, [saveNote, title, triggerSavedToast]);
+    setIsSaveMenuOpen((current) => !current);
+  }, [hasTypedContent, title, triggerSavedToast]);
+
+  const triggerManualSave = useCallback(() => {
+    openSaveMenu();
+  }, [openSaveMenu]);
+
+  const handleSaveAction = useCallback(
+    (nextVisibility: NoteVisibilityId) => {
+      setIsSaveMenuOpen(false);
+      triggerSavedToast(
+        nextVisibility === "PRIVATE"
+          ? "Saving..."
+          : nextVisibility === "SCHOOL"
+            ? "Saving to school..."
+            : "Publishing...",
+      );
+      void saveNote({
+        overrideVisibility: nextVisibility,
+        showToastOnNoop: true,
+      });
+    },
+    [saveNote, triggerSavedToast],
+  );
 
   const handleCloseNoteShortcut = useCallback(
     (event: { preventDefault(): void }) => {
@@ -2759,7 +2847,12 @@ function NoteComponent({
       return;
     }
 
-    const signature = createNoteSignature(noteId, trimmedTitle, content);
+    const signature = createNoteSignature(
+      noteId,
+      trimmedTitle,
+      content,
+      visibility,
+    );
     if (signature === lastSavedSignatureRef.current) {
       return;
     }
@@ -2771,18 +2864,90 @@ function NoteComponent({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [noteId, title, content, saveNote]);
+  }, [noteId, title, content, saveNote, visibility]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !mathEditor) {
+        if (isSaveMenuOpen) {
+          setIsSaveMenuOpen(false);
+          return;
+        }
         handleCloseNoteShortcut(event);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleCloseNoteShortcut, mathEditor]);
+  }, [handleCloseNoteShortcut, isSaveMenuOpen, mathEditor]);
+
+  useEffect(() => {
+    if (!hasTypedContent) {
+      setIsSaveMenuOpen(false);
+    }
+  }, [hasTypedContent]);
+
+  useEffect(() => {
+    if (!isSaveMenuOpen) {
+      return;
+    }
+
+    const currentIndex = SAVE_VISIBILITY_OPTIONS.indexOf(visibility);
+    setFocusedSaveOptionIndex(currentIndex >= 0 ? currentIndex : 0);
+  }, [isSaveMenuOpen, visibility]);
+
+  useEffect(() => {
+    if (!isSaveMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!saveMenuRef.current) {
+        return;
+      }
+
+      if (!saveMenuRef.current.contains(event.target as Node)) {
+        setIsSaveMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isSaveMenuOpen]);
+
+  useEffect(() => {
+    if (!isSaveMenuOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setFocusedSaveOptionIndex(
+          (current) => (current + 1) % SAVE_VISIBILITY_OPTIONS.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setFocusedSaveOptionIndex(
+          (current) =>
+            (current - 1 + SAVE_VISIBILITY_OPTIONS.length) %
+            SAVE_VISIBILITY_OPTIONS.length,
+        );
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleSaveAction(SAVE_VISIBILITY_OPTIONS[focusedSaveOptionIndex]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedSaveOptionIndex, handleSaveAction, isSaveMenuOpen]);
 
   const saveMathEditor = () => {
     if (!editor || !mathEditor) {
@@ -2828,7 +2993,11 @@ function NoteComponent({
             ref={titleInputRef}
             type="text"
             value={title}
-            className="w-full text-[40px] font-bold text-black bg-transparent border-0 outline-none"
+            className={`w-full border-0 bg-transparent text-[40px] font-bold text-black outline-none ${
+              title.length === 0 && arePlaceholdersVisible
+                ? "caret-transparent"
+                : "caret-black"
+            }`}
             aria-label="Note title"
             onChange={(event) => {
               setTitle(event.target.value);
@@ -2848,7 +3017,7 @@ function NoteComponent({
         </div>
       </div>
 
-      <div className="relative">
+      <div className="relative min-h-[65vh] pb-24">
         {!isEditorFocused && isEditorEmpty && arePlaceholdersVisible ? (
           <div className="pointer-events-none absolute left-0 top-0 text-[25px] leading-[1.5] text-gray-400">
             <span>{bodyPlaceholder}</span>
@@ -2861,6 +3030,60 @@ function NoteComponent({
           editor={editor}
           className="w-full text-[25px] leading-[1.5] text-black"
         />
+        {hasTypedContent ? (
+          <div
+            ref={saveMenuRef}
+            className="absolute bottom-0 right-0 flex flex-col items-end gap-2"
+          >
+            {isSaveMenuOpen ? (
+              <div className="w-[220px] rounded-[20px] border border-black/10 bg-white p-2 shadow-[0_16px_40px_rgba(17,24,39,0.12)]">
+                {SAVE_VISIBILITY_OPTIONS.map((option, index) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`flex w-full items-center justify-between rounded-[14px] px-3 py-2 text-left text-[13px] transition-colors ${
+                        focusedSaveOptionIndex === index
+                          ? "bg-black text-white"
+                          : "text-black/72 hover:bg-black/5"
+                      }`}
+                      onMouseEnter={() => setFocusedSaveOptionIndex(index)}
+                      onClick={() => handleSaveAction(option)}
+                    >
+                      <span className="font-medium">
+                        {option === "PRIVATE"
+                          ? "Save privately"
+                          : option === "SCHOOL"
+                            ? "School"
+                            : "Publish"}
+                      </span>
+                      <span
+                        className={`text-[11px] ${
+                          focusedSaveOptionIndex === index
+                            ? "text-white/70"
+                            : "text-black/35"
+                        }`}
+                      >
+                        {option === "PRIVATE"
+                          ? "only you"
+                          : option === "SCHOOL"
+                            ? "school feed"
+                            : "public feed"}
+                      </span>
+                    </button>
+                  ),
+                )}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              className="rounded-full border border-black/10 bg-[var(--app-card)] px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black transition-transform duration-150 hover:-translate-y-0.5"
+              onClick={openSaveMenu}
+            >
+              Save | {isSaveMenuOpen ? "v" : ">"}
+            </button>
+          </div>
+        ) : null}
       </div>
       {mathEditor ? (
         <div
@@ -3509,6 +3732,9 @@ export default function RootHomeShell({
     if (option === "Appearance") {
       setIsMenuOpen(false);
       setIsAppearanceOpen(true);
+    } else if (option === "Explore") {
+      setIsMenuOpen(false);
+      router.push("/explore");
     } else if (option === "Font") {
       setIsMenuOpen(false);
       setIsFontOpen(true);
@@ -3517,7 +3743,7 @@ export default function RootHomeShell({
       setIsTamagotchiOpen(true);
     }
     // other menu items: no action yet
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     return () => {
@@ -3598,6 +3824,9 @@ export default function RootHomeShell({
         } else if (e.key === "M" || e.key === "m") {
           e.preventDefault();
           setIsMenuOpen(true);
+        } else if (e.key === "L" || e.key === "l") {
+          e.preventDefault();
+          router.push("/explore");
         }
       }
     };

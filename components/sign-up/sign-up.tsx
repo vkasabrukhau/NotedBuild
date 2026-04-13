@@ -333,6 +333,7 @@ export default function SignUpView({
         </div>
       </div>
       <CompletionOverlay
+        canContinue={completionReady}
         onTypingComplete={handleTypingComplete}
         phase={completionPhase}
       />

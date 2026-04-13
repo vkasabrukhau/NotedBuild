@@ -115,6 +115,8 @@ export default async function NotePage({
         name: note.name,
         content: note.content,
         ownerEmail: note.owner.email,
+        visibility: note.visibility,
+        publishedAt: note.publishedAt?.toISOString() ?? null,
       }}
       profile={profile}
       schools={schools}

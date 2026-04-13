@@ -14,7 +14,8 @@ function CompletionTypewriter({
 }: {
   onComplete: () => void;
 }) {
-  const [messagePrefix, setMessagePrefix] = useState("");
+  const [messageLeadLine, setMessageLeadLine] = useState("");
+  const [messageCtaPrefix, setMessageCtaPrefix] = useState("");
   const [messageNoting, setMessageNoting] = useState("");
 
   useEffect(() => {
@@ -57,9 +58,9 @@ function CompletionTypewriter({
 
     const run = async () => {
       await sleep(180);
-      await typeInto("You're all set and ready to go,", setMessagePrefix);
+      await typeInto("You're all set and ready to go,", setMessageLeadLine);
       await sleep(160);
-      await typeInto("Enter to start ", setMessagePrefix);
+      await typeInto("Enter to start ", setMessageCtaPrefix);
       await typeInto("noting.", setMessageNoting);
       onComplete();
     };
@@ -71,12 +72,27 @@ function CompletionTypewriter({
     };
   }, [onComplete]);
 
+  const isSecondLineActive =
+    messageCtaPrefix.length > 0 || messageNoting.length > 0;
+
   return (
     <>
-      {messagePrefix}
-      <span className="font-bold italic">{messageNoting}</span>
-      <span className="typewriter-cursor" aria-hidden="true">
-        |
+      <span className="completion-line">
+        {messageLeadLine}
+        {!isSecondLineActive ? (
+          <span className="typewriter-cursor" aria-hidden="true">
+            |
+          </span>
+        ) : null}
+      </span>
+      <span className="completion-line">
+        {messageCtaPrefix}
+        <span className="font-bold italic">{messageNoting}</span>
+        {isSecondLineActive ? (
+          <span className="typewriter-cursor" aria-hidden="true">
+            |
+          </span>
+        ) : null}
       </span>
     </>
   );
@@ -114,6 +130,14 @@ export default function CompletionOverlay({
         </p>
         {phase === "visible" && canContinue }
       <style jsx>{`
+        .completion-line {
+          display: block;
+        }
+
+        .completion-line + .completion-line {
+          margin-top: 0.16em;
+        }
+
         .typewriter-cursor {
           display: inline-block;
           margin-left: 0.08em;

@@ -155,8 +155,56 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-          <div className="s3-wide-tall" />
-          <div className="s3-right-tall" />
+          <div className="s3-wide-tall">
+            <p className="s3-wide-tall-header">たまごっち Friends</p>
+            <p className="s3-wide-tall-sub">
+              Tamagotchis accompany you on your note taking journey
+            </p>
+            <div className="s3-wide-tall-chars">
+              <div className="s3-wide-tall-char">
+                <Image
+                  src="/landingpageassets/snorlaxlandingpage.png"
+                  alt=""
+                  width={400}
+                  height={400}
+                  draggable={false}
+                />
+              </div>
+              <div className="s3-wide-tall-char">
+                <Image
+                  src="/landingpageassets/mewtwolandingpage.png"
+                  alt=""
+                  width={400}
+                  height={400}
+                  draggable={false}
+                />
+              </div>
+              <div className="s3-wide-tall-char">
+                <Image
+                  src="/landingpageassets/bonelylandingpage.png"
+                  alt=""
+                  width={400}
+                  height={400}
+                  draggable={false}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="s3-right-tall">
+            <p className="s3-right-tall-header">Ctrl + Shift +</p>
+            <p className="s3-right-tall-sub">
+              {"Don't miss a beat with a fully\nshortcuts based interface,\nno trackpad interaction\nrequired"}
+            </p>
+            <div className="s3-right-tall-img">
+              <Image
+                src="/landingpageassets/macintoshlanding.png"
+                alt=""
+                width={400}
+                height={400}
+                draggable={false}
+              />
+            </div>
+          </div>
         </div>
       </section>
     </div>

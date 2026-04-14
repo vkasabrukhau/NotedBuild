@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import ClerkSignUpView from "@/components/auth/clerk-sign-up";
+import LandingPage from "@/components/landing/landing-page";
 import PersonalInfoView from "@/components/personal-info/personal-info";
 import RootHomeShell from "@/components/root-home-shell";
 import SignUpView from "@/components/sign-up/sign-up";
@@ -221,13 +221,13 @@ export default async function Home() {
   const { userId } = await auth();
 
   if (!userId) {
-    return <ClerkSignUpView />;
+    return <LandingPage />;
   }
 
   const clerkUser = await currentUser();
 
   if (!clerkUser) {
-    return <ClerkSignUpView />;
+    return <LandingPage />;
   }
 
   const dbStatus = await getDbStatus(userId, clerkUser);

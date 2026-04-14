@@ -1,0 +1,192 @@
+// ─── Landing Page ─────────────────────────────────────────────
+
+.landing-root {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+// ─── Nav ──────────────────────────────────────────────────────
+
+.landing-nav {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 44px;
+  flex-shrink: 0;
+}
+
+.landing-nav-logo-noted {
+  font-family: var(--font-doto);
+  font-weight: 700;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+  color: #111;
+}
+
+.landing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-btn-signin {
+  background: transparent;
+  border: none;
+  font-family: var(--font-roboto);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #111;
+  cursor: pointer;
+  padding: 8px 18px;
+  border-radius: 999px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.landing-btn-signup {
+  background: #111;
+  border: none;
+  font-family: var(--font-roboto);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+  padding: 9px 22px;
+  border-radius: 999px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #333;
+  }
+}
+
+// ─── Hero ─────────────────────────────────────────────────────
+
+.landing-hero {
+  position: relative;
+  z-index: 0; // establish stacking context for children
+  isolation: isolate;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6vh;
+}
+
+// ─── Heading stage ────────────────────────────────────────────
+// This wrapper shrink-wraps to the heading width so that
+// percentage-based `left` values are relative to the text.
+// The padding-top creates the vertical room that the characters
+// occupy above the headline.
+
+$char-space: 340px; // vertical clearance for character images
+
+.landing-hero-stage {
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  // Room above the heading for the tallest character (girl ≈ 320px)
+  padding-top: $char-space;
+}
+
+// ─── Heading ──────────────────────────────────────────────────
+
+.landing-heading {
+  position: relative;
+  z-index: 2; // text sits above the guy (z-index: 1)
+  display: block;
+  font-size: 80px;
+  line-height: 1;
+  white-space: nowrap;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+.landing-heading-regular {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  color: #111;
+}
+
+.landing-heading-noted {
+  font-family: var(--font-doto);
+  font-weight: 700;
+  color: #111;
+}
+
+// ─── Characters ───────────────────────────────────────────────
+// Both characters are positioned so their bottom edge aligns
+// with approximately the cap-height of the heading text.
+//
+// At 85px Roboto/Doto, cap-height ≈ 62 px above baseline and
+// descender ≈ 17 px below → from the bottom of the 85px
+// line-box the cap-top sits at ≈ 79 px.
+//
+// The heading element is 85px tall (line-height:1).
+// `bottom: 79px` = character's bottom is 79px from the bottom
+// of the stage = at the approximate cap-height of the letters.
+
+.landing-char {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
+
+// Guy: 272 × 457 px original.
+// Display at width 126px → height ≈ 212px.
+// z-index: 1 so the heading text (z-index: 2) renders on top of him.
+// Center of image (63px) placed over center of "M" (≈ 36px) → left ≈ -27px.
+.landing-char-guy {
+  width: 180px;
+  left: -100px;
+  bottom: -40px;
+  z-index: 1; // behind the heading text
+}
+
+// Girl: 245 × 869 px original.
+// Display at width 90px → height ≈ 319px.
+// Moved down slightly: bottom reduced from 79px → 55px.
+.landing-char-girl {
+  width: 90px;
+  left: 737px;
+  bottom: 50px;
+  z-index: 1; // in front of the heading text
+}
+
+// ─── Background ───────────────────────────────────────────────
+
+.landing-background {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  max-width: 1000px;
+  pointer-events: none;
+  user-select: none;
+  z-index: -1; // behind everything — stage (z-index:2), chars, heading
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}

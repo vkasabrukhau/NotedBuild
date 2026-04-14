@@ -74,6 +74,22 @@ export default function LandingPage() {
           />
         </div>
       </section>
+
+      {/* Section 2 */}
+      <section className="landing-s2">
+        <div className="landing-s2-left">
+          <p className="landing-s2-headline">
+            <span className="landing-s2-roboto">{"Designed to\nHelp You\nDo, Think, & Create\n"}</span>
+            <span className="landing-s2-doto">Without Chaos</span>
+          </p>
+        </div>
+
+        <div className="landing-s2-right">
+          <p className="landing-s2-sub">
+            {"Our note taking app drives\nmeaningful cross-institution\ncollaboration in STEM research\nwhile staying sexy."}
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

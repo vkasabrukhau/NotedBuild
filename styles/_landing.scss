@@ -4,10 +4,8 @@
   position: relative;
   width: 100%;
   height: 100dvh;
-  overflow: hidden;
+  overflow-y: auto;
   background: #fff;
-  display: flex;
-  flex-direction: column;
 }
 
 // ─── Nav ──────────────────────────────────────────────────────
@@ -19,7 +17,6 @@
   align-items: center;
   justify-content: space-between;
   padding: 22px 44px;
-  flex-shrink: 0;
 }
 
 .landing-nav-logo-noted {
@@ -74,9 +71,9 @@
 
 .landing-hero {
   position: relative;
-  z-index: 0; // establish stacking context for children
+  z-index: 0;
   isolation: isolate;
-  flex: 1;
+  height: calc(100dvh - 80px); // 80px ≈ nav height, fills rest of viewport
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -189,4 +186,55 @@ $char-space: 340px; // vertical clearance for character images
     width: 100%;
     height: auto;
   }
+}
+
+// ─── Section 2 ────────────────────────────────────────────────
+
+.landing-s2 {
+  display: flex;
+  align-items: flex-start;
+  gap: 80px;
+  padding: 220px 80px 100px;
+  background: #fff;
+}
+
+.landing-s2-left {
+  flex: 1;
+}
+
+.landing-s2-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.landing-s2-headline {
+  font-size: 85px;
+  line-height: 1.05;
+  white-space: pre-line;
+  text-align: left;
+  margin: 0;
+}
+
+.landing-s2-roboto {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  color: #111;
+}
+
+.landing-s2-doto {
+  font-family: var(--font-doto);
+  font-weight: 700;
+  color: #111;
+}
+
+.landing-s2-sub {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 1.2;
+  white-space: pre-line;
+  text-align: right;
+  color: #111;
+  margin: 0;
 }

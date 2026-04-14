@@ -79,14 +79,18 @@ export default function LandingPage() {
       <section className="landing-s2">
         <div className="landing-s2-left">
           <p className="landing-s2-headline">
-            <span className="landing-s2-roboto">{"Designed to\nHelp You\nDo, Think, & Create\n"}</span>
+            <span className="landing-s2-roboto">
+              {"Designed to\nHelp You\nDo, Think, & Create\n"}
+            </span>
             <span className="landing-s2-doto">Without Chaos</span>
           </p>
         </div>
 
         <div className="landing-s2-right">
           <p className="landing-s2-sub">
-            {"Our note taking app drives\nmeaningful cross-institution\ncollaboration in STEM research\nwhile staying sexy."}
+            {
+              "Our note taking app drives\nmeaningful cross-institution\ncollaboration in STEM research\nwhile staying sexy."
+            }
           </p>
         </div>
       </section>
@@ -94,9 +98,63 @@ export default function LandingPage() {
       {/* Section 3: Modular grid */}
       <section className="landing-s3">
         <div className="landing-s3-grid">
-          <div className="s3-narrow-tall" />
-          <div className="s3-narrow-sq" />
-          <div className="s3-wide-short" />
+          <div className="s3-narrow-tall">
+            <p className="s3-narrow-tall-text">
+              {"Dive into\nintellectually\nstimulating\nwith "}
+              <span className="s3-doto">diverse</span>
+              {"\ninterests"}
+            </p>
+            <div className="s3-narrow-tall-img">
+              <Image
+                src="/landingpageassets/guyfallinglandingpage.png"
+                alt=""
+                width={400}
+                height={400}
+                draggable={false}
+              />
+            </div>
+          </div>
+          <div className="s3-narrow-sq">
+            <p className="s3-narrow-sq-text">Infinite Organization</p>
+            <div className="s3-narrow-sq-img">
+              <Image
+                src="/landingpageassets/fileiconlandingpage.png"
+                alt=""
+                width={400}
+                height={400}
+                draggable={false}
+              />
+            </div>
+          </div>
+          <div className="s3-wide-short">
+            <p className="s3-wide-short-text">
+              {"Cross\nUniversity\nCollaboration"}
+            </p>
+            <div className="s3-shields">
+              {[
+                { file: "dukeshieldlanding.png", width: 120 },
+                { file: "princetonlanding.png", width: 120 },
+                { file: "harvardlanding.png", width: 130 },
+                { file: "upennshieldlanding.png", width: 180 },
+                { file: "yalelanding.png", width: 150 },
+              ].map(({ file, width }, i) => (
+                <div
+                  key={file}
+                  className="s3-shield"
+                  style={{ left: `${i * 90}px`, zIndex: i + 1 }}
+                >
+                  <Image
+                    src={`/landingpageassets/universityshields/${file}`}
+                    alt=""
+                    width={120}
+                    height={120}
+                    style={{ width, height: "auto" }}
+                    draggable={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="s3-wide-tall" />
           <div className="s3-right-tall" />
         </div>

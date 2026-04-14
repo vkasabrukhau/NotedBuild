@@ -90,6 +90,17 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
+
+      {/* Section 3: Modular grid */}
+      <section className="landing-s3">
+        <div className="landing-s3-grid">
+          <div className="s3-narrow-tall" />
+          <div className="s3-narrow-sq" />
+          <div className="s3-wide-short" />
+          <div className="s3-wide-tall" />
+          <div className="s3-right-tall" />
+        </div>
+      </section>
     </div>
   );
 }

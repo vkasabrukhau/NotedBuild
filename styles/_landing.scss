@@ -188,6 +188,43 @@ $char-space: 340px; // vertical clearance for character images
   }
 }
 
+// ─── Section 3: Modular grid ──────────────────────────────────
+// Col 1 width = $row so the square cell stays a perfect square.
+// Left col is wider (200px), shrinking the 1fr middle col.
+// Top middle spans 2 rows, bottom middle spans 2 rows (equal split).
+//
+//  [narrow-tall 3×row] [wide-short 2×row ] [right-tall 4×row]
+//  [narrow-tall      ] [wide-short       ] [                ]
+//  [narrow-tall      ] [wide-tall  2×row ] [                ]
+//  [narrow-sq   1×row] [wide-tall        ] [                ]
+
+$row: 200px;
+$gap: 12px;
+
+.landing-s3 {
+  padding: 220px 80px 100px;
+}
+
+.landing-s3-grid {
+  display: grid;
+  grid-template-columns: $row 1fr 280px;
+  grid-template-rows: repeat(4, $row);
+  gap: $gap;
+}
+
+// shared cell style
+.landing-s3-grid > div {
+  border-radius: 25px;
+  border: 2px solid #111;
+  background: transparent;
+}
+
+.s3-narrow-tall { grid-column: 1; grid-row: 1 / 4; }
+.s3-narrow-sq   { grid-column: 1; grid-row: 4; }
+.s3-wide-short  { grid-column: 2; grid-row: 1 / 3; }
+.s3-wide-tall   { grid-column: 2; grid-row: 3 / 5; }
+.s3-right-tall  { grid-column: 3; grid-row: 1 / 5; }
+
 // ─── Section 2 ────────────────────────────────────────────────
 
 .landing-s2 {

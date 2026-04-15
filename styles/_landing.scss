@@ -452,3 +452,126 @@ $gap: 12px;
   color: #111;
   margin: 0;
 }
+
+// ─── Section 4: Math ──────────────────────────────────────────
+
+.landing-s4 {
+  padding: 160px 80px 100px;
+}
+
+.landing-s4-title {
+  font-size: 50px;
+  line-height: 1.1;
+  margin: 0 0 40px;
+}
+
+.landing-s4-roboto {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  color: #111;
+}
+
+.landing-s4-doto {
+  font-family: var(--font-doto);
+  font-weight: 700;
+  color: #111;
+}
+
+.landing-s4-banner {
+  border-radius: 30px;
+  overflow: hidden;
+  height: 500px;
+  background: url("/landingpageassets/mathlanding.png") center / cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-s4-pill {
+  border-radius: 18px;
+  padding: 24px 48px;
+  backdrop-filter: blur(80px);
+  -webkit-backdrop-filter: blur(80px);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.landing-s4-pill-text {
+  font-family: var(--font-doto);
+  font-weight: 600;
+  font-size: 55px;
+  color: #fff;
+  line-height: 1;
+}
+
+// ─── Section 5: Stack ─────────────────────────────────────────
+
+.landing-s5 {
+  padding: 160px 80px 100px;
+}
+
+.landing-s5-title {
+  font-size: 50px;
+  line-height: 1.1;
+  margin: 0 0 40px;
+}
+
+.landing-s5-roboto {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  color: #111;
+}
+
+.landing-s5-doto {
+  font-family: var(--font-doto);
+  font-weight: 700;
+  color: #111;
+}
+
+.landing-s5-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.landing-s5-card {
+  border: 2px solid #111;
+  border-radius: 30px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  max-width: 70%;
+  margin: 0 auto;
+}
+
+.landing-s5-card--dark {
+  background: #111;
+
+  .landing-s5-card-title {
+    color: #fff;
+  }
+}
+
+.landing-s5-card-title {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  font-size: 45px;
+  color: #111;
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.landing-s5-card-img {
+  width: 50%;
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}

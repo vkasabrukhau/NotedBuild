@@ -207,6 +207,65 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Section 4: Math */}
+      <section className="landing-s4">
+        <h2 className="landing-s4-title">
+          <span className="landing-s4-roboto">With /math[ ] LaTeX is </span>
+          <span className="landing-s4-doto">Trivial</span>
+        </h2>
+        <div className="landing-s4-banner">
+          <div className="landing-s4-pill">
+            <span className="landing-s4-pill-text">/math[]</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 5: Stack */}
+      <section className="landing-s5">
+        <h2 className="landing-s5-title">
+          <span className="landing-s5-doto">Lightning </span>
+          <span className="landing-s5-roboto">fast stack to power it all</span>
+        </h2>
+        <div className="landing-s5-grid">
+          <div className="landing-s5-card landing-s5-card--dark">
+            <p className="landing-s5-card-title">TipTap Formatting</p>
+            <div className="landing-s5-card-img">
+              <Image
+                src="/landingpageassets/tiptaplanding.png"
+                alt=""
+                width={300}
+                height={300}
+                draggable={false}
+              />
+            </div>
+          </div>
+          <div className="landing-s5-card">
+            <p className="landing-s5-card-title">Gemini Integration</p>
+            <div className="landing-s5-card-img">
+              <Image
+                src="/landingpageassets/geminilanding.png"
+                alt=""
+                width={300}
+                height={300}
+                draggable={false}
+              />
+            </div>
+          </div>
+          <div className="landing-s5-card">
+            <p className="landing-s5-card-title">NextJS Framework</p>
+            <div className="landing-s5-card-img">
+              <Image
+                src="/landingpageassets/nextjslanding.png"
+                alt=""
+                width={300}
+                height={300}
+                draggable={false}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

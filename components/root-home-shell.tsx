@@ -6,6 +6,7 @@ import { Mathematics } from "@tiptap/extension-mathematics";
 import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import ExplorePage from "@/components/explore/explore-page";
 import ProfileView from "@/components/profile/profile-view";
 import type {
   ProfileSchoolOption,
@@ -328,7 +329,13 @@ function isTamagotchiCheckinResponse(
 }
 
 type RootHomeShellProps = {
-  initialView?: "home" | "all-notes" | "note" | "folder" | "profile";
+  initialView?:
+    | "home"
+    | "all-notes"
+    | "note"
+    | "folder"
+    | "profile"
+    | "explore";
   initialNote?: InitialNote | null;
   initialFolder?: InitialFolder | null;
   initialNoteUsageCount?: number;
@@ -3585,7 +3592,7 @@ export default function RootHomeShell({
 }: RootHomeShellProps) {
   const router = useRouter();
   const [view, setView] = useState<
-    "home" | "all-notes" | "note" | "folder" | "profile"
+    "home" | "all-notes" | "note" | "folder" | "profile" | "explore"
   >(initialView);
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
   const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(
@@ -3629,12 +3636,15 @@ export default function RootHomeShell({
   );
 
   const [closingView, setClosingView] = useState<
-    "all-notes" | "folder" | "profile" | null
+    "all-notes" | "folder" | "profile" | "explore" | null
   >(null);
   const closeViewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeView = useCallback(
-    (name: "all-notes" | "folder" | "profile", andThen?: () => void) => {
+    (
+      name: "all-notes" | "folder" | "profile" | "explore",
+      andThen?: () => void,
+    ) => {
       if (closeViewTimerRef.current) clearTimeout(closeViewTimerRef.current);
       setClosingView(name);
       closeViewTimerRef.current = setTimeout(() => {
@@ -3734,7 +3744,7 @@ export default function RootHomeShell({
       setIsAppearanceOpen(true);
     } else if (option === "Explore") {
       setIsMenuOpen(false);
-      router.push("/explore");
+      setView("explore");
     } else if (option === "Font") {
       setIsMenuOpen(false);
       setIsFontOpen(true);
@@ -3743,7 +3753,7 @@ export default function RootHomeShell({
       setIsTamagotchiOpen(true);
     }
     // other menu items: no action yet
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -3792,7 +3802,12 @@ export default function RootHomeShell({
 
       if (e.key === "Escape" && view !== "note" && closingView === null) {
         e.preventDefault();
-        if (view === "all-notes" || view === "folder" || view === "profile") {
+        if (
+          view === "all-notes" ||
+          view === "folder" ||
+          view === "profile" ||
+          view === "explore"
+        ) {
           closeView(view, () => {
             if (window.location.pathname !== "/") {
               router.push("/");
@@ -3826,7 +3841,7 @@ export default function RootHomeShell({
           setIsMenuOpen(true);
         } else if (e.key === "L" || e.key === "l") {
           e.preventDefault();
-          router.push("/explore");
+          setView("explore");
         }
       }
     };
@@ -3965,6 +3980,11 @@ export default function RootHomeShell({
       {view === "profile" || closingView === "profile" ? (
         <div className={closingView === "profile" ? "view-exit" : "view-enter"}>
           <ProfileView profile={profile} schools={schools} viewer={viewer} />
+        </div>
+      ) : null}
+      {view === "explore" || closingView === "explore" ? (
+        <div className={closingView === "explore" ? "view-exit" : "view-enter"}>
+          <ExplorePage />
         </div>
       ) : null}
       {isMenuOpen || closingOverlay === "menu" ? (

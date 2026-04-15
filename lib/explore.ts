@@ -1,15 +1,16 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { NoteVisibilityId } from "@/lib/note-visibility";
-
-export const EXPLORE_FEEDS = ["friends", "school", "public"] as const;
-
-export type ExploreFeedId = (typeof EXPLORE_FEEDS)[number];
 
 export type ExploreViewer = {
   id: string;
   schoolId: string | null;
 };
+
+export type ExploreSourceType =
+  | "friends"
+  | "school"
+  | "trending"
+  | "public";
 
 export type ExploreNoteCard = {
   id: string;
@@ -22,6 +23,9 @@ export type ExploreNoteCard = {
   likeCount: number;
   commentCount: number;
   likedByViewer: boolean;
+  sourceType: ExploreSourceType;
+  sourceLabel: string;
+  score: number;
   owner: {
     id: string;
     email: string;
@@ -44,10 +48,6 @@ export type ExploreCommentRecord = {
   };
 };
 
-export function isExploreFeedId(value: unknown): value is ExploreFeedId {
-  return typeof value === "string" && EXPLORE_FEEDS.includes(value as ExploreFeedId);
-}
-
 export async function getAcceptedFriendIds(userId: string) {
   const friendships = await prisma.friendship.findMany({
     where: {
@@ -67,82 +67,107 @@ export async function getAcceptedFriendIds(userId: string) {
   );
 }
 
-export function getFeedWhere(
-  feed: ExploreFeedId,
-  viewer: ExploreViewer,
-  friendIds: string[] = [],
-): Prisma.NoteWhereInput | null {
-  if (feed === "friends" && friendIds.length === 0) {
-    return null;
+function getRecencyScore(publishedAt: Date | null, updatedAt: Date) {
+  const basis = publishedAt ?? updatedAt;
+  const ageHours = Math.max(
+    0,
+    (Date.now() - basis.getTime()) / (1000 * 60 * 60),
+  );
+
+  if (ageHours <= 6) {
+    return 30;
   }
 
-  const sameSchoolVisibility: Prisma.NoteWhereInput | null = viewer.schoolId
-    ? {
-        visibility: "SCHOOL",
-        owner: {
-          schoolId: viewer.schoolId,
-        },
-      }
-    : null;
+  if (ageHours <= 24) {
+    return 22;
+  }
 
-  if (feed === "friends") {
+  if (ageHours <= 72) {
+    return 12;
+  }
+
+  if (ageHours <= 168) {
+    return 4;
+  }
+
+  return 0;
+}
+
+function getSourceForCandidate({
+  commentCount,
+  friendIds,
+  likeCount,
+  ownerId,
+  ownerSchoolId,
+  viewer,
+}: {
+  commentCount: number;
+  friendIds: Set<string>;
+  likeCount: number;
+  ownerId: string;
+  ownerSchoolId: string | null;
+  viewer: ExploreViewer;
+}): { sourceLabel: string; sourceType: ExploreSourceType; weight: number } {
+  if (friendIds.has(ownerId)) {
     return {
+      sourceLabel: "From friends",
+      sourceType: "friends",
+      weight: 40,
+    };
+  }
+
+  if (viewer.schoolId && ownerSchoolId === viewer.schoolId) {
+    return {
+      sourceLabel: "From your school",
+      sourceType: "school",
+      weight: 28,
+    };
+  }
+
+  if (commentCount >= 2 || likeCount >= 4) {
+    return {
+      sourceLabel: "Trending now",
+      sourceType: "trending",
+      weight: 18,
+    };
+  }
+
+  return {
+    sourceLabel: "Public post",
+    sourceType: "public",
+    weight: 10,
+  };
+}
+
+export async function getRecommendedExploreFeed(
+  viewer: ExploreViewer,
+  limit = 24,
+): Promise<ExploreNoteCard[]> {
+  const friendIds = new Set(await getAcceptedFriendIds(viewer.id));
+
+  const notes = await prisma.note.findMany({
+    where: {
       deletedAt: null,
       ownerId: {
-        in: friendIds,
+        not: viewer.id,
       },
       OR: [
         {
           visibility: "PUBLIC",
         },
-        ...(sameSchoolVisibility ? [sameSchoolVisibility] : []),
+        ...(viewer.schoolId
+          ? [
+              {
+                visibility: "SCHOOL" as const,
+                owner: {
+                  schoolId: viewer.schoolId,
+                },
+              },
+            ]
+          : []),
       ],
-    };
-  }
-
-  if (feed === "school") {
-    if (!viewer.schoolId) {
-      return null;
-    }
-
-    return {
-      deletedAt: null,
-      ownerId: {
-        not: viewer.id,
-      },
-      owner: {
-        schoolId: viewer.schoolId,
-      },
-      visibility: {
-        in: ["SCHOOL", "PUBLIC"],
-      },
-    };
-  }
-
-  return {
-    deletedAt: null,
-    ownerId: {
-      not: viewer.id,
     },
-    visibility: "PUBLIC",
-  };
-}
-
-export async function getExploreFeed(
-  feed: ExploreFeedId,
-  viewer: ExploreViewer,
-  limit = 24,
-): Promise<ExploreNoteCard[]> {
-  const friendIds = feed === "friends" ? await getAcceptedFriendIds(viewer.id) : [];
-  const where = getFeedWhere(feed, viewer, friendIds);
-
-  if (!where) {
-    return [];
-  }
-
-  const notes = await prisma.note.findMany({
-    where,
-    take: limit,
+    take: Math.max(limit * 4, 72),
     orderBy: [
       {
         publishedAt: "desc",
@@ -176,6 +201,7 @@ export async function getExploreFeed(
           email: true,
           fullName: true,
           profilePhotoUrl: true,
+          schoolId: true,
           school: {
             select: {
               name: true,
@@ -186,25 +212,58 @@ export async function getExploreFeed(
     },
   });
 
-  return notes.map((note) => ({
-    id: note.id,
-    name: note.name,
-    content: note.content,
-    visibility: note.visibility,
-    createdAt: note.createdAt.toISOString(),
-    updatedAt: note.updatedAt.toISOString(),
-    publishedAt: note.publishedAt?.toISOString() ?? null,
-    likeCount: note.likeCount,
-    commentCount: note.commentCount,
-    likedByViewer: note.likes.length > 0,
-    owner: {
-      id: note.owner.id,
-      email: note.owner.email,
-      fullName: note.owner.fullName,
-      profilePhotoUrl: note.owner.profilePhotoUrl,
-      schoolName: note.owner.school?.name ?? null,
-    },
-  }));
+  const ranked = notes
+    .map((note) => {
+      const source = getSourceForCandidate({
+        commentCount: note.commentCount,
+        friendIds,
+        likeCount: note.likeCount,
+        ownerId: note.owner.id,
+        ownerSchoolId: note.owner.schoolId,
+        viewer,
+      });
+      const score =
+        source.weight +
+        getRecencyScore(note.publishedAt, note.updatedAt) +
+        note.likeCount * 3 +
+        note.commentCount * 5;
+
+      return {
+        id: note.id,
+        name: note.name,
+        content: note.content,
+        visibility: note.visibility,
+        createdAt: note.createdAt.toISOString(),
+        updatedAt: note.updatedAt.toISOString(),
+        publishedAt: note.publishedAt?.toISOString() ?? null,
+        likeCount: note.likeCount,
+        commentCount: note.commentCount,
+        likedByViewer: note.likes.length > 0,
+        sourceLabel: source.sourceLabel,
+        sourceType: source.sourceType,
+        score,
+        owner: {
+          id: note.owner.id,
+          email: note.owner.email,
+          fullName: note.owner.fullName,
+          profilePhotoUrl: note.owner.profilePhotoUrl,
+          schoolName: note.owner.school?.name ?? null,
+        },
+      } satisfies ExploreNoteCard;
+    })
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      return (
+        new Date(right.publishedAt ?? right.updatedAt).getTime() -
+        new Date(left.publishedAt ?? left.updatedAt).getTime()
+      );
+    })
+    .slice(0, limit);
+
+  return ranked;
 }
 
 export async function getAccessibleNoteForViewer(

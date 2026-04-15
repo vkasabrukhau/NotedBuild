@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOrCreateDbUser } from "@/lib/api-auth";
-import { getExploreFeed, isExploreFeedId } from "@/lib/explore";
+import { getRecommendedExploreFeed } from "@/lib/explore";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const dbUser = await getOrCreateDbUser();
 
@@ -10,14 +10,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const feedParam = searchParams.get("feed") ?? "school";
-
-    if (!isExploreFeedId(feedParam)) {
-      return NextResponse.json({ error: "Invalid feed." }, { status: 422 });
-    }
-
-    const notes = await getExploreFeed(feedParam, {
+    const notes = await getRecommendedExploreFeed({
       id: dbUser.id,
       schoolId: dbUser.schoolId,
     });

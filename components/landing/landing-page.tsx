@@ -266,6 +266,39 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Section 6: Access */}
+      <section className="landing-s6">
+        <h2 className="landing-s6-title">Access</h2>
+        <div className="landing-s6-body">
+          <div className="landing-s6-image">
+            <Image
+              src="/landingpageassets/coffeelanding.png"
+              alt=""
+              width={600}
+              height={600}
+              draggable={false}
+            />
+          </div>
+          <div className="landing-s6-card">
+            <p className="landing-s6-caption">For Educator(s)</p>
+            <SignUpButton mode="modal">
+              <button type="button" className="landing-s6-btn landing-s6-btn--light">
+                Sign Up
+              </button>
+            </SignUpButton>
+            <SignInButton mode="modal">
+              <button type="button" className="landing-s6-btn landing-s6-btn--light">
+                Sign In
+              </button>
+            </SignInButton>
+            <p className="landing-s6-caption landing-s6-caption--spaced">For Students</p>
+            <button type="button" className="landing-s6-btn landing-s6-btn--blue">
+              Beta Sign Up
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

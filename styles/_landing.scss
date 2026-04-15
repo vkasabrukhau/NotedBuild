@@ -579,3 +579,81 @@ $gap: 12px;
     height: auto;
   }
 }
+
+// ─── Section 6: Access ────────────────────────────────────────
+
+.landing-s6 {
+  padding: 160px 80px 120px;
+}
+
+.landing-s6-title {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  font-size: 50px;
+  color: #111;
+  margin: 0 0 40px;
+}
+
+.landing-s6-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+.landing-s6-image {
+  flex: 1;
+
+  img {
+    display: block;
+    width: 85%;
+    height: auto;
+  }
+}
+
+.landing-s6-card {
+  flex: 0 0 380px;
+  background: #111;
+  border-radius: 30px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.landing-s6-caption {
+  font-family: var(--font-roboto);
+  font-weight: 400;
+  font-size: 30px;
+  color: #fff;
+  margin: 0;
+}
+
+.landing-s6-caption--spaced {
+  margin-top: 16px;
+}
+
+.landing-s6-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 0;
+  font-family: var(--font-roboto);
+  font-size: 25px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 0.85;
+  }
+}
+
+.landing-s6-btn--light {
+  background: #fff;
+  color: #111;
+}
+
+.landing-s6-btn--blue {
+  background: #2563eb;
+  color: #fff;
+}

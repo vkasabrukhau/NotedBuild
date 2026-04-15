@@ -826,6 +826,14 @@ export default function ProfileView({
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [openedPostId]);
 
+  useEffect(() => {
+    if (focusLevel !== "items") return;
+    const el = document.querySelector<HTMLElement>(
+      `[data-profile-item="${focusedItemIndex}"]`,
+    );
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [focusedItemIndex, focusLevel, activeSection]);
+
   const handleReplyToComment = useCallback((fullName: string) => {
     setPostCommentDraft((currentDraft) => {
       const nextDraft = currentDraft.trim().length === 0
@@ -1178,7 +1186,7 @@ export default function ProfileView({
     : `${profile.fullName.split(" ")[0]}'s Notes`;
 
   return (
-    <div className="h-screen overflow-hidden w-full bg-white px-6 py-8">
+    <div className="min-h-screen w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[40px] font-bold leading-none tracking-[-0.05em] text-black">
@@ -1795,18 +1803,19 @@ export default function ProfileView({
                     ) : profileNotes.length > 0 ? (
                       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                         {profileNotes.map((note, idx) => (
-                          <ProfileNoteCard
-                            key={note.id}
-                            content={note.content}
-                            createdAt={note.createdAt}
-                            href={getNoteHref(note.ownerEmail, note.name)}
-                            name={note.name}
-                            isFocused={
-                              focusLevel === "items" &&
-                              activeSection === "notes" &&
-                              focusedItemIndex === idx
-                            }
-                          />
+                          <div key={note.id} data-profile-item={idx}>
+                            <ProfileNoteCard
+                              content={note.content}
+                              createdAt={note.createdAt}
+                              href={getNoteHref(note.ownerEmail, note.name)}
+                              name={note.name}
+                              isFocused={
+                                focusLevel === "items" &&
+                                activeSection === "notes" &&
+                                focusedItemIndex === idx
+                              }
+                            />
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -1832,6 +1841,7 @@ export default function ProfileView({
                         {profilePosts.map((note, idx) => (
                           <div
                             key={note.id}
+                            data-profile-item={idx}
                             className={
                               focusLevel === "items" &&
                               activeSection === "posts" &&
@@ -1896,6 +1906,7 @@ export default function ProfileView({
                             <Link
                               key={friend.id}
                               href={getProfileHref(friend.email)}
+                              data-profile-item={idx}
                               className={`folder-grid-card ${friendActiveClass} rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-black`}
                             >
                               <div className="flex items-center gap-4">
@@ -1944,15 +1955,16 @@ export default function ProfileView({
                     ) : folders.length > 0 ? (
                       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                         {folders.map((folder, idx) => (
-                          <ProfileFolderCard
-                            key={folder.id}
-                            folder={folder}
-                            isFocused={
-                              focusLevel === "items" &&
-                              activeSection === "folders" &&
-                              focusedItemIndex === idx
-                            }
-                          />
+                          <div key={folder.id} data-profile-item={idx}>
+                            <ProfileFolderCard
+                              folder={folder}
+                              isFocused={
+                                focusLevel === "items" &&
+                                activeSection === "folders" &&
+                                focusedItemIndex === idx
+                              }
+                            />
+                          </div>
                         ))}
                       </div>
                     ) : (

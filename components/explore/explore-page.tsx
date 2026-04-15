@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   type ExploreCommentRecord,
@@ -11,243 +11,6 @@ import { formatAuthoredDate, getPreviewText } from "@/lib/text-utils";
 import type { ProfileFriendshipState } from "@/lib/profile-data";
 
 const EMPTY_NOTES: ExploreNoteCard[] = [];
-const DEMO_NOTE_ID_PREFIX = "demo-explore-note-";
-
-const DEMO_NOTE_SEEDS = [
-  {
-    name: "Math final cheat sheet that is actually understandable",
-    content:
-      "<p>I turned my last three review sessions into one page: derivative rules, trig identities, and the two substitution patterns I always forget. If anyone wants it cleaned up into a study guide, I can post version two tonight.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "friends" as const,
-    sourceLabel: "From friends",
-    publishedAt: "2026-04-15T11:40:00.000Z",
-    likeCount: 12,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-1",
-      email: "maya@noted.demo",
-      fullName: "Maya Chen",
-      profilePhotoUrl: null,
-      schoolName: "Columbia University",
-    },
-  },
-  {
-    name: "Organic chemistry reaction ladder for midterm week",
-    content:
-      "<p>I made a condensed reaction map for substitution, elimination, oxidation, and reduction. The full note has color-coded mistakes I kept making on old problem sets.</p>",
-    visibility: "SCHOOL" as const,
-    sourceType: "school" as const,
-    sourceLabel: "From your school",
-    publishedAt: "2026-04-15T10:05:00.000Z",
-    likeCount: 8,
-    likedByViewer: true,
-    owner: {
-      id: "demo-owner-2",
-      email: "leo@noted.demo",
-      fullName: "Leo Martinez",
-      profilePhotoUrl: null,
-      schoolName: "Columbia University",
-    },
-  },
-  {
-    name: "CS interview note on trees that finally clicked for me",
-    content:
-      "<p>Binary trees stopped being abstract once I rewrote every traversal with one sentence each. Preorder is visit before branching, inorder is left-root-right, postorder is clean up on the way back.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "trending" as const,
-    sourceLabel: "Trending now",
-    publishedAt: "2026-04-15T09:15:00.000Z",
-    likeCount: 21,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-3",
-      email: "nina@noted.demo",
-      fullName: "Nina Kapoor",
-      profilePhotoUrl: null,
-      schoolName: "NYU",
-    },
-  },
-  {
-    name: "Constitutional law cases grouped by what they actually changed",
-    content:
-      "<p>Instead of memorizing case names in isolation, I grouped them into privacy, speech, equal protection, and federal power. The note reads more like a timeline than a casebook.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "public" as const,
-    sourceLabel: "Public post",
-    publishedAt: "2026-04-14T20:30:00.000Z",
-    likeCount: 5,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-4",
-      email: "sara@noted.demo",
-      fullName: "Sara Williams",
-      profilePhotoUrl: null,
-      schoolName: "Georgetown",
-    },
-  },
-  {
-    name: "Spanish vocab note built from phrases instead of word lists",
-    content:
-      "<p>I started storing words only inside sentences I would actually say. Retention got much better, and it stopped feeling like a stack of disconnected flashcards.</p>",
-    visibility: "SCHOOL" as const,
-    sourceType: "school" as const,
-    sourceLabel: "From your school",
-    publishedAt: "2026-04-14T18:10:00.000Z",
-    likeCount: 7,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-5",
-      email: "elena@noted.demo",
-      fullName: "Elena Ruiz",
-      profilePhotoUrl: null,
-      schoolName: "Columbia University",
-    },
-  },
-  {
-    name: "Game theory examples from class rewritten in plain English",
-    content:
-      "<p>Nash equilibrium felt obvious once I stopped writing it like a theorem and started describing what each player would regret changing after the fact.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "friends" as const,
-    sourceLabel: "From friends",
-    publishedAt: "2026-04-14T16:25:00.000Z",
-    likeCount: 14,
-    likedByViewer: true,
-    owner: {
-      id: "demo-owner-6",
-      email: "omar@noted.demo",
-      fullName: "Omar Hassan",
-      profilePhotoUrl: null,
-      schoolName: "Princeton",
-    },
-  },
-  {
-    name: "Microeconomics diagrams with the labels people always skip",
-    content:
-      "<p>I annotated every graph with the exact shift trigger, the equilibrium change, and the one sentence interpretation professors usually ask for under time pressure.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "trending" as const,
-    sourceLabel: "Trending now",
-    publishedAt: "2026-04-14T15:40:00.000Z",
-    likeCount: 18,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-7",
-      email: "ivy@noted.demo",
-      fullName: "Ivy Park",
-      profilePhotoUrl: null,
-      schoolName: "UChicago",
-    },
-  },
-  {
-    name: "Physics lab checklist so I stop losing points on formatting",
-    content:
-      "<p>This note has nothing glamorous in it, just the exact order for uncertainty, units, sig figs, and graph captions. It saved me twice already.</p>",
-    visibility: "SCHOOL" as const,
-    sourceType: "school" as const,
-    sourceLabel: "From your school",
-    publishedAt: "2026-04-14T13:55:00.000Z",
-    likeCount: 4,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-8",
-      email: "jules@noted.demo",
-      fullName: "Jules Carter",
-      profilePhotoUrl: null,
-      schoolName: "Columbia University",
-    },
-  },
-  {
-    name: "European history essay structure that keeps my arguments coherent",
-    content:
-      "<p>I built a repeatable outline: claim, tension, evidence, historiography, and why the evidence matters. It made my last paper easier to draft and revise.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "public" as const,
-    sourceLabel: "Public post",
-    publishedAt: "2026-04-14T12:20:00.000Z",
-    likeCount: 6,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-9",
-      email: "claire@noted.demo",
-      fullName: "Claire Dubois",
-      profilePhotoUrl: null,
-      schoolName: "Brown",
-    },
-  },
-  {
-    name: "Linear algebra summary for eigenvalues without the textbook fog",
-    content:
-      "<p>The note boils the chapter down to transformations, stretch directions, and why diagonalization matters for repeated matrix multiplication.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "friends" as const,
-    sourceLabel: "From friends",
-    publishedAt: "2026-04-14T09:45:00.000Z",
-    likeCount: 11,
-    likedByViewer: false,
-    owner: {
-      id: "demo-owner-10",
-      email: "ethan@noted.demo",
-      fullName: "Ethan Brooks",
-      profilePhotoUrl: null,
-      schoolName: "Penn",
-    },
-  },
-  {
-    name: "Quick accounting sheet for debits, credits, and common mistakes",
-    content:
-      "<p>I wrote this for friends in intro accounting who kept mixing up what increases assets versus liabilities. The examples are short and painfully direct.</p>",
-    visibility: "PUBLIC" as const,
-    sourceType: "trending" as const,
-    sourceLabel: "Trending now",
-    publishedAt: "2026-04-13T22:00:00.000Z",
-    likeCount: 16,
-    likedByViewer: true,
-    owner: {
-      id: "demo-owner-11",
-      email: "rachael@noted.demo",
-      fullName: "Rachael Kim",
-      profilePhotoUrl: null,
-      schoolName: "Michigan",
-    },
-  },
-];
-
-const INITIAL_DEMO_COMMENTS_BY_NOTE: Record<string, ExploreCommentRecord[]> = {
-  [`${DEMO_NOTE_ID_PREFIX}1`]: [
-    {
-      id: "demo-comment-1",
-      body: "This is exactly the kind of post I would open from the feed.",
-      createdAt: new Date("2026-04-15T12:15:00.000Z").toISOString(),
-      updatedAt: new Date("2026-04-15T12:15:00.000Z").toISOString(),
-      author: {
-        id: "demo-friend-1",
-        email: "maya@noted.demo",
-        fullName: "Maya Chen",
-        profilePhotoUrl: null,
-      },
-    },
-  ],
-  [`${DEMO_NOTE_ID_PREFIX}3`]: [
-    {
-      id: "demo-comment-2",
-      body: "The traversal sentence trick is weirdly effective.",
-      createdAt: new Date("2026-04-15T11:05:00.000Z").toISOString(),
-      updatedAt: new Date("2026-04-15T11:05:00.000Z").toISOString(),
-      author: {
-        id: "demo-friend-2",
-        email: "alex@noted.demo",
-        fullName: "Alex Rivera",
-        profilePhotoUrl: null,
-      },
-    },
-  ],
-};
-
-function isDemoNoteId(noteId: string) {
-  return noteId.startsWith(DEMO_NOTE_ID_PREFIX);
-}
 
 function getInitials(value: string) {
   return value
@@ -256,22 +19,6 @@ function getInitials(value: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-}
-
-function getCompactSourceLabel(sourceType: ExploreNoteCard["sourceType"]) {
-  if (sourceType === "friends") {
-    return "Friends";
-  }
-
-  if (sourceType === "school") {
-    return "School";
-  }
-
-  if (sourceType === "trending") {
-    return "Trending";
-  }
-
-  return "Public";
 }
 
 function getSourceChipClassName(sourceType: ExploreNoteCard["sourceType"]) {
@@ -328,9 +75,11 @@ function ExploreUserAvatar({
 }
 
 function ExploreSchoolTag({
+  compact = false,
   schoolLogoUrl,
   schoolName,
 }: {
+  compact?: boolean;
   schoolLogoUrl: string | null;
   schoolName: string | null;
 }) {
@@ -339,7 +88,11 @@ function ExploreSchoolTag({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm">
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white shadow-sm ${
+        compact ? "px-2 py-0.5" : "px-2.5 py-1"
+      }`}
+    >
       {schoolLogoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -347,46 +100,23 @@ function ExploreSchoolTag({
           alt=""
           width={16}
           height={16}
-          className="h-4 w-4 object-contain"
+          className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} object-contain`}
           style={{ imageRendering: "pixelated" }}
         />
       ) : (
-        <span className="text-[10px] font-bold text-black/55">
+        <span className={`${compact ? "text-[9px]" : "text-[10px]"} font-bold text-black/55`}>
           {getInitials(schoolName).slice(0, 2)}
         </span>
       )}
-      <span className="max-w-[160px] truncate text-[11px] font-medium text-black/65">
+      <span
+        className={`truncate font-medium text-black/65 ${
+          compact ? "max-w-[126px] text-[10px]" : "max-w-[160px] text-[11px]"
+        }`}
+      >
         {schoolName}
       </span>
     </span>
   );
-}
-
-function createInitialDemoNotes(): ExploreNoteCard[] {
-  return DEMO_NOTE_SEEDS.map((seed, index) => {
-    const id = `${DEMO_NOTE_ID_PREFIX}${index + 1}`;
-    const comments = INITIAL_DEMO_COMMENTS_BY_NOTE[id] ?? [];
-
-    return {
-      id,
-      name: seed.name,
-      content: seed.content,
-      visibility: seed.visibility,
-      createdAt: seed.publishedAt,
-      updatedAt: seed.publishedAt,
-      publishedAt: seed.publishedAt,
-      likeCount: seed.likeCount,
-      commentCount: comments.length,
-      likedByViewer: seed.likedByViewer,
-      sourceType: seed.sourceType,
-      sourceLabel: getCompactSourceLabel(seed.sourceType),
-      score: 999 - index,
-      owner: {
-        ...seed.owner,
-        schoolLogoUrl: null,
-      },
-    };
-  });
 }
 
 function getExploreCardLayout(index: number) {
@@ -465,7 +195,14 @@ type FriendshipNotification = {
   user: FriendshipNotificationUser;
 };
 
-export default function ExplorePage() {
+export default function ExplorePage({
+  isShellOverlayOpen = false,
+}: {
+  isShellOverlayOpen?: boolean;
+}) {
+  const cardButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [hasArrowSelection, setHasArrowSelection] = useState(false);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [openedPostId, setOpenedPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -473,12 +210,6 @@ export default function ExplorePage() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
-  const [demoNotes, setDemoNotes] = useState<ExploreNoteCard[]>(
-    createInitialDemoNotes,
-  );
-  const [demoCommentsByNote, setDemoCommentsByNote] = useState<
-    Record<string, ExploreCommentRecord[]>
-  >(INITIAL_DEMO_COMMENTS_BY_NOTE);
   const [friendQuery, setFriendQuery] = useState("");
   const [friendResults, setFriendResults] = useState<FriendshipSearchResult[]>(
     [],
@@ -504,23 +235,63 @@ export default function ExplorePage() {
     isLoading: commentsLoading,
     mutate: mutateComments,
   } = useSWR<{ comments: ExploreCommentRecord[] }>(
-    (openedPostId ?? expandedNoteId) &&
-      !isDemoNoteId(openedPostId ?? expandedNoteId ?? "")
+    openedPostId ?? expandedNoteId
       ? `/api/notes/${openedPostId ?? expandedNoteId}/comments`
       : null,
     swrFetcher,
   );
-  const shouldShowDemoNote = !isLoading && !error && notes.length === 0;
-  const displayNotes = useMemo<ExploreNoteCard[]>(
-    () => (shouldShowDemoNote ? demoNotes : notes),
-    [demoNotes, notes, shouldShowDemoNote],
-  );
+  const displayNotes = notes;
   const openedPost = useMemo(
     () => displayNotes.find((note) => note.id === openedPostId) ?? null,
     [displayNotes, openedPostId],
   );
   const activeCommentsNoteId = openedPostId ?? expandedNoteId;
+  const acceptedRequests = notificationsData?.acceptedRequests ?? [];
   const incomingRequests = notificationsData?.incomingRequests ?? [];
+  const unreadFriendshipCount =
+    incomingRequests.length + acceptedRequests.length;
+
+  useEffect(() => {
+    setActiveCardIndex((currentIndex) =>
+      Math.max(0, Math.min(displayNotes.length - 1, currentIndex)),
+    );
+  }, [displayNotes.length]);
+
+  useEffect(() => {
+    if (
+      isShellOverlayOpen ||
+      !hasArrowSelection ||
+      openedPostId ||
+      displayNotes.length === 0
+    ) {
+      return;
+    }
+
+    const activeCard = cardButtonRefs.current[activeCardIndex];
+
+    if (!activeCard) {
+      return;
+    }
+
+    activeCard.focus({ preventScroll: true });
+    activeCard.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "smooth",
+    });
+  }, [
+    activeCardIndex,
+    displayNotes.length,
+    hasArrowSelection,
+    isShellOverlayOpen,
+    openedPostId,
+  ]);
+
+  useEffect(() => {
+    if (isShellOverlayOpen) {
+      setHasArrowSelection(false);
+    }
+  }, [isShellOverlayOpen]);
 
   useEffect(() => {
     const trimmedQuery = friendQuery.trim();
@@ -591,6 +362,10 @@ export default function ExplorePage() {
         return;
       }
 
+      if (isShellOverlayOpen) {
+        return;
+      }
+
       if (openedPostId) {
         event.preventDefault();
         event.stopPropagation();
@@ -609,12 +384,175 @@ export default function ExplorePage() {
         event.preventDefault();
         event.stopPropagation();
         setExpandedNoteId(null);
+        return;
+      }
+
+      if (hasArrowSelection) {
+        event.preventDefault();
+        event.stopPropagation();
+        setHasArrowSelection(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [expandedNoteId, isNotificationsOpen, openedPostId]);
+  }, [
+    expandedNoteId,
+    hasArrowSelection,
+    isNotificationsOpen,
+    isShellOverlayOpen,
+    openedPostId,
+  ]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter"].includes(
+          event.key,
+        )
+      ) {
+        return;
+      }
+
+      if (
+        isShellOverlayOpen ||
+        openedPostId ||
+        isNotificationsOpen ||
+        displayNotes.length === 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+
+      if (
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const activeNote = displayNotes[activeCardIndex];
+
+        if (activeNote) {
+          setOpenedPostId(activeNote.id);
+        }
+
+        return;
+      }
+
+      const currentCard = cardButtonRefs.current[activeCardIndex];
+
+      if (!currentCard) {
+        return;
+      }
+
+      const currentRect = currentCard.getBoundingClientRect();
+      const currentCenterX = currentRect.left + currentRect.width / 2;
+      const currentCenterY = currentRect.top + currentRect.height / 2;
+      const currentHeight = currentRect.height;
+      const currentWidth = currentRect.width;
+
+      let nextIndex = activeCardIndex;
+      let bestPrimaryDistance = Number.POSITIVE_INFINITY;
+      let bestSecondaryDistance = Number.POSITIVE_INFINITY;
+
+      for (let index = 0; index < displayNotes.length; index += 1) {
+        if (index === activeCardIndex) {
+          continue;
+        }
+
+        const candidateCard = cardButtonRefs.current[index];
+
+        if (!candidateCard) {
+          continue;
+        }
+
+        const candidateRect = candidateCard.getBoundingClientRect();
+        const candidateCenterX = candidateRect.left + candidateRect.width / 2;
+        const candidateCenterY = candidateRect.top + candidateRect.height / 2;
+        const deltaX = candidateCenterX - currentCenterX;
+        const deltaY = candidateCenterY - currentCenterY;
+
+        let primaryDistance = Number.POSITIVE_INFINITY;
+        let secondaryDistance = Number.POSITIVE_INFINITY;
+
+        if (event.key === "ArrowLeft" && deltaX < -8) {
+          primaryDistance = Math.abs(deltaX);
+          secondaryDistance = Math.abs(deltaY);
+        }
+
+        if (event.key === "ArrowRight" && deltaX > 8) {
+          primaryDistance = Math.abs(deltaX);
+          secondaryDistance = Math.abs(deltaY);
+        }
+
+        if (event.key === "ArrowUp" && deltaY < -8) {
+          primaryDistance = Math.abs(deltaY);
+          secondaryDistance = Math.abs(deltaX);
+        }
+
+        if (event.key === "ArrowDown" && deltaY > 8) {
+          primaryDistance = Math.abs(deltaY);
+          secondaryDistance = Math.abs(deltaX);
+        }
+
+        if (!Number.isFinite(primaryDistance)) {
+          continue;
+        }
+
+        const isHorizontalMove =
+          event.key === "ArrowLeft" || event.key === "ArrowRight";
+        const alignmentLimit = isHorizontalMove
+          ? Math.max(72, currentHeight * 0.7)
+          : Math.max(96, currentWidth * 0.8);
+        const penalizedPrimary = secondaryDistance > alignmentLimit
+          ? primaryDistance + alignmentLimit * 4
+          : primaryDistance;
+
+        if (
+          penalizedPrimary < bestPrimaryDistance ||
+          (penalizedPrimary === bestPrimaryDistance &&
+            secondaryDistance < bestSecondaryDistance)
+        ) {
+          nextIndex = index;
+          bestPrimaryDistance = penalizedPrimary;
+          bestSecondaryDistance = secondaryDistance;
+        }
+      }
+
+      if (nextIndex !== activeCardIndex) {
+        event.preventDefault();
+        setHasArrowSelection(true);
+        setActiveCardIndex(nextIndex);
+        return;
+      }
+
+      if (
+        event.key !== "Enter" &&
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+      ) {
+        event.preventDefault();
+        setHasArrowSelection(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [
+    activeCardIndex,
+    displayNotes,
+    isNotificationsOpen,
+    isShellOverlayOpen,
+    openedPostId,
+  ]);
 
   async function reloadSearchResults() {
     const trimmedQuery = friendQuery.trim();
@@ -755,25 +693,6 @@ export default function ExplorePage() {
   }
 
   async function handleToggleLike(noteId: string) {
-    if (isDemoNoteId(noteId)) {
-      setActionError(null);
-      setDemoNotes((currentNotes) =>
-        currentNotes.map((note) =>
-          note.id === noteId
-            ? {
-                ...note,
-                likedByViewer: !note.likedByViewer,
-                likeCount: Math.max(
-                  0,
-                  note.likeCount + (note.likedByViewer ? -1 : 1),
-                ),
-              }
-            : note,
-        ),
-      );
-      return;
-    }
-
     const target = notes.find((note) => note.id === noteId);
 
     if (!target) {
@@ -851,41 +770,6 @@ export default function ExplorePage() {
     }
 
     setActionError(null);
-
-    if (isDemoNoteId(noteId)) {
-      const nextComment: ExploreCommentRecord = {
-        id: `demo-comment-${Date.now()}`,
-        body: trimmed,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        author: {
-          id: "demo-viewer",
-          email: "you@noted.demo",
-          fullName: "You",
-          profilePhotoUrl: null,
-        },
-      };
-      setDemoCommentsByNote((currentComments) => {
-        const existingComments = currentComments[noteId] ?? [];
-
-        return {
-          ...currentComments,
-          [noteId]: [...existingComments, nextComment],
-        };
-      });
-      setDemoNotes((currentNotes) =>
-        currentNotes.map((note) =>
-          note.id === noteId
-            ? {
-                ...note,
-                commentCount: note.commentCount + 1,
-              }
-            : note,
-        ),
-      );
-      setCommentDraft("");
-      return;
-    }
 
     try {
       const response = await fetch(`/api/notes/${noteId}/comments`, {
@@ -968,7 +852,7 @@ export default function ExplorePage() {
                 }
               >
                 Inbox
-                {incomingRequests.length > 0 ? ` · ${incomingRequests.length}` : ""}
+                {unreadFriendshipCount > 0 ? ` · ${unreadFriendshipCount}` : ""}
               </button>
             </div>
             <input
@@ -1041,64 +925,94 @@ export default function ExplorePage() {
                 <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
                   Friendship activity
                 </div>
-                {incomingRequests.length === 0 ? (
+                {incomingRequests.length === 0 && acceptedRequests.length === 0 ? (
                   <p className="mt-3 text-[13px] text-black/45">
-                    No incoming friend requests right now.
+                    No friendship updates right now.
                   </p>
                 ) : (
                   <div className="mt-3 space-y-3">
-                    {incomingRequests.map((notification) => {
-                      const acceptKey = `accept:${notification.user.id}`;
-                      const rejectKey = `reject:${notification.user.id}`;
-                      const isBusy =
-                        pendingNotificationActionKey === acceptKey ||
-                        pendingNotificationActionKey === rejectKey;
-
-                      return (
-                        <div
-                          key={`incoming-${notification.user.id}`}
-                          className="rounded-[22px] border border-black/10 bg-white p-3"
-                        >
-                          <p className="text-[14px] leading-[1.45] text-black/75">
-                            <span className="font-semibold text-black">
-                              {notification.user.fullName}
-                            </span>{" "}
-                            sent you a friend request.
-                          </p>
-                          <p className="mt-1 text-[12px] text-black/40">
-                            {formatAuthoredDate(notification.createdAt)}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="rounded-full border border-black bg-black px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-55"
-                              disabled={isBusy}
-                              onClick={() =>
-                                void handleNotificationAction(
-                                  "accept",
-                                  notification.user.id,
-                                )
-                              }
-                            >
-                              Accept
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-black/70 disabled:opacity-55"
-                              disabled={isBusy}
-                              onClick={() =>
-                                void handleNotificationAction(
-                                  "reject",
-                                  notification.user.id,
-                                )
-                              }
-                            >
-                              Reject
-                            </button>
-                          </div>
+                    {incomingRequests.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-black/40">
+                          Requests
                         </div>
-                      );
-                    })}
+                        {incomingRequests.map((notification) => {
+                          const acceptKey = `accept:${notification.user.id}`;
+                          const rejectKey = `reject:${notification.user.id}`;
+                          const isBusy =
+                            pendingNotificationActionKey === acceptKey ||
+                            pendingNotificationActionKey === rejectKey;
+
+                          return (
+                            <div
+                              key={`incoming-${notification.user.id}`}
+                              className="rounded-[22px] border border-black/10 bg-white p-3"
+                            >
+                              <p className="text-[14px] leading-[1.45] text-black/75">
+                                <span className="font-semibold text-black">
+                                  {notification.user.fullName}
+                                </span>{" "}
+                                sent you a friend request.
+                              </p>
+                              <p className="mt-1 text-[12px] text-black/40">
+                                {formatAuthoredDate(notification.createdAt)}
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-black bg-black px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-55"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void handleNotificationAction(
+                                      "accept",
+                                      notification.user.id,
+                                    )
+                                  }
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-black/70 disabled:opacity-55"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    void handleNotificationAction(
+                                      "reject",
+                                      notification.user.id,
+                                    )
+                                  }
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    {acceptedRequests.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-black/40">
+                          Accepted
+                        </div>
+                        {acceptedRequests.map((notification) => (
+                          <div
+                            key={`accepted-${notification.user.id}-${notification.createdAt}`}
+                            className="rounded-[22px] border border-black/10 bg-white p-3"
+                          >
+                            <p className="text-[14px] leading-[1.45] text-black/75">
+                              <span className="font-semibold text-black">
+                                {notification.user.fullName}
+                              </span>{" "}
+                              accepted your friend request.
+                            </p>
+                            <p className="mt-1 text-[12px] text-black/40">
+                              {formatAuthoredDate(notification.createdAt)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1139,11 +1053,10 @@ export default function ExplorePage() {
         {!isLoading && notes.length === 0 ? (
           <div className="mt-10 rounded-[28px] border border-black/10 bg-[var(--app-card)] p-8">
             <h2 className="text-[26px] font-bold leading-tight">
-              No live posts yet, so here are some demo cards
+              No posts yet
             </h2>
             <p className="mt-3 text-[17px] leading-[1.5] text-black/55">
-              Likes and comments on the sample posts work locally so you can
-              preview how Explore will feel before real posts start showing up.
+              Explore will show public and school posts here once people start sharing.
             </p>
           </div>
         ) : null}
@@ -1151,29 +1064,30 @@ export default function ExplorePage() {
         <div className="mt-10 grid gap-5 lg:grid-cols-12">
           {displayNotes.map((note, index) => {
             const isExpanded = expandedNoteId === note.id;
-            const isDemoNote = isDemoNoteId(note.id);
-            const visibleComments = isDemoNote
-              ? demoCommentsByNote[note.id] ?? []
-              : activeCommentsNoteId === note.id
-                ? commentsData?.comments ?? []
-                : [];
-            const isCommentsLoading = isDemoNote
-              ? false
-              : activeCommentsNoteId === note.id
-                ? commentsLoading
-                : false;
+            const visibleComments =
+              activeCommentsNoteId === note.id ? commentsData?.comments ?? [] : [];
+            const isCommentsLoading =
+              activeCommentsNoteId === note.id ? commentsLoading : false;
             const layout = getExploreCardLayout(index);
 
             return (
               <article
                 key={note.id}
-                className={`overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 ${layout.articleClass}`}
+                className={`overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 transition-[transform,box-shadow] duration-200 ${layout.articleClass} ${
+                  hasArrowSelection && activeCardIndex === index
+                    ? "-translate-y-1 shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+                    : "shadow-[0_1px_0_rgba(20,18,17,0.02)]"
+                }`}
               >
                 <div className="flex h-full flex-col">
                   <button
                     type="button"
-                    className="flex flex-1 flex-col text-left"
+                    ref={(element) => {
+                      cardButtonRefs.current[index] = element;
+                    }}
+                    className="flex flex-1 flex-col rounded-[20px] text-left outline-none"
                     onClick={() => setOpenedPostId(note.id)}
+                    onFocus={() => setActiveCardIndex(index)}
                   >
                     <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
                       <span
@@ -1181,27 +1095,30 @@ export default function ExplorePage() {
                       >
                         {note.sourceLabel}
                       </span>
-                      <ExploreSchoolTag
-                        schoolLogoUrl={note.owner.schoolLogoUrl}
-                        schoolName={note.owner.schoolName}
-                      />
                     </div>
 
-                    <div className="mt-5 flex items-center gap-3">
+                    <div className="mt-5 flex items-center gap-2.5">
                       <ExploreUserAvatar
                         fullName={note.owner.fullName}
                         profilePhotoUrl={note.owner.profilePhotoUrl}
-                        size={48}
+                        size={32}
                       />
-                      <div className="min-w-0">
-                        <p className="truncate text-[15px] font-semibold text-black">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[14px] font-semibold text-black">
                           {note.owner.fullName}
                         </p>
-                        <p className="mt-1 text-[13px] text-black/45">
-                          {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-                        </p>
+                        <div className="mt-1">
+                          <ExploreSchoolTag
+                            compact
+                            schoolLogoUrl={note.owner.schoolLogoUrl}
+                            schoolName={note.owner.schoolName}
+                          />
+                        </div>
                       </div>
                     </div>
+                    <p className="mt-2 text-[12px] text-black/45">
+                      {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                    </p>
 
                     <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
                       {note.name}
@@ -1310,10 +1227,6 @@ export default function ExplorePage() {
                 >
                   {openedPost.sourceLabel}
                 </span>
-                <ExploreSchoolTag
-                  schoolLogoUrl={openedPost.owner.schoolLogoUrl}
-                  schoolName={openedPost.owner.schoolName}
-                />
               </div>
               <button
                 type="button"
@@ -1328,19 +1241,26 @@ export default function ExplorePage() {
               <ExploreUserAvatar
                 fullName={openedPost.owner.fullName}
                 profilePhotoUrl={openedPost.owner.profilePhotoUrl}
-                size={56}
+                size={40}
               />
-              <div className="min-w-0">
-                <p className="truncate text-[17px] font-semibold text-black">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-black">
                   {openedPost.owner.fullName}
                 </p>
-                <p className="mt-1 text-[14px] text-black/45">
-                  {formatAuthoredDate(
-                    openedPost.publishedAt ?? openedPost.createdAt,
-                  )}
-                </p>
+                <div className="mt-1">
+                  <ExploreSchoolTag
+                    compact
+                    schoolLogoUrl={openedPost.owner.schoolLogoUrl}
+                    schoolName={openedPost.owner.schoolName}
+                  />
+                </div>
               </div>
             </div>
+            <p className="mt-2 text-[13px] text-black/45">
+              {formatAuthoredDate(
+                openedPost.publishedAt ?? openedPost.createdAt,
+              )}
+            </p>
 
             <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
               {openedPost.name}
@@ -1367,17 +1287,12 @@ export default function ExplorePage() {
                 </button>
                 <span className="text-[15px] text-black/55">
                   Comments ·{" "}
-                  {isDemoNoteId(openedPost.id)
-                    ? demoCommentsByNote[openedPost.id]?.length ?? 0
-                    : commentsData?.comments?.length ?? openedPost.commentCount}
+                  {commentsData?.comments?.length ?? openedPost.commentCount}
                 </span>
               </div>
 
               <div className="mt-8 space-y-4">
-                {(isDemoNoteId(openedPost.id)
-                  ? demoCommentsByNote[openedPost.id] ?? []
-                  : commentsData?.comments ?? []
-                ).map((comment) => (
+                {(commentsData?.comments ?? []).map((comment) => (
                   <div
                     key={comment.id}
                     className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
@@ -1393,13 +1308,11 @@ export default function ExplorePage() {
                     </p>
                   </div>
                 ))}
-                {!isDemoNoteId(openedPost.id) && commentsLoading ? (
+                {commentsLoading ? (
                   <p className="text-[15px] text-black/45">Loading comments...</p>
                 ) : null}
-                {(isDemoNoteId(openedPost.id)
-                  ? (demoCommentsByNote[openedPost.id]?.length ?? 0) === 0
-                  : !commentsLoading &&
-                    (commentsData?.comments?.length ?? 0) === 0) ? (
+                {!commentsLoading &&
+                (commentsData?.comments?.length ?? 0) === 0 ? (
                   <p className="text-[15px] text-black/45">No comments yet.</p>
                 ) : null}
               </div>

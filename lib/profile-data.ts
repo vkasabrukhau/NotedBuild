@@ -4,6 +4,7 @@ import {
   getFriendshipStateFromRecords,
   type ProfileFriendshipState,
 } from "@/lib/friendship-state";
+import type { NoteVisibilityId } from "@/lib/note-visibility";
 import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
 export type ProfileViewData = {
@@ -27,11 +28,15 @@ export type ProfileViewData = {
 };
 
 export type ProfileNoteSummary = {
+  commentCount: number;
   content: string;
   createdAt: string;
   id: string;
+  likeCount: number;
   name: string;
   ownerEmail: string;
+  publishedAt: string | null;
+  visibility: NoteVisibilityId;
 };
 
 export type ProfileViewerData = {
@@ -128,19 +133,27 @@ export async function getProfileNotes(
     },
     take: limit,
     select: {
+      commentCount: true,
       content: true,
       createdAt: true,
       id: true,
+      likeCount: true,
       name: true,
+      publishedAt: true,
+      visibility: true,
     },
   });
 
   return notes.map((note) => ({
+    commentCount: note.commentCount,
     content: note.content,
     createdAt: note.createdAt.toISOString(),
     id: note.id,
+    likeCount: note.likeCount,
     name: note.name,
     ownerEmail,
+    publishedAt: note.publishedAt?.toISOString() ?? null,
+    visibility: note.visibility,
   }));
 }
 

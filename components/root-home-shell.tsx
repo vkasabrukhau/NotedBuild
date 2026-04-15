@@ -3984,7 +3984,15 @@ export default function RootHomeShell({
       ) : null}
       {view === "explore" || closingView === "explore" ? (
         <div className={closingView === "explore" ? "view-exit" : "view-enter"}>
-          <ExplorePage />
+          <ExplorePage
+            isShellOverlayOpen={
+              isMenuOpen ||
+              isAppearanceOpen ||
+              isFontOpen ||
+              isTamagotchiOpen ||
+              closingOverlay !== null
+            }
+          />
         </div>
       ) : null}
       {isMenuOpen || closingOverlay === "menu" ? (

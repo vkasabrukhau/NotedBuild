@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { mutate as swrMutate } from "swr";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import ProfileEditor from "@/components/profile/profile-editor";
+import type { ExploreCommentRecord } from "@/lib/explore";
 import type {
   ProfileFriendshipState,
   ProfileSchoolOption,
   ProfileViewData,
   ProfileViewerData,
 } from "@/lib/profile-data";
-import { stripHtml, getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
+import { getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
+import { NOTE_VISIBILITY_LABELS } from "@/lib/note-visibility";
 import {
   TAMAGOTCHI_SPECIES,
   type ProgressKey,
@@ -49,7 +51,7 @@ type ProfileFolderSummary = {
   updatedAt: string;
 };
 
-type ProfileContentSection = "notes" | "friends" | "folders";
+type ProfileContentSection = "notes" | "posts" | "friends" | "folders";
 
 const DISMISSED_ACCEPTED_NOTIFICATION_STORAGE_KEY =
   "noted-dismissed-accepted-friend-notifications";
@@ -386,6 +388,89 @@ function ProfileFolderCard({
   );
 }
 
+function ProfilePostCard({
+  note,
+  onOpen,
+  owner,
+  isFocused = false,
+}: {
+  note: ProfileViewData["notes"][number];
+  onOpen: () => void;
+  owner: Pick<
+    ProfileViewData,
+    "fullName" | "profilePhotoUrl" | "schoolLogoUrl" | "schoolName"
+  >;
+  isFocused?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left text-black transition ${
+        isFocused ? "ring-2 ring-black ring-offset-2" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+        <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+          {NOTE_VISIBILITY_LABELS[note.visibility]}
+        </span>
+      </div>
+
+      <div className="mt-5 flex items-center gap-2.5">
+        <UserAvatar
+          fullName={owner.fullName}
+          profilePhotoUrl={owner.profilePhotoUrl}
+          size={32}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14px] font-semibold text-black">
+            {owner.fullName}
+          </p>
+          <div className="mt-1">
+            <SchoolTag
+              className="align-middle"
+              profile={{
+                ...owner,
+                age: null,
+                bio: null,
+                email: "",
+                folderCount: 0,
+                friendCount: 0,
+                id: "",
+                joinedAt: "",
+                noteCount: 0,
+                notes: [],
+                schoolAccentColor: null,
+                schoolId: null,
+                schoolLocation: null,
+                schoolPrimaryColor: null,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-2 text-[12px] text-black/45">
+        {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+      </p>
+
+      <h4 className="mt-5 text-[30px] font-bold leading-[1.05]">{note.name}</h4>
+      <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
+        {getPreviewText(note.content, 120) || "No preview available yet."}
+      </p>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
+          Likes · {note.likeCount}
+        </span>
+        <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
+          Comments · {note.commentCount}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 async function sendFriendRequest(targetUserId: string) {
   const response = await fetch("/api/friendships", {
     method: "POST",
@@ -423,49 +508,6 @@ async function searchFriendships(query: string) {
   return data.results;
 }
 
-async function fetchFriendNotifications() {
-  const response = await fetch("/api/friendships?view=notifications");
-  const data = (await response.json().catch(() => null)) as {
-    acceptedRequests?: FriendshipNotification[];
-    error?: string;
-    incomingRequests?: FriendshipNotification[];
-  } | null;
-
-  if (!response.ok || !data?.incomingRequests || !data.acceptedRequests) {
-    throw new Error(data?.error ?? "Failed to load notifications.");
-  }
-
-  return data;
-}
-
-async function fetchFriendsDirectory() {
-  const response = await fetch("/api/friendships?view=friends");
-  const data = (await response.json().catch(() => null)) as {
-    error?: string;
-    friends?: FriendshipPerson[];
-  } | null;
-
-  if (!response.ok || !data?.friends) {
-    throw new Error(data?.error ?? "Failed to load friends.");
-  }
-
-  return data.friends;
-}
-
-async function fetchProfileFolders() {
-  const response = await fetch("/api/folders?view=folders");
-  const data = (await response.json().catch(() => null)) as {
-    error?: string;
-    folders?: ProfileFolderSummary[];
-  } | null;
-
-  if (!response.ok || !data?.folders) {
-    throw new Error(data?.error ?? "Failed to load folders.");
-  }
-
-  return data.folders;
-}
-
 async function updateFriendshipAction(
   action: "accept" | "reject",
   targetUserId: string,
@@ -495,6 +537,7 @@ async function updateFriendshipAction(
 
 const PROFILE_SECTIONS: ProfileContentSection[] = [
   "notes",
+  "posts",
   "folders",
   "friends",
 ];
@@ -534,11 +577,15 @@ export default function ProfileView({
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [friends, setFriends] = useState<FriendshipPerson[]>([]);
   const [folders, setFolders] = useState<ProfileFolderSummary[]>([]);
+  const [openedPostId, setOpenedPostId] = useState<string | null>(null);
+  const [postCommentDraft, setPostCommentDraft] = useState("");
+  const [postActionError, setPostActionError] = useState<string | null>(null);
   const [pendingSearchTargetId, setPendingSearchTargetId] = useState<
     string | null
   >(null);
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
+  const postCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ── Typing animation ─────────────────────────────────────────────────────
   const [displayedTitle, setDisplayedTitle] = useState("");
@@ -548,7 +595,11 @@ export default function ProfileView({
 
   // ── SWR data fetching ────────────────────────────────────────────────────
   const swrKey = viewer.isOwnProfile;
-  const { data: notesData, isLoading: isLoadingProfileNotes } = useSWR<{ notes: typeof profile.notes }>(
+  const {
+    data: notesData,
+    isLoading: isLoadingProfileNotes,
+    mutate: mutateProfileNotes,
+  } = useSWR<{ notes: typeof profile.notes }>(
     swrKey ? "/api/notes" : null,
     swrFetcher,
   );
@@ -573,6 +624,19 @@ export default function ProfileView({
   );
 
   const profileNotes = notesData?.notes ?? profile.notes;
+  const profilePosts = profileNotes.filter(
+    (note) => note.visibility !== "PRIVATE" && note.publishedAt !== null,
+  );
+  const openedPost =
+    profilePosts.find((note) => note.id === openedPostId) ?? null;
+  const {
+    data: postCommentsData,
+    isLoading: isLoadingPostComments,
+    mutate: mutatePostComments,
+  } = useSWR<{ comments: ExploreCommentRecord[] }>(
+    openedPostId ? `/api/notes/${openedPostId}/comments` : null,
+    swrFetcher,
+  );
   const progress = progressData?.progress ?? null;
   const notificationError = notificationsError instanceof Error ? notificationsError.message : notificationsError ? "Failed to load notifications." : null;
   const friendDirectoryError = friendsError instanceof Error ? friendsError.message : friendsError ? "Failed to load friends." : null;
@@ -640,9 +704,18 @@ export default function ProfileView({
 
 
   useEffect(() => {
+    setPostCommentDraft("");
+    setPostActionError(null);
+  }, [openedPostId]);
+
+  useEffect(() => {
     if (!viewer.isOwnProfile) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (openedPostId) {
+        return;
+      }
+
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement
@@ -662,6 +735,8 @@ export default function ProfileView({
       const currentItems =
         activeSection === "notes"
           ? profileNotes
+          : activeSection === "posts"
+            ? profilePosts
           : activeSection === "folders"
             ? folders
             : friends;
@@ -670,10 +745,12 @@ export default function ProfileView({
       if (focusLevel === "tabs") {
         if (e.key === "ArrowRight") {
           e.preventDefault();
-          setKeyboardFocusIndex((i) => (i + 1) % 3);
+          setKeyboardFocusIndex((i) => (i + 1) % PROFILE_SECTIONS.length);
         } else if (e.key === "ArrowLeft") {
           e.preventDefault();
-          setKeyboardFocusIndex((i) => (i + 2) % 3);
+          setKeyboardFocusIndex(
+            (i) => (i + PROFILE_SECTIONS.length - 1) % PROFILE_SECTIONS.length,
+          );
         } else if (e.key === "Enter") {
           e.preventDefault();
           changeSection(
@@ -702,6 +779,9 @@ export default function ProfileView({
           if (activeSection === "notes") {
             const note = profileNotes[focusedItemIndex];
             if (note) router.push(getNoteHref(note.ownerEmail, note.name));
+          } else if (activeSection === "posts") {
+            const note = profilePosts[focusedItemIndex];
+            if (note) router.push(getNoteHref(note.ownerEmail, note.name));
           } else if (activeSection === "folders") {
             const folder = folders[focusedItemIndex];
             if (folder)
@@ -723,11 +803,156 @@ export default function ProfileView({
     focusedItemIndex,
     activeSection,
     profileNotes,
+    profilePosts,
     folders,
     friends,
     router,
     changeSection,
+    openedPostId,
   ]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !openedPostId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setOpenedPostId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [openedPostId]);
+
+  const handleReplyToComment = useCallback((fullName: string) => {
+    setPostCommentDraft((currentDraft) => {
+      const nextDraft = currentDraft.trim().length === 0
+        ? `@${fullName} `
+        : `${currentDraft}\n@${fullName} `;
+      return nextDraft;
+    });
+
+    window.setTimeout(() => {
+      postCommentTextareaRef.current?.focus();
+      const nextLength = postCommentTextareaRef.current?.value.length ?? 0;
+      postCommentTextareaRef.current?.setSelectionRange(nextLength, nextLength);
+    }, 0);
+  }, []);
+
+  async function handleTogglePostLike(noteId: string) {
+    const target = profileNotes.find((note) => note.id === noteId);
+
+    if (!target) {
+      return;
+    }
+
+    setPostActionError(null);
+
+    try {
+      const response = await fetch(`/api/notes/${noteId}/likes`, {
+        method: "POST",
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            likeCount?: number;
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update like.");
+      }
+
+      await mutateProfileNotes(
+        (current) =>
+          current
+            ? {
+                notes: current.notes.map((note) =>
+                  note.id === noteId
+                    ? {
+                        ...note,
+                        likeCount: payload?.likeCount ?? note.likeCount,
+                      }
+                    : note,
+                ),
+              }
+            : current,
+        { revalidate: false },
+      );
+    } catch (error) {
+      setPostActionError(
+        error instanceof Error ? error.message : "Failed to update like.",
+      );
+    }
+  }
+
+  async function handleSubmitPostComment(noteId: string) {
+    const trimmed = postCommentDraft.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    setPostActionError(null);
+
+    try {
+      const response = await fetch(`/api/notes/${noteId}/comments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          body: trimmed,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            comment?: ExploreCommentRecord;
+            commentCount?: number;
+          }
+        | null;
+
+      if (!response.ok || !payload?.comment) {
+        throw new Error(payload?.error || "Failed to save comment.");
+      }
+
+      setPostCommentDraft("");
+
+      await mutatePostComments(
+        (current) => ({
+          comments: [...(current?.comments ?? []), payload.comment!],
+        }),
+        { revalidate: false },
+      );
+
+      await mutateProfileNotes(
+        (current) =>
+          current
+            ? {
+                notes: current.notes.map((note) =>
+                  note.id === noteId
+                    ? {
+                        ...note,
+                        commentCount:
+                          payload.commentCount ?? note.commentCount + 1,
+                      }
+                    : note,
+                ),
+              }
+            : current,
+        { revalidate: false },
+      );
+    } catch (error) {
+      setPostActionError(
+        error instanceof Error ? error.message : "Failed to save comment.",
+      );
+    }
+  }
 
 
   // Seed local friends state from SWR
@@ -1385,7 +1610,7 @@ export default function ProfileView({
         ) : null}
 
         <div className="mt-20">
-          <div className="grid max-w-4xl gap-x-0 gap-y-6 md:grid-cols-3">
+          <div className="grid max-w-5xl gap-x-0 gap-y-6 md:grid-cols-4">
             {viewer.isOwnProfile ? (
               <>
                 <button
@@ -1420,9 +1645,9 @@ export default function ProfileView({
 
                 <button
                   type="button"
-                  onClick={() => changeSection("folders", 1)}
+                  onClick={() => changeSection("posts", 1)}
                   className={`folder-grid-card border px-6 py-6 text-left ${
-                    activeSection === "folders"
+                    activeSection === "posts"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 1
                         ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
@@ -1431,8 +1656,38 @@ export default function ProfileView({
                 >
                   <div
                     className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
-                      activeSection === "folders" ||
+                      activeSection === "posts" ||
                       (focusLevel === "tabs" && keyboardFocusIndex === 1)
+                        ? "text-black/55"
+                        : "text-black/95"
+                    }`}
+                  >
+                    Posts
+                  </div>
+                  <div
+                    className={`mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] ${
+                      activeSection === "posts" ? "text-black" : "text-black"
+                    }`}
+                  >
+                    {profilePosts.length}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => changeSection("folders", 2)}
+                  className={`folder-grid-card border px-6 py-6 text-left ${
+                    activeSection === "folders"
+                      ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : focusLevel === "tabs" && keyboardFocusIndex === 2
+                        ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                  }`}
+                >
+                  <div
+                    className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                      activeSection === "folders" ||
+                      (focusLevel === "tabs" && keyboardFocusIndex === 2)
                         ? "text-black/55"
                         : "text-black/95"
                     }`}
@@ -1450,11 +1705,11 @@ export default function ProfileView({
 
                 <button
                   type="button"
-                  onClick={() => changeSection("friends", 2)}
+                  onClick={() => changeSection("friends", 3)}
                   className={`folder-grid-card border px-6 py-6 text-left ${
                     activeSection === "friends"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                      : focusLevel === "tabs" && keyboardFocusIndex === 2
+                      : focusLevel === "tabs" && keyboardFocusIndex === 3
                         ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
                         : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                   }`}
@@ -1462,7 +1717,7 @@ export default function ProfileView({
                   <div
                     className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
                       activeSection === "friends" ||
-                      (focusLevel === "tabs" && keyboardFocusIndex === 2)
+                      (focusLevel === "tabs" && keyboardFocusIndex === 3)
                         ? "text-black/55"
                         : "text-black/95"
                     }`}
@@ -1521,6 +1776,8 @@ export default function ProfileView({
               <h3 className="text-[30px] font-bold leading-none tracking-[-0.04em] text-black">
                 {activeSection === "notes"
                   ? "Notes"
+                  : activeSection === "posts"
+                    ? "Posts"
                   : activeSection === "friends"
                     ? "Friends"
                     : "Folders"}
@@ -1559,6 +1816,55 @@ export default function ProfileView({
                         </div>
                       </div>
                     )}
+                  </>
+                ) : null}
+
+                {activeSection === "posts" ? (
+                  <>
+                    {isLoadingProfileNotes && profilePosts.length === 0 ? (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          Loading posts...
+                        </div>
+                      </div>
+                    ) : profilePosts.length > 0 ? (
+                      <div className="mt-8 grid gap-5 lg:grid-cols-12">
+                        {profilePosts.map((note, idx) => (
+                          <div
+                            key={note.id}
+                            className={
+                              focusLevel === "items" &&
+                              activeSection === "posts" &&
+                              focusedItemIndex === idx
+                                ? "lg:col-span-7"
+                                : "lg:col-span-5"
+                            }
+                          >
+                            <ProfilePostCard
+                              note={note}
+                              onOpen={() => setOpenedPostId(note.id)}
+                              owner={profile}
+                              isFocused={
+                                focusLevel === "items" &&
+                                activeSection === "posts" &&
+                                focusedItemIndex === idx
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                        <div className="text-[22px] font-medium text-black/52">
+                          No posts yet.
+                        </div>
+                      </div>
+                    )}
+                    {postActionError ? (
+                      <p className="mt-4 text-sm text-[#a11d1d]">
+                        {postActionError}
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
 
@@ -1695,6 +2001,146 @@ export default function ProfileView({
           )}
         </div>
       </section>
+
+      {openedPost ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 px-6 py-8">
+          <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+                <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+                  {NOTE_VISIBILITY_LABELS[openedPost.visibility]}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                  onClick={() =>
+                    router.push(getNoteHref(openedPost.ownerEmail, openedPost.name))
+                  }
+                >
+                  Edit note
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+                  onClick={() => setOpenedPostId(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center gap-3">
+              <UserAvatar
+                fullName={profile.fullName}
+                profilePhotoUrl={profile.profilePhotoUrl}
+                size={40}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-black">
+                  {profile.fullName}
+                </p>
+                <div className="mt-1">
+                  <SchoolTag className="align-middle" profile={profile} />
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-[13px] text-black/45">
+              {formatAuthoredDate(openedPost.publishedAt ?? openedPost.createdAt)}
+            </p>
+
+            <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
+              {openedPost.name}
+            </h2>
+
+            <div
+              className="prose prose-lg mt-8 max-w-none text-black"
+              dangerouslySetInnerHTML={{ __html: openedPost.content }}
+            />
+
+            <div className="mt-10 border-t border-black/10 pt-8">
+              {postActionError ? (
+                <p className="mb-4 text-sm text-[#a11d1d]">{postActionError}</p>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
+                  onClick={() => void handleTogglePostLike(openedPost.id)}
+                >
+                  Like · {openedPost.likeCount}
+                </button>
+                <span className="text-[15px] text-black/55">
+                  Comments · {postCommentsData?.comments?.length ?? openedPost.commentCount}
+                </span>
+              </div>
+
+              <div className="mt-8 space-y-4">
+                {(postCommentsData?.comments ?? []).map((comment) => (
+                  <div
+                    key={comment.id}
+                    className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[14px] font-semibold text-black">
+                          {comment.author.fullName}
+                        </div>
+                        <div className="mt-1 text-[13px] text-black/40">
+                          {formatAuthoredDate(comment.createdAt)}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-black/60"
+                        onClick={() => handleReplyToComment(comment.author.fullName)}
+                      >
+                        Reply
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
+                      {comment.body}
+                    </p>
+                  </div>
+                ))}
+                {isLoadingPostComments ? (
+                  <p className="text-[15px] text-black/45">Loading comments...</p>
+                ) : null}
+                {!isLoadingPostComments &&
+                (postCommentsData?.comments?.length ?? 0) === 0 ? (
+                  <p className="text-[15px] text-black/45">No comments yet.</p>
+                ) : null}
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3">
+                <textarea
+                  ref={postCommentTextareaRef}
+                  value={postCommentDraft}
+                  onChange={(event) => setPostCommentDraft(event.target.value)}
+                  rows={3}
+                  maxLength={600}
+                  className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
+                  placeholder="Add a comment..."
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[13px] text-black/35">
+                    {postCommentDraft.trim().length}/600
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                    onClick={() => void handleSubmitPostComment(openedPost.id)}
+                  >
+                    Post comment
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ProfileEditor
         onClose={() => setIsEditorOpen(false)}

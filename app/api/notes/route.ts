@@ -66,7 +66,9 @@ export async function GET() {
 
     return NextResponse.json({
       notes: notes.map((note) => ({
+        commentCount: note.commentCount,
         id: note.id,
+        likeCount: note.likeCount,
         name: note.name,
         content: note.content,
         createdAt: note.createdAt.toISOString(),

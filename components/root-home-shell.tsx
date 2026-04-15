@@ -65,9 +65,6 @@ const MENU_OPTIONS = [
   "Explore",
   "Appearance",
   "Font",
-  "Languages",
-  "Voices Library",
-  "STEM Preferences",
   "たまごっち Preferences",
 ] as const;
 const SAVE_VISIBILITY_OPTIONS: NoteVisibilityId[] = [

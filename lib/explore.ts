@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { NoteVisibilityId } from "@/lib/note-visibility";
+import { getMatchedSchoolLogoUrl } from "@/lib/school-logo";
 
 export type ExploreViewer = {
   id: string;
@@ -32,6 +33,7 @@ export type ExploreNoteCard = {
     fullName: string;
     profilePhotoUrl: string | null;
     schoolName: string | null;
+    schoolLogoUrl: string | null;
   };
 };
 
@@ -110,7 +112,7 @@ function getSourceForCandidate({
 }): { sourceLabel: string; sourceType: ExploreSourceType; weight: number } {
   if (friendIds.has(ownerId)) {
     return {
-      sourceLabel: "From friends",
+      sourceLabel: "Friends",
       sourceType: "friends",
       weight: 40,
     };
@@ -118,7 +120,7 @@ function getSourceForCandidate({
 
   if (viewer.schoolId && ownerSchoolId === viewer.schoolId) {
     return {
-      sourceLabel: "From your school",
+      sourceLabel: "School",
       sourceType: "school",
       weight: 28,
     };
@@ -126,14 +128,14 @@ function getSourceForCandidate({
 
   if (commentCount >= 2 || likeCount >= 4) {
     return {
-      sourceLabel: "Trending now",
+      sourceLabel: "Trending",
       sourceType: "trending",
       weight: 18,
     };
   }
 
   return {
-    sourceLabel: "Public post",
+    sourceLabel: "Public",
     sourceType: "public",
     weight: 10,
   };
@@ -248,6 +250,7 @@ export async function getRecommendedExploreFeed(
           fullName: note.owner.fullName,
           profilePhotoUrl: note.owner.profilePhotoUrl,
           schoolName: note.owner.school?.name ?? null,
+          schoolLogoUrl: getMatchedSchoolLogoUrl(note.owner.school?.name ?? null),
         },
       } satisfies ExploreNoteCard;
     })

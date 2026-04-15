@@ -249,6 +249,119 @@ function isDemoNoteId(noteId: string) {
   return noteId.startsWith(DEMO_NOTE_ID_PREFIX);
 }
 
+function getInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getCompactSourceLabel(sourceType: ExploreNoteCard["sourceType"]) {
+  if (sourceType === "friends") {
+    return "Friends";
+  }
+
+  if (sourceType === "school") {
+    return "School";
+  }
+
+  if (sourceType === "trending") {
+    return "Trending";
+  }
+
+  return "Public";
+}
+
+function getSourceChipClassName(sourceType: ExploreNoteCard["sourceType"]) {
+  if (sourceType === "friends") {
+    return "border-black bg-black text-white";
+  }
+
+  if (sourceType === "school") {
+    return "border-black/10 bg-black/10 text-black/78";
+  }
+
+  if (sourceType === "trending") {
+    return "border-amber-200 bg-amber-100 text-amber-900";
+  }
+
+  return "border-black/8 bg-black/[0.06] text-black/60";
+}
+
+function ExploreUserAvatar({
+  fullName,
+  profilePhotoUrl,
+  size = 48,
+}: {
+  fullName: string;
+  profilePhotoUrl: string | null;
+  size?: number;
+}) {
+  const radiusClass = size >= 56 ? "rounded-[18px]" : "rounded-[16px]";
+
+  if (profilePhotoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={profilePhotoUrl}
+        alt={fullName}
+        width={size}
+        height={size}
+        className={`${radiusClass} border border-black/8 object-cover shadow-[0_10px_24px_rgba(20,18,17,0.08)]`}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`flex ${radiusClass} items-center justify-center border border-black/8 bg-black text-white shadow-[0_10px_24px_rgba(20,18,17,0.08)]`}
+      style={{ width: size, height: size }}
+    >
+      <span className="text-sm font-bold uppercase tracking-[0.08em]">
+        {getInitials(fullName)}
+      </span>
+    </div>
+  );
+}
+
+function ExploreSchoolTag({
+  schoolLogoUrl,
+  schoolName,
+}: {
+  schoolLogoUrl: string | null;
+  schoolName: string | null;
+}) {
+  if (!schoolName) {
+    return null;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm">
+      {schoolLogoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={schoolLogoUrl}
+          alt=""
+          width={16}
+          height={16}
+          className="h-4 w-4 object-contain"
+          style={{ imageRendering: "pixelated" }}
+        />
+      ) : (
+        <span className="text-[10px] font-bold text-black/55">
+          {getInitials(schoolName).slice(0, 2)}
+        </span>
+      )}
+      <span className="max-w-[160px] truncate text-[11px] font-medium text-black/65">
+        {schoolName}
+      </span>
+    </span>
+  );
+}
+
 function createInitialDemoNotes(): ExploreNoteCard[] {
   return DEMO_NOTE_SEEDS.map((seed, index) => {
     const id = `${DEMO_NOTE_ID_PREFIX}${index + 1}`;
@@ -266,9 +379,12 @@ function createInitialDemoNotes(): ExploreNoteCard[] {
       commentCount: comments.length,
       likedByViewer: seed.likedByViewer,
       sourceType: seed.sourceType,
-      sourceLabel: seed.sourceLabel,
+      sourceLabel: getCompactSourceLabel(seed.sourceType),
       score: 999 - index,
-      owner: seed.owner,
+      owner: {
+        ...seed.owner,
+        schoolLogoUrl: null,
+      },
     };
   });
 }
@@ -337,11 +453,26 @@ type FriendshipSearchResult = {
   profilePhotoUrl: string | null;
 };
 
+type FriendshipNotificationUser = {
+  email: string;
+  fullName: string;
+  id: string;
+  profilePhotoUrl: string | null;
+};
+
+type FriendshipNotification = {
+  createdAt: string;
+  user: FriendshipNotificationUser;
+};
+
 export default function ExplorePage() {
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [openedPostId, setOpenedPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [pendingNotificationActionKey, setPendingNotificationActionKey] =
+    useState<string | null>(null);
   const [demoNotes, setDemoNotes] = useState<ExploreNoteCard[]>(
     createInitialDemoNotes,
   );
@@ -363,6 +494,10 @@ export default function ExplorePage() {
     isLoading,
     mutate: mutateFeed,
   } = useSWR<{ notes: ExploreNoteCard[] }>("/api/explore", swrFetcher);
+  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{
+    acceptedRequests: FriendshipNotification[];
+    incomingRequests: FriendshipNotification[];
+  }>("/api/friendships?view=notifications", swrFetcher);
   const notes = useMemo(() => data?.notes ?? EMPTY_NOTES, [data]);
   const {
     data: commentsData,
@@ -385,6 +520,7 @@ export default function ExplorePage() {
     [displayNotes, openedPostId],
   );
   const activeCommentsNoteId = openedPostId ?? expandedNoteId;
+  const incomingRequests = notificationsData?.incomingRequests ?? [];
 
   useEffect(() => {
     const trimmedQuery = friendQuery.trim();
@@ -462,6 +598,13 @@ export default function ExplorePage() {
         return;
       }
 
+      if (isNotificationsOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsNotificationsOpen(false);
+        return;
+      }
+
       if (expandedNoteId) {
         event.preventDefault();
         event.stopPropagation();
@@ -471,7 +614,38 @@ export default function ExplorePage() {
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [expandedNoteId, openedPostId]);
+  }, [expandedNoteId, isNotificationsOpen, openedPostId]);
+
+  async function reloadSearchResults() {
+    const trimmedQuery = friendQuery.trim();
+
+    if (trimmedQuery.length < 2) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/friendships?query=${encodeURIComponent(trimmedQuery)}`,
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            results?: FriendshipSearchResult[];
+          }
+        | null;
+
+      if (!response.ok || !payload?.results) {
+        throw new Error(payload?.error || "Failed to search users.");
+      }
+
+      setFriendResults(payload.results);
+      setFriendSearchError(null);
+    } catch (error) {
+      setFriendSearchError(
+        error instanceof Error ? error.message : "Failed to search users.",
+      );
+    }
+  }
 
   async function handleAddFriend(targetUserId: string) {
     setPendingFriendId(targetUserId);
@@ -533,6 +707,51 @@ export default function ExplorePage() {
     }
 
     return "Add friend";
+  }
+
+  async function handleNotificationAction(
+    action: "accept" | "reject",
+    targetUserId: string,
+  ) {
+    const actionKey = `${action}:${targetUserId}`;
+    setPendingNotificationActionKey(actionKey);
+    setActionError(null);
+
+    try {
+      const response = await fetch("/api/friendships", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action,
+          targetUserId,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            friendshipState?: ProfileFriendshipState;
+          }
+        | null;
+
+      if (!response.ok || !payload?.friendshipState) {
+        throw new Error(payload?.error || "Failed to update friendship.");
+      }
+
+      await Promise.all([
+        mutateNotifications(),
+        mutateFeed(),
+        reloadSearchResults(),
+      ]);
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Failed to update friendship.",
+      );
+    } finally {
+      setPendingNotificationActionKey(null);
+    }
   }
 
   async function handleToggleLike(noteId: string) {
@@ -725,35 +944,44 @@ export default function ExplorePage() {
   }
 
   return (
-    <main className="h-screen overflow-y-auto bg-white px-6 py-8 text-black">
-      <div className="mx-auto w-full max-w-6xl">
+    <main className="h-screen overflow-y-auto bg-white px-4 py-8 text-black sm:px-6 lg:px-8 xl:px-10">
+      <div className="w-full">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div>
-            <p className="text-[14px] font-medium uppercase tracking-[0.18em] text-black/40">
-              Explore
-            </p>
             <h1 className="mt-3 text-[48px] font-bold leading-none">
               Explore
             </h1>
           </div>
-          <div className="relative w-full max-w-[360px]">
-            <label
-              htmlFor="friend-search"
-              className="text-[13px] font-semibold uppercase tracking-[0.16em] text-black/40"
-            >
-              Find friends
-            </label>
+          <div className="relative w-full max-w-[420px]">
+            <div className="flex items-center justify-between gap-3">
+              <label
+                htmlFor="friend-search"
+                className="text-[13px] font-semibold uppercase tracking-[0.16em] text-black/40"
+              >
+                Find friends
+              </label>
+              <button
+                type="button"
+                className="rounded-full border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-black/70"
+                onClick={() =>
+                  setIsNotificationsOpen((currentOpen) => !currentOpen)
+                }
+              >
+                Inbox
+                {incomingRequests.length > 0 ? ` · ${incomingRequests.length}` : ""}
+              </button>
+            </div>
             <input
               id="friend-search"
               type="text"
               value={friendQuery}
               onChange={(event) => setFriendQuery(event.target.value)}
-              placeholder="Search friends"
-              className="mt-3 w-full border border-black/10 bg-white px-4 py-3 text-[15px] text-black outline-none"
+              placeholder="Search"
+              className="mt-3 w-full rounded-[22px] border border-black/10 bg-white px-4 py-3 text-[15px] text-black outline-none"
               aria-label="Search friends"
             />
             {friendQuery.trim().length >= 2 ? (
-              <div className="absolute left-0 right-0 top-full z-30 mt-3 border border-black/10 bg-[var(--app-card)] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
+              <div className="absolute left-0 right-0 top-full z-30 mt-3 rounded-[28px] border border-black/10 bg-[var(--app-card)] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
                 {friendSearchError ? (
                   <p className="text-[13px] text-[#a11d1d]">{friendSearchError}</p>
                 ) : null}
@@ -772,7 +1000,7 @@ export default function ExplorePage() {
                       return (
                         <div
                           key={result.id}
-                          className="flex items-start justify-between gap-3 border border-black/10 bg-white p-3"
+                          className="flex items-start justify-between gap-3 rounded-[22px] border border-black/10 bg-white p-3"
                         >
                           <div className="min-w-0">
                             <div className="truncate text-[15px] font-semibold text-black">
@@ -784,7 +1012,7 @@ export default function ExplorePage() {
                           </div>
                           <button
                             type="button"
-                            className={`shrink-0 border px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] ${
+                            className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] ${
                               isActionDisabled
                                 ? "border-black/8 bg-black/8 text-black/40"
                                 : "border-black bg-black text-white"
@@ -808,16 +1036,83 @@ export default function ExplorePage() {
                 ) : null}
               </div>
             ) : null}
+            {isNotificationsOpen ? (
+              <div className="absolute right-0 top-full z-30 mt-3 w-full max-w-[420px] rounded-[28px] border border-black/10 bg-[var(--app-card)] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+                  Friendship activity
+                </div>
+                {incomingRequests.length === 0 ? (
+                  <p className="mt-3 text-[13px] text-black/45">
+                    No incoming friend requests right now.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {incomingRequests.map((notification) => {
+                      const acceptKey = `accept:${notification.user.id}`;
+                      const rejectKey = `reject:${notification.user.id}`;
+                      const isBusy =
+                        pendingNotificationActionKey === acceptKey ||
+                        pendingNotificationActionKey === rejectKey;
+
+                      return (
+                        <div
+                          key={`incoming-${notification.user.id}`}
+                          className="rounded-[22px] border border-black/10 bg-white p-3"
+                        >
+                          <p className="text-[14px] leading-[1.45] text-black/75">
+                            <span className="font-semibold text-black">
+                              {notification.user.fullName}
+                            </span>{" "}
+                            sent you a friend request.
+                          </p>
+                          <p className="mt-1 text-[12px] text-black/40">
+                            {formatAuthoredDate(notification.createdAt)}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="rounded-full border border-black bg-black px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-55"
+                              disabled={isBusy}
+                              onClick={() =>
+                                void handleNotificationAction(
+                                  "accept",
+                                  notification.user.id,
+                                )
+                              }
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-full border border-black/10 bg-white px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-black/70 disabled:opacity-55"
+                              disabled={isBusy}
+                              onClick={() =>
+                                void handleNotificationAction(
+                                  "reject",
+                                  notification.user.id,
+                                )
+                              }
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 
         {error ? (
-          <div className="mt-10 border border-red-200 bg-red-50 p-6 text-[17px] text-red-700">
+          <div className="mt-10 rounded-[28px] border border-red-200 bg-red-50 p-6 text-[17px] text-red-700">
             Failed to load explore notes.
           </div>
         ) : null}
         {actionError ? (
-          <div className="mt-6 border border-red-200 bg-red-50 px-5 py-4 text-[15px] text-red-700">
+          <div className="mt-6 rounded-[24px] border border-red-200 bg-red-50 px-5 py-4 text-[15px] text-red-700">
             {actionError}
           </div>
         ) : null}
@@ -827,7 +1122,7 @@ export default function ExplorePage() {
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={`explore-skeleton-${index}`}
-                className="border border-black/10 bg-[var(--app-card)] p-6"
+                className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6"
               >
                 <div className="h-4 w-28 bg-black/10" />
                 <div className="mt-5 h-8 w-3/4 bg-black/10" />
@@ -842,7 +1137,7 @@ export default function ExplorePage() {
         ) : null}
 
         {!isLoading && notes.length === 0 ? (
-          <div className="mt-10 border border-black/10 bg-[var(--app-card)] p-8">
+          <div className="mt-10 rounded-[28px] border border-black/10 bg-[var(--app-card)] p-8">
             <h2 className="text-[26px] font-bold leading-tight">
               No live posts yet, so here are some demo cards
             </h2>
@@ -872,7 +1167,7 @@ export default function ExplorePage() {
             return (
               <article
                 key={note.id}
-                className={`border border-black/10 bg-[var(--app-card)] p-6 ${layout.articleClass}`}
+                className={`overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 ${layout.articleClass}`}
               >
                 <div className="flex h-full flex-col">
                   <button
@@ -882,32 +1177,35 @@ export default function ExplorePage() {
                   >
                     <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
                       <span
-                        className={`border px-3 py-1 ${
-                          note.sourceType === "friends"
-                            ? "border-black bg-black text-white"
-                            : note.sourceType === "school"
-                              ? "border-black/10 bg-black/10 text-black/78"
-                              : note.sourceType === "trending"
-                                ? "border-amber-200 bg-amber-100 text-amber-900"
-                                : "border-black/8 bg-black/[0.06] text-black/60"
-                        }`}
+                        className={`rounded-full border px-3 py-1 ${getSourceChipClassName(note.sourceType)}`}
                       >
                         {note.sourceLabel}
                       </span>
-                      <span>
-                        {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-                      </span>
-                      {note.owner.schoolName ? (
-                        <span>{note.owner.schoolName}</span>
-                      ) : null}
+                      <ExploreSchoolTag
+                        schoolLogoUrl={note.owner.schoolLogoUrl}
+                        schoolName={note.owner.schoolName}
+                      />
                     </div>
 
-                    <div className={`mt-4 font-bold leading-[1.02] ${layout.titleClass}`}>
+                    <div className="mt-5 flex items-center gap-3">
+                      <ExploreUserAvatar
+                        fullName={note.owner.fullName}
+                        profilePhotoUrl={note.owner.profilePhotoUrl}
+                        size={48}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-semibold text-black">
+                          {note.owner.fullName}
+                        </p>
+                        <p className="mt-1 text-[13px] text-black/45">
+                          {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
                       {note.name}
                     </div>
-                    <p className="mt-2 text-[16px] font-medium text-black/45">
-                      {note.owner.fullName}
-                    </p>
                     <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
                       {getPreviewText(
                         note.content,
@@ -920,7 +1218,7 @@ export default function ExplorePage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        className={`border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
+                        className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
                           note.likedByViewer
                             ? "border-black bg-black text-white"
                             : "border-black/10 bg-white text-black/70"
@@ -931,7 +1229,7 @@ export default function ExplorePage() {
                       </button>
                       <button
                         type="button"
-                        className="border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
+                        className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
                         onClick={() =>
                           setExpandedNoteId((current) =>
                             current === note.id ? null : note.id,
@@ -943,7 +1241,7 @@ export default function ExplorePage() {
                     </div>
 
                     {isExpanded ? (
-                      <div className="mt-6 border border-black/10 bg-white p-5">
+                      <div className="mt-6 rounded-[24px] border border-black/10 bg-white p-5">
                         <div className="space-y-4">
                           {visibleComments.map((comment) => (
                             <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
@@ -976,7 +1274,7 @@ export default function ExplorePage() {
                             onChange={(event) => setCommentDraft(event.target.value)}
                             rows={3}
                             maxLength={600}
-                            className="w-full border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
+                            className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
                             placeholder="Add a comment..."
                           />
                           <div className="flex items-center justify-between gap-3">
@@ -985,7 +1283,7 @@ export default function ExplorePage() {
                             </span>
                             <button
                               type="button"
-                              className="border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                              className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
                               onClick={() => void handleSubmitComment(note.id)}
                             >
                               Post comment
@@ -1004,46 +1302,49 @@ export default function ExplorePage() {
 
       {openedPost ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 px-6 py-8">
-          <div className="max-h-full w-full max-w-4xl overflow-y-auto border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
+          <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
             <div className="flex items-start justify-between gap-4">
               <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
                 <span
-                  className={`border px-3 py-1 ${
-                    openedPost.sourceType === "friends"
-                      ? "border-black bg-black text-white"
-                      : openedPost.sourceType === "school"
-                        ? "border-black/10 bg-black/10 text-black/78"
-                        : openedPost.sourceType === "trending"
-                          ? "border-amber-200 bg-amber-100 text-amber-900"
-                          : "border-black/8 bg-black/[0.06] text-black/60"
-                  }`}
+                  className={`rounded-full border px-3 py-1 ${getSourceChipClassName(openedPost.sourceType)}`}
                 >
                   {openedPost.sourceLabel}
                 </span>
-                <span>
-                  {formatAuthoredDate(
-                    openedPost.publishedAt ?? openedPost.createdAt,
-                  )}
-                </span>
-                {openedPost.owner.schoolName ? (
-                  <span>{openedPost.owner.schoolName}</span>
-                ) : null}
+                <ExploreSchoolTag
+                  schoolLogoUrl={openedPost.owner.schoolLogoUrl}
+                  schoolName={openedPost.owner.schoolName}
+                />
               </div>
               <button
                 type="button"
-                className="border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+                className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
                 onClick={() => setOpenedPostId(null)}
               >
                 Close
               </button>
             </div>
 
-            <h2 className="mt-6 max-w-3xl text-[38px] font-bold leading-[1.02] text-black">
+            <div className="mt-6 flex items-center gap-3">
+              <ExploreUserAvatar
+                fullName={openedPost.owner.fullName}
+                profilePhotoUrl={openedPost.owner.profilePhotoUrl}
+                size={56}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-[17px] font-semibold text-black">
+                  {openedPost.owner.fullName}
+                </p>
+                <p className="mt-1 text-[14px] text-black/45">
+                  {formatAuthoredDate(
+                    openedPost.publishedAt ?? openedPost.createdAt,
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
               {openedPost.name}
             </h2>
-            <p className="mt-3 text-[17px] font-medium text-black/45">
-              {openedPost.owner.fullName}
-            </p>
 
             <div
               className="prose prose-lg mt-8 max-w-none text-black"
@@ -1054,7 +1355,7 @@ export default function ExplorePage() {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  className={`border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
+                  className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
                     openedPost.likedByViewer
                       ? "border-black bg-black text-white"
                       : "border-black/10 bg-white text-black/70"
@@ -1109,7 +1410,7 @@ export default function ExplorePage() {
                   onChange={(event) => setCommentDraft(event.target.value)}
                   rows={3}
                   maxLength={600}
-                  className="w-full border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
+                  className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
                   placeholder="Add a comment..."
                 />
                 <div className="flex items-center justify-between gap-3">
@@ -1118,7 +1419,7 @@ export default function ExplorePage() {
                   </span>
                   <button
                     type="button"
-                    className="border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                    className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
                     onClick={() => void handleSubmitComment(openedPost.id)}
                   >
                     Post comment

@@ -589,8 +589,13 @@ async function updateFriendshipAction(
 
 const PROFILE_SECTIONS: ProfileContentSection[] = [
   "notes",
-  "posts",
   "folders",
+  "posts",
+  "friends",
+];
+
+const PUBLIC_PROFILE_SECTIONS: ProfileContentSection[] = [
+  "posts",
   "friends",
 ];
 
@@ -614,7 +619,7 @@ export default function ProfileView({
   const [friendError, setFriendError] = useState<string | null>(null);
   const [isFriendActionPending, setIsFriendActionPending] = useState(false);
   const [activeSection, setActiveSection] =
-    useState<ProfileContentSection>("notes");
+    useState<ProfileContentSection>(viewer.isOwnProfile ? "notes" : "posts");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<FriendshipSearchResult[]>(
     [],
@@ -733,21 +738,22 @@ export default function ProfileView({
   );
 
   useEffect(() => {
-    if (!viewer.isOwnProfile || focusLevel !== "items") {
+    if (focusLevel !== "items") {
       return;
     }
 
     focusGridItem(getActiveItemRefs(), focusedItemIndex);
-  }, [focusLevel, focusedItemIndex, getActiveItemRefs, viewer.isOwnProfile]);
+  }, [focusLevel, focusedItemIndex, getActiveItemRefs]);
 
   useEffect(() => {
     setFriendshipState(viewer.friendshipState);
   }, [viewer.friendshipState]);
 
   useEffect(() => {
-    if (!viewer.isOwnProfile) {
-      setActiveSection("notes");
-    }
+    setActiveSection(viewer.isOwnProfile ? "notes" : "posts");
+    setKeyboardFocusIndex(0);
+    setFocusedItemIndex(0);
+    setFocusLevel("tabs");
   }, [viewer.isOwnProfile]);
 
   // Title typing animation
@@ -796,8 +802,6 @@ export default function ProfileView({
   }, [openedPostId]);
 
   useEffect(() => {
-    if (!viewer.isOwnProfile) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (openedPostId) {
         return;
@@ -820,30 +824,34 @@ export default function ProfileView({
       }
 
       const currentItems =
-        activeSection === "notes"
+        !viewer.isOwnProfile
+          ? activeSection === "friends"
+            ? visibleFriends
+            : visibleProfilePosts
+          : activeSection === "notes"
           ? profileNotes
           : activeSection === "posts"
             ? profilePosts
           : activeSection === "folders"
             ? folders
             : friends;
+      const tabSections = viewer.isOwnProfile
+        ? PROFILE_SECTIONS
+        : PUBLIC_PROFILE_SECTIONS;
       const itemCount = currentItems.length;
 
       if (focusLevel === "tabs") {
         if (e.key === "ArrowRight") {
           e.preventDefault();
-          setKeyboardFocusIndex((i) => (i + 1) % PROFILE_SECTIONS.length);
+          setKeyboardFocusIndex((i) => (i + 1) % tabSections.length);
         } else if (e.key === "ArrowLeft") {
           e.preventDefault();
           setKeyboardFocusIndex(
-            (i) => (i + PROFILE_SECTIONS.length - 1) % PROFILE_SECTIONS.length,
+            (i) => (i + tabSections.length - 1) % tabSections.length,
           );
         } else if (e.key === "Enter") {
           e.preventDefault();
-          changeSection(
-            PROFILE_SECTIONS[keyboardFocusIndex],
-            keyboardFocusIndex,
-          );
+          changeSection(tabSections[keyboardFocusIndex], keyboardFocusIndex);
         } else if (e.key === "ArrowDown" && itemCount > 0) {
           e.preventDefault();
           setFocusLevel("items");
@@ -874,14 +882,18 @@ export default function ProfileView({
             const note = profileNotes[focusedItemIndex];
             if (note) router.push(getNoteHref(note.ownerEmail, note.name));
           } else if (activeSection === "posts") {
-            const note = profilePosts[focusedItemIndex];
-            if (note) router.push(getNoteHref(note.ownerEmail, note.name));
+            const note = viewer.isOwnProfile
+              ? profilePosts[focusedItemIndex]
+              : visibleProfilePosts[focusedItemIndex];
+            if (note) setOpenedPostId(note.id);
           } else if (activeSection === "folders") {
             const folder = folders[focusedItemIndex];
             if (folder)
               router.push(getFolderHref(folder.ownerEmail, folder.name));
           } else if (activeSection === "friends") {
-            const friend = friends[focusedItemIndex];
+            const friend = viewer.isOwnProfile
+              ? friends[focusedItemIndex]
+              : visibleFriends[focusedItemIndex];
             if (friend) router.push(`/${friend.email}`);
           }
         }
@@ -890,21 +902,7 @@ export default function ProfileView({
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [
-    viewer.isOwnProfile,
-    keyboardFocusIndex,
-    focusLevel,
-    focusedItemIndex,
-    activeSection,
-    profileNotes,
-    profilePosts,
-    folders,
-    friends,
-    router,
-    changeSection,
-    findNextItemIndex,
-    openedPostId,
-  ]);
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1699,7 +1697,13 @@ export default function ProfileView({
         ) : null}
 
         <div className="mt-20">
-          <div className="grid max-w-5xl gap-x-0 gap-y-6 md:grid-cols-4">
+          <div
+            className={
+              viewer.isOwnProfile
+                ? "grid max-w-5xl gap-x-0 gap-y-6 md:grid-cols-4"
+                : "grid max-w-5xl gap-x-0 gap-y-6 md:grid-cols-4"
+            }
+          >
             {viewer.isOwnProfile ? (
               <>
                 <button
@@ -1734,9 +1738,9 @@ export default function ProfileView({
 
                 <button
                   type="button"
-                  onClick={() => changeSection("posts", 1)}
+                  onClick={() => changeSection("folders", 1)}
                   className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
-                    activeSection === "posts"
+                    activeSection === "folders"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 1
                         ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
@@ -1745,38 +1749,8 @@ export default function ProfileView({
                 >
                   <div
                     className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
-                      activeSection === "posts" ||
-                      (focusLevel === "tabs" && keyboardFocusIndex === 1)
-                        ? "text-black/55"
-                        : "text-black/95"
-                    }`}
-                  >
-                    Posts
-                  </div>
-                  <div
-                    className={`mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] ${
-                      activeSection === "posts" ? "text-black" : "text-black"
-                    }`}
-                  >
-                    {profilePosts.length}
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => changeSection("folders", 2)}
-                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
-                    activeSection === "folders"
-                      ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                      : focusLevel === "tabs" && keyboardFocusIndex === 2
-                        ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
-                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
-                  }`}
-                >
-                  <div
-                    className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
                       activeSection === "folders" ||
-                      (focusLevel === "tabs" && keyboardFocusIndex === 2)
+                      (focusLevel === "tabs" && keyboardFocusIndex === 1)
                         ? "text-black/55"
                         : "text-black/95"
                     }`}
@@ -1789,6 +1763,36 @@ export default function ProfileView({
                     }`}
                   >
                     {profile.folderCount}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => changeSection("posts", 2)}
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
+                    activeSection === "posts"
+                      ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : focusLevel === "tabs" && keyboardFocusIndex === 2
+                        ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                  }`}
+                >
+                  <div
+                    className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                      activeSection === "posts" ||
+                      (focusLevel === "tabs" && keyboardFocusIndex === 2)
+                        ? "text-black/55"
+                        : "text-black/95"
+                    }`}
+                  >
+                    Posts
+                  </div>
+                  <div
+                    className={`mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] ${
+                      activeSection === "posts" ? "text-black" : "text-black"
+                    }`}
+                  >
+                    {profilePosts.length}
                   </div>
                 </button>
 
@@ -1842,14 +1846,57 @@ export default function ProfileView({
                   </div>
                 </div>
 
-                <div className="border border-transparent px-6 py-6">
-                  <div className="text-[11px] font-medium uppercase tracking-[0.24em] text-black/95">
+                <button
+                  type="button"
+                  onClick={() => changeSection("posts", 0)}
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
+                    activeSection === "posts"
+                      ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : focusLevel === "tabs" && keyboardFocusIndex === 0
+                        ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                  }`}
+                >
+                  <div
+                    className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                      activeSection === "posts" ||
+                      (focusLevel === "tabs" && keyboardFocusIndex === 0)
+                        ? "text-black/55"
+                        : "text-black/95"
+                    }`}
+                  >
+                    Posts
+                  </div>
+                  <div className="mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] text-black">
+                    {visibleProfilePosts.length}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => changeSection("friends", 1)}
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
+                    activeSection === "friends"
+                      ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                      : focusLevel === "tabs" && keyboardFocusIndex === 1
+                        ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                        : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                  }`}
+                >
+                  <div
+                    className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                      activeSection === "friends" ||
+                      (focusLevel === "tabs" && keyboardFocusIndex === 1)
+                        ? "text-black/55"
+                        : "text-black/95"
+                    }`}
+                  >
                     Friends
                   </div>
                   <div className="mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] text-black">
-                    {profile.friendCount}
+                    {visibleFriends.length}
                   </div>
-                </div>
+                </button>
               </>
             )}
           </div>
@@ -2076,68 +2123,89 @@ export default function ProfileView({
           ) : (
             <div>
               <h3 className="text-[30px] font-bold leading-none tracking-[-0.04em] text-black">
-                Posts
+                {activeSection === "friends" ? "Friends" : "Posts"}
               </h3>
 
-              {visibleProfilePosts.length > 0 ? (
-                <div className="mt-8 grid gap-5 lg:grid-cols-12">
-                  {visibleProfilePosts.map((note, idx) => (
-                    <div key={note.id} className={getProfilePostLayoutClass(idx)}>
-                      <ProfilePostCard
-                        note={note}
-                        onOpen={() => setOpenedPostId(note.id)}
-                        owner={profile}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                  <div className="text-[22px] font-medium text-black/52">
-                    No posts yet.
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-14">
-                <h3 className="text-[30px] font-bold leading-none tracking-[-0.04em] text-black">
-                  Friends
-                </h3>
-
-                {visibleFriends.length > 0 ? (
-                  <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {visibleFriends.map((friend) => (
-                      <button
-                        key={friend.id}
-                        type="button"
-                        onClick={() => router.push(`/${friend.email}`)}
-                        className="folder-grid-card rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black"
-                      >
-                        <div className="flex items-center gap-4">
-                          <UserAvatar
-                            fullName={friend.fullName}
-                            profilePhotoUrl={friend.profilePhotoUrl}
-                            size={56}
+              <div key={sectionAnimKey} className="profile-section-enter">
+                {activeSection === "posts" ? (
+                  visibleProfilePosts.length > 0 ? (
+                    <div className="mt-8 grid gap-5 lg:grid-cols-12">
+                      {visibleProfilePosts.map((note, idx) => (
+                        <div
+                          key={note.id}
+                          ref={(element) => {
+                            postItemRefs.current[idx] = element;
+                          }}
+                          className={`${getProfilePostLayoutClass(idx)} outline-none`}
+                          tabIndex={-1}
+                        >
+                          <ProfilePostCard
+                            note={note}
+                            onOpen={() => setOpenedPostId(note.id)}
+                            owner={profile}
+                            isFocused={
+                              focusLevel === "items" &&
+                              activeSection === "posts" &&
+                              focusedItemIndex === idx
+                            }
                           />
-                          <div className="min-w-0">
-                            <div className="truncate text-lg font-semibold text-black">
-                              {friend.fullName}
-                            </div>
-                            <div className="truncate text-sm text-black/55">
-                              {friend.email}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                      <div className="text-[22px] font-medium text-black/52">
+                        No posts yet.
+                      </div>
+                    </div>
+                  )
+                ) : null}
+
+                {activeSection === "friends" ? (
+                  visibleFriends.length > 0 ? (
+                    <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {visibleFriends.map((friend, idx) => (
+                        <button
+                          key={friend.id}
+                          ref={(element) => {
+                            friendItemRefs.current[idx] = element;
+                          }}
+                          type="button"
+                          onClick={() => router.push(`/${friend.email}`)}
+                          className={`folder-grid-card rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${
+                            focusLevel === "items" &&
+                            activeSection === "friends" &&
+                            focusedItemIndex === idx
+                              ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <UserAvatar
+                              fullName={friend.fullName}
+                              profilePhotoUrl={friend.profilePhotoUrl}
+                              size={56}
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-lg font-semibold text-black">
+                                {friend.fullName}
+                              </div>
+                              <div className="truncate text-sm text-black/55">
+                                {friend.email}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-                    <div className="text-[22px] font-medium text-black/52">
-                      No accepted friends yet.
+                        </button>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                      <div className="text-[22px] font-medium text-black/52">
+                        No accepted friends yet.
+                      </div>
+                    </div>
+                  )
+                ) : null}
               </div>
             </div>
           )}

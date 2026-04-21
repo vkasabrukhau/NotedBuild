@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { swrFetcher } from "@/lib/swr-fetcher";
@@ -10,6 +10,7 @@ import type { ExploreCommentRecord } from "@/lib/explore";
 import { NOTE_VISIBILITY_LABELS } from "@/lib/note-visibility";
 import NoteCardStack from "@/components/notes/note-card-stack";
 import PostViewerModal from "@/components/notes/post-viewer-modal";
+import { findNextGridItemIndex, focusGridItem } from "@/lib/grid-navigation";
 
 type FriendProfileModalProps = {
   email: string | null;
@@ -143,8 +144,14 @@ function FriendProfileModalContent({
   onOpenSchool,
 }: FriendProfileModalProps) {
   const [activeTab, setActiveTab] = useState<ModalTab>("posts");
+  const [focusLevel, setFocusLevel] = useState<"tabs" | "items">("tabs");
+  const [keyboardFocusIndex, setKeyboardFocusIndex] = useState(0);
+  const [focusedItemIndex, setFocusedItemIndex] = useState(0);
   const [openedPostId, setOpenedPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const postButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const friendButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const encodedEmail = email ? encodeURIComponent(email) : null;
 
@@ -165,6 +172,42 @@ function FriendProfileModalContent({
 
   const profile = data?.profile ?? null;
   const openedPost = profile?.notes.find((n) => n.id === openedPostId) ?? null;
+
+  const changeTab = useCallback((tab: ModalTab, index: number) => {
+    setActiveTab(tab);
+    setKeyboardFocusIndex(index);
+    setFocusLevel("tabs");
+    setFocusedItemIndex(0);
+  }, []);
+
+  const getActiveItemRefs = useCallback(
+    () => (activeTab === "posts" ? postButtonRefs.current : friendButtonRefs.current),
+    [activeTab],
+  );
+
+  useEffect(() => {
+    if (openedPostId) {
+      return;
+    }
+
+    if (focusLevel === "tabs") {
+      const activeTabButton = tabButtonRefs.current[keyboardFocusIndex];
+      if (!activeTabButton) {
+        return;
+      }
+
+      activeTabButton.focus({ preventScroll: true });
+      activeTabButton.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "smooth",
+      });
+      return;
+    }
+
+    focusGridItem(getActiveItemRefs(), focusedItemIndex);
+  }, [focusLevel, focusedItemIndex, getActiveItemRefs, keyboardFocusIndex, openedPostId]);
+
   // Close on Escape
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -185,6 +228,114 @@ function FriendProfileModalContent({
     window.addEventListener("keydown", handleKey, true);
     return () => window.removeEventListener("keydown", handleKey, true);
   }, [onClose, openedPostId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!profile || openedPostId) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.isContentEditable)
+      ) {
+        return;
+      }
+
+      const tabOrder: ModalTab[] = ["posts", "friends"];
+      const itemCount =
+        activeTab === "posts" ? profile.notes.length : profile.friends.length;
+
+      if (focusLevel === "tabs") {
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          const nextIndex = Math.min(tabOrder.length - 1, keyboardFocusIndex + 1);
+          changeTab(tabOrder[nextIndex], nextIndex);
+          return;
+        }
+
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          const nextIndex = Math.max(0, keyboardFocusIndex - 1);
+          changeTab(tabOrder[nextIndex], nextIndex);
+          return;
+        }
+
+        if (e.key === "ArrowDown" && itemCount > 0) {
+          e.preventDefault();
+          setFocusLevel("items");
+          setFocusedItemIndex((current) => Math.min(current, itemCount - 1));
+          return;
+        }
+
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          changeTab(tabOrder[keyboardFocusIndex], keyboardFocusIndex);
+        }
+
+        return;
+      }
+
+      if (
+        e.key === "ArrowRight" ||
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowUp" ||
+        e.key === "ArrowDown"
+      ) {
+        const nextIndex = findNextGridItemIndex(
+          getActiveItemRefs(),
+          focusedItemIndex,
+          e.key,
+        );
+
+        if (nextIndex !== null) {
+          e.preventDefault();
+          setFocusedItemIndex(nextIndex);
+          return;
+        }
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setFocusLevel("tabs");
+        }
+
+        return;
+      }
+
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+
+        if (activeTab === "posts") {
+          const note = profile.notes[focusedItemIndex];
+          if (note) {
+            setOpenedPostId(note.id);
+          }
+          return;
+        }
+
+        const friend = profile.friends[focusedItemIndex];
+        if (friend) {
+          onOpenProfile(friend.email);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [
+    activeTab,
+    changeTab,
+    focusLevel,
+    focusedItemIndex,
+    getActiveItemRefs,
+    keyboardFocusIndex,
+    onOpenProfile,
+    openedPostId,
+    profile,
+  ]);
 
   async function handleSubmitComment(noteId: string) {
     const trimmed = commentDraft.trim();
@@ -269,38 +420,62 @@ function FriendProfileModalContent({
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-4 border-b border-black/8 pb-5">
-                <span className="text-[13px] text-black/55">
-                  <span className="font-semibold text-black">{profile.noteCount}</span>{" "}
-                  {profile.noteCount === 1 ? "note" : "notes"}
-                </span>
-                <span className="text-[13px] text-black/55">
-                  <span className="font-semibold text-black">{profile.friendCount}</span>{" "}
-                  {profile.friendCount === 1 ? "friend" : "friends"}
-                </span>
-              </div>
-
-              {/* Tabs */}
-              <div className="mt-5 flex gap-2">
-                {(["posts", "friends"] as ModalTab[]).map((tab) => (
+              <div className="mt-8 grid grid-cols-2 gap-3 border-b border-black/8 pb-5">
+                {([
+                  {
+                    count: profile.notes.length,
+                    index: 0,
+                    label: "Posts",
+                    tab: "posts" as const,
+                  },
+                  {
+                    count: profile.friendCount,
+                    index: 1,
+                    label: "Friends",
+                    tab: "friends" as const,
+                  },
+                ]).map((item) => (
                   <button
-                    key={tab}
+                    key={item.tab}
                     type="button"
-                    onClick={() => setActiveTab(tab)}
-                    className={`rounded-full border px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] transition ${
-                      activeTab === tab
-                        ? "border-black bg-black text-white"
-                        : "border-black/10 bg-white text-black/60 hover:border-black/20 hover:text-black"
+                    ref={(element) => {
+                      tabButtonRefs.current[item.index] = element;
+                    }}
+                    onClick={() => changeTab(item.tab, item.index)}
+                    className={`folder-grid-card border px-5 py-5 text-left outline-none focus:outline-none focus-visible:outline-none ${
+                      activeTab === item.tab
+                        ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                        : focusLevel === "tabs" && keyboardFocusIndex === item.index
+                          ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                          : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                     }`}
                   >
-                    {tab === "posts" ? "Posts" : "Friends"}
+                    <div
+                      className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                        activeTab === item.tab ||
+                        (focusLevel === "tabs" && keyboardFocusIndex === item.index)
+                          ? "text-black/55"
+                          : "text-black/95"
+                      }`}
+                    >
+                      {item.label}
+                    </div>
+                    <div className="mt-4 text-[34px] font-bold leading-none tracking-[-0.05em] text-black">
+                      {item.count}
+                    </div>
                   </button>
                 ))}
               </div>
 
+              <div className="mt-8">
+                <h3 className="text-[28px] font-bold leading-none tracking-[-0.04em] text-black">
+                  {activeTab === "posts" ? "Posts" : "Friends"}
+                </h3>
+              </div>
+
               {/* Posts tab */}
               {activeTab === "posts" ? (
-                <div className="mt-5 space-y-4">
+                <div className="mt-6 grid gap-4">
                   {profile.notes.length === 0 ? (
                     <div className="rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] px-5 py-6">
                       <p className="text-[16px] font-medium text-black/50">
@@ -308,12 +483,25 @@ function FriendProfileModalContent({
                       </p>
                     </div>
                   ) : (
-                    profile.notes.map((note) => (
+                    profile.notes.map((note, idx) => (
                       <button
                         key={note.id}
                         type="button"
+                        ref={(element) => {
+                          postButtonRefs.current[idx] = element;
+                        }}
                         onClick={() => setOpenedPostId(note.id)}
-                        className="folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black"
+                        onFocus={() => {
+                          setFocusLevel("items");
+                          setFocusedItemIndex(idx);
+                        }}
+                        className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${
+                          focusLevel === "items" &&
+                          activeTab === "posts" &&
+                          focusedItemIndex === idx
+                            ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+                            : ""
+                        }`}
                       >
                         <NoteCardStack
                           topBar={
@@ -350,20 +538,33 @@ function FriendProfileModalContent({
 
               {/* Friends tab */}
               {activeTab === "friends" ? (
-                <div className="mt-5 space-y-3">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   {profile.friends.length === 0 ? (
-                    <div className="rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] px-5 py-6">
+                    <div className="rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] px-5 py-6 sm:col-span-2">
                       <p className="text-[16px] font-medium text-black/50">
                         No accepted friends yet.
                       </p>
                     </div>
                   ) : (
-                    profile.friends.map((friend) => (
+                    profile.friends.map((friend, idx) => (
                       <button
                         key={friend.id}
                         type="button"
+                        ref={(element) => {
+                          friendButtonRefs.current[idx] = element;
+                        }}
                         onClick={() => onOpenProfile(friend.email)}
-                        className="folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black"
+                        onFocus={() => {
+                          setFocusLevel("items");
+                          setFocusedItemIndex(idx);
+                        }}
+                        className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${
+                          focusLevel === "items" &&
+                          activeTab === "friends" &&
+                          focusedItemIndex === idx
+                            ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+                            : ""
+                        }`}
                       >
                         <div className="flex items-center gap-3">
                           <Avatar

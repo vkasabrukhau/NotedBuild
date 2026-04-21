@@ -164,7 +164,7 @@ const SchoolCard = forwardRef<
       type="button"
       onClick={onClick}
       data-school-id={school.id}
-      className={`folder-grid-card w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none${isActive ? " folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
+      className={`folder-grid-card w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none transition-[transform,box-shadow,border-color] duration-200 focus:outline-none focus-visible:outline-none${isActive ? " folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]" : ""}`}
     >
       <div className="flex items-center gap-4">
         <div

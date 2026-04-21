@@ -1,8 +1,8 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import type { ChangeEvent } from "react";
-import { useEffect, useState } from "react";
+import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProfileSchoolOption, ProfileViewData } from "@/lib/profile-data";
 
 type ProfileEditorProps = {
@@ -12,6 +12,14 @@ type ProfileEditorProps = {
   profile: ProfileViewData;
   schools: ProfileSchoolOption[];
 };
+
+function getSchoolDisplayLabel(school: ProfileSchoolOption) {
+  return school.location ? `${school.name} · ${school.location}` : school.name;
+}
+
+function getSchoolSearchText(school: ProfileSchoolOption) {
+  return `${school.name} ${school.location ?? ""}`.trim().toLowerCase();
+}
 
 async function syncProfileToServer(payload: {
   age: number | null;
@@ -49,6 +57,9 @@ export default function ProfileEditor({
   const [age, setAge] = useState(profile.age?.toString() ?? "");
   const [bio, setBio] = useState(profile.bio ?? "");
   const [schoolId, setSchoolId] = useState(profile.schoolId ?? "");
+  const [schoolQuery, setSchoolQuery] = useState(profile.schoolName ?? "");
+  const [isSchoolMenuOpen, setIsSchoolMenuOpen] = useState(false);
+  const [activeSchoolIndex, setActiveSchoolIndex] = useState(0);
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
   const [pendingEmailAddressId, setPendingEmailAddressId] = useState<
@@ -57,6 +68,24 @@ export default function ProfileEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const schoolFieldRef = useRef<HTMLDivElement | null>(null);
+  const schoolInputRef = useRef<HTMLInputElement | null>(null);
+  const schoolOptionsRef = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const selectedSchool = useMemo(
+    () => schools.find((school) => school.id === schoolId) ?? null,
+    [schoolId, schools],
+  );
+  const normalizedSchoolQuery = schoolQuery.trim().toLowerCase();
+  const filteredSchools = useMemo(() => {
+    if (normalizedSchoolQuery.length === 0) {
+      return [];
+    }
+
+    return schools
+      .filter((school) => getSchoolSearchText(school).includes(normalizedSchoolQuery))
+      .slice(0, 8);
+  }, [normalizedSchoolQuery, schools]);
 
   useEffect(() => {
     if (!open) {
@@ -68,6 +97,9 @@ export default function ProfileEditor({
     setAge(profile.age?.toString() ?? "");
     setBio(profile.bio ?? "");
     setSchoolId(profile.schoolId ?? "");
+    setSchoolQuery(profile.schoolName ?? "");
+    setIsSchoolMenuOpen(false);
+    setActiveSchoolIndex(0);
     setProfilePhoto(null);
     setVerificationCode("");
     setPendingEmailAddressId(null);
@@ -75,8 +107,135 @@ export default function ProfileEditor({
     setError(null);
   }, [open, profile]);
 
+  useEffect(() => {
+    if (!open || !isSchoolMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!schoolFieldRef.current?.contains(event.target as Node)) {
+        setIsSchoolMenuOpen(false);
+        setActiveSchoolIndex(0);
+        setSchoolQuery(selectedSchool ? getSchoolDisplayLabel(selectedSchool) : "");
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isSchoolMenuOpen, open, selectedSchool]);
+
+  useEffect(() => {
+    if (!open || !isSchoolMenuOpen || filteredSchools.length === 0) {
+      return;
+    }
+
+    const activeOption = schoolOptionsRef.current[activeSchoolIndex];
+    activeOption?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [activeSchoolIndex, filteredSchools.length, isSchoolMenuOpen, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (isSchoolMenuOpen) {
+        setIsSchoolMenuOpen(false);
+        setActiveSchoolIndex(0);
+        setSchoolQuery(selectedSchool ? getSchoolDisplayLabel(selectedSchool) : "");
+        return;
+      }
+
+      onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isSchoolMenuOpen, onClose, open, selectedSchool]);
+
   if (!open) {
     return null;
+  }
+
+  function handleSchoolSelect(nextSchoolId: string) {
+    const nextSchool = schools.find((school) => school.id === nextSchoolId) ?? null;
+    setSchoolId(nextSchoolId);
+    setSchoolQuery(nextSchool ? getSchoolDisplayLabel(nextSchool) : "");
+    setIsSchoolMenuOpen(false);
+    setActiveSchoolIndex(0);
+    setError(null);
+  }
+
+  function handleSchoolQueryChange(value: string) {
+    setSchoolQuery(value);
+    setIsSchoolMenuOpen(true);
+    setActiveSchoolIndex(0);
+
+    if (value.trim() === "") {
+      setSchoolId("");
+      return;
+    }
+
+    const exactMatch =
+      schools.find(
+        (school) =>
+          getSchoolDisplayLabel(school).toLowerCase() === value.trim().toLowerCase() ||
+          school.name.toLowerCase() === value.trim().toLowerCase(),
+      ) ?? null;
+
+    setSchoolId(exactMatch?.id ?? "");
+  }
+
+  function handleSchoolInputFocus() {
+    setIsSchoolMenuOpen(true);
+  }
+
+  function handleSchoolInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!isSchoolMenuOpen) {
+        setIsSchoolMenuOpen(true);
+        return;
+      }
+
+      if (filteredSchools.length > 0) {
+        setActiveSchoolIndex((current) => Math.min(current + 1, filteredSchools.length - 1));
+      }
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!isSchoolMenuOpen || filteredSchools.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setActiveSchoolIndex((current) => Math.max(current - 1, 0));
+      return;
+    }
+
+    if (event.key === "Enter" && isSchoolMenuOpen && filteredSchools.length > 0) {
+      event.preventDefault();
+      handleSchoolSelect(filteredSchools[activeSchoolIndex]?.id ?? filteredSchools[0].id);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsSchoolMenuOpen(false);
+      setActiveSchoolIndex(0);
+      setSchoolQuery(selectedSchool ? getSchoolDisplayLabel(selectedSchool) : "");
+    }
   }
 
   async function saveProfileDetails() {
@@ -260,20 +419,108 @@ export default function ProfileEditor({
             <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-black/45">
               School
             </span>
-            <select
-              value={schoolId}
-              onChange={(event) => setSchoolId(event.target.value)}
-              className="mt-2 w-full rounded-[18px] border border-black/12 bg-white px-4 py-3 text-[15px] text-black outline-none transition focus:border-black/30"
-            >
-              <option value="">No school selected</option>
-              {schools.map((school) => (
-                <option key={school.id} value={school.id}>
-                  {school.location
-                    ? `${school.name} · ${school.location}`
-                    : school.name}
-                </option>
-              ))}
-            </select>
+            <div ref={schoolFieldRef} className="relative mt-2">
+              <input
+                ref={schoolInputRef}
+                value={schoolQuery}
+                onChange={(event) => handleSchoolQueryChange(event.target.value)}
+                onFocus={handleSchoolInputFocus}
+                onKeyDown={handleSchoolInputKeyDown}
+                placeholder="Type your university"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="words"
+                className="w-full rounded-[18px] border border-black/12 bg-[var(--app-card)] px-4 py-3 pr-10 text-[15px] text-black outline-none transition focus:border-black/30"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSchoolMenuOpen((current) => !current);
+                  schoolInputRef.current?.focus();
+                }}
+                className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-black/10 text-black/45 transition hover:border-black/20 hover:text-black"
+                aria-label={isSchoolMenuOpen ? "Close school menu" : "Open school menu"}
+              >
+                <span className={`text-xs transition ${isSchoolMenuOpen ? "rotate-180" : ""}`}>
+                  v
+                </span>
+              </button>
+
+              {isSchoolMenuOpen ? (
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_24px_60px_rgba(15,23,42,0.12)]">
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSchoolSelect("")}
+                    className={`flex w-full items-center justify-between rounded-[16px] px-4 py-3 text-left text-[14px] transition ${
+                      schoolId === ""
+                        ? "bg-black text-white"
+                        : "text-black/72 hover:bg-black/[0.04]"
+                    }`}
+                  >
+                    <span>No school selected</span>
+                    <span className={`text-[11px] uppercase tracking-[0.22em] ${schoolId === "" ? "text-white/70" : "text-black/35"}`}>
+                      Clear
+                    </span>
+                  </button>
+
+                  {normalizedSchoolQuery.length === 0 ? (
+                    <div className="px-4 pb-2 pt-3 text-[12px] text-black/45">
+                      {selectedSchool
+                        ? `Current: ${getSchoolDisplayLabel(selectedSchool)}`
+                        : "Type to search for your university."}
+                    </div>
+                  ) : filteredSchools.length > 0 ? (
+                    <div className="mt-2 max-h-56 overflow-y-auto">
+                      {filteredSchools.map((school, index) => {
+                        const isActive = index === activeSchoolIndex;
+                        const isSelected = school.id === schoolId;
+
+                        return (
+                          <button
+                            key={school.id}
+                            type="button"
+                            ref={(element) => {
+                              schoolOptionsRef.current[index] = element;
+                            }}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onMouseEnter={() => setActiveSchoolIndex(index)}
+                            onClick={() => handleSchoolSelect(school.id)}
+                            className={`mb-1 flex w-full items-start justify-between gap-4 rounded-[16px] border px-4 py-3 text-left outline-none transition-[transform,background-color,border-color,box-shadow] duration-200 last:mb-0 ${
+                              isActive
+                                ? "-translate-y-1 border-black bg-[var(--app-card)] shadow-[0_14px_28px_rgba(20,18,17,0.10)]"
+                                : isSelected
+                                  ? "border-black/20 bg-black/[0.04]"
+                                  : "border-transparent hover:border-black/10 hover:bg-black/[0.03]"
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-[14px] font-medium text-black">
+                                {school.name}
+                              </span>
+                              {school.location ? (
+                                <span className="mt-1 block truncate text-[12px] text-black/45">
+                                  {school.location}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className={`shrink-0 pt-1 text-[10px] uppercase tracking-[0.22em] ${
+                              isActive ? "text-black/70" : "text-black/28"
+                            }`}>
+                              {isSelected ? "Selected" : isActive ? "Ready" : ""}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 pb-2 pt-3 text-[12px] text-black/45">
+                      No schools match that search.
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </label>
         </div>
 

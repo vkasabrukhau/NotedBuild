@@ -435,9 +435,9 @@ export default function SchoolProfileView({
                     studentButtonRefs.current[idx] = element;
                   }}
                   onClick={() => router.push(`/${student.email}`)}
-                  className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none focus:outline-none focus-visible:outline-none transition hover:border-black/20 ${
+                  className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none transition-[transform,box-shadow,border-color] duration-200 hover:border-black/20 focus:outline-none focus-visible:outline-none ${
                     focusLevel === "items" && focusedItemIndex === idx
-                      ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
+                      ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
                       : ""
                   }`}
                 >
@@ -474,9 +474,9 @@ export default function SchoolProfileView({
                       noteButtonRefs.current[index] = element;
                     }}
                     onClick={() => setOpenedPostId(note.id)}
-                    className={`folder-grid-card overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left outline-none focus:outline-none focus-visible:outline-none ${layout.articleClass} ${
+                    className={`folder-grid-card overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left outline-none transition-[transform,box-shadow,border-color] duration-200 focus:outline-none focus-visible:outline-none ${layout.articleClass} ${
                       focusLevel === "items" && focusedItemIndex === index
-                        ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
+                        ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
                         : ""
                     }`}
                   >

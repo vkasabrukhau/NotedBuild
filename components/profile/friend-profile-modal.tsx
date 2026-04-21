@@ -158,13 +158,13 @@ export default function FriendProfileModal({
 
       if (openedPostId) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         setOpenedPostId(null);
         return;
       }
 
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       onClose();
     };
 

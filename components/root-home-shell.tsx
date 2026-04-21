@@ -815,17 +815,21 @@ function HomeComponent({
                         setIsRenaming(false);
                       }}
                     >
-                      <input
-                        ref={renameInputRef}
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") setIsRenaming(false);
-                        }}
-                        onBlur={() => setIsRenaming(false)}
-                        className="w-full bg-transparent text-[22px] font-medium text-black outline-none border-b border-black/30 focus:border-black/60"
-                        placeholder={getSpeciesName(activeTamagotchi.species)}
-                        maxLength={24}
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsRenaming(false);
+                          }
+                          }}
+                          onBlur={() => setIsRenaming(false)}
+                          className="w-full bg-transparent text-[22px] font-medium text-black outline-none border-b border-black/30 focus:border-black/60"
+                          placeholder={getSpeciesName(activeTamagotchi.species)}
+                          maxLength={24}
                       />
                     </form>
                   ) : (
@@ -1624,7 +1628,11 @@ function TamagotchiPreferencesOverlay({
                             value={renameValue}
                             onChange={(e) => setRenameValue(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") setRenamingSpecies(null);
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setRenamingSpecies(null);
+                              }
                             }}
                             onBlur={() => setRenamingSpecies(null)}
                             className="w-full rounded-md border border-black/20 bg-transparent px-2 py-0.5 text-center text-[14px] text-black outline-none focus:border-black/50"
@@ -1835,7 +1843,11 @@ function TamagotchiPreferencesOverlay({
                             value={renameValue}
                             onChange={(e) => setRenameValue(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Escape") setRenamingSpecies(null);
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setRenamingSpecies(null);
+                              }
                             }}
                             onBlur={() => setRenamingSpecies(null)}
                             className="w-[80px] rounded-md border border-black/20 bg-transparent px-1.5 py-0.5 text-center text-[13px] text-black outline-none"
@@ -1899,11 +1911,11 @@ function NoteGridCard({
     <button
       type="button"
       role="gridcell"
-      className={`folder-grid-card rounded-[28px] border p-5 text-left ${
+      className={`folder-grid-card rounded-[28px] border p-5 text-left outline-none transition-[transform,box-shadow,border-color] duration-200 focus:outline-none focus-visible:outline-none ${
         isSelected
           ? "border-black bg-black text-white"
           : "border-black/10 bg-[var(--app-card)] text-black"
-      } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
+      } ${isActive ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]" : ""} ${
         isSelected ? "folder-grid-card--selected" : ""
       }`}
       style={{
@@ -1961,7 +1973,7 @@ function FolderGridCard({
     <button
       type="button"
       role="gridcell"
-      className={`folder-grid-card rounded-[28px] border p-5 text-left border-black/10 bg-[var(--app-card)] text-black ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
+      className={`folder-grid-card rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none transition-[transform,box-shadow,border-color] duration-200 focus:outline-none focus-visible:outline-none ${isActive ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]" : ""}`}
       style={{ animationDelay: `${animationDelayMs}ms` }}
       onClick={onClick}
       onFocus={onFocus}
@@ -2613,6 +2625,12 @@ function NoteComponent({
         const { selection } = state;
 
         if (event.key === "Escape") {
+          if (isSaveMenuOpen) {
+            event.preventDefault();
+            setIsSaveMenuOpen(false);
+            return true;
+          }
+
           handleCloseNoteShortcut(event);
           return true;
         }
@@ -3010,6 +3028,12 @@ function NoteComponent({
             }}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
+                if (isSaveMenuOpen) {
+                  event.preventDefault();
+                  setIsSaveMenuOpen(false);
+                  return;
+                }
+
                 handleCloseNoteShortcut(event);
                 return;
               }
@@ -3512,11 +3536,11 @@ function FolderComponent({
                   key={note.id}
                   type="button"
                   role="gridcell"
-                  className={`folder-grid-card rounded-[28px] border p-5 text-left ${
+                  className={`folder-grid-card rounded-[28px] border p-5 text-left outline-none transition-[transform,box-shadow,border-color] duration-200 focus:outline-none focus-visible:outline-none ${
                     isSelected
                       ? "border-black bg-black text-white"
                       : "border-black/10 bg-[var(--app-card)] text-black"
-                  } ${isActive ? "folder-grid-card--active ring-2 ring-black ring-offset-2" : ""} ${
+                  } ${isActive ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]" : ""} ${
                     isSelected ? "folder-grid-card--selected" : ""
                   }`}
                   style={{

@@ -1341,7 +1341,7 @@ export default function ProfileView({
   }
 
   return (
-    <div className="h-screen overflow-hidden w-full bg-white px-6 py-8">
+    <div className="min-h-screen w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[40px] font-bold leading-none tracking-[-0.05em] text-black">

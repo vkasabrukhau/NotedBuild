@@ -1,13 +1,31 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect } from "react";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 
 export default function LandingPage() {
+  useEffect(() => {
+    const els = document.querySelectorAll<HTMLElement>("[data-animate]");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="landing-root">
       {/* Nav */}
-      <nav className="landing-nav">
+      <nav className="landing-nav landing-hero-load landing-hero-load--nav">
         <span className="landing-nav-logo">
           <span className="landing-nav-logo-noted">Noted</span>
         </span>
@@ -30,7 +48,7 @@ export default function LandingPage() {
         {/* Heading + characters, layered together */}
         <div className="landing-hero-stage">
           {/* Guy sitting on "Make" */}
-          <div className="landing-char landing-char-guy">
+          <div className="landing-char landing-char-guy landing-hero-load landing-hero-load--guy">
             <Image
               src="/landingpageassets/guysittinglandingpage.png"
               alt=""
@@ -42,7 +60,7 @@ export default function LandingPage() {
           </div>
 
           {/* Heading text */}
-          <h1 className="landing-heading">
+          <h1 className="landing-heading landing-hero-load landing-hero-load--heading">
             <span className="landing-heading-regular">
               Life gets busy, make sure it's all{" "}
             </span>
@@ -50,7 +68,7 @@ export default function LandingPage() {
           </h1>
 
           {/* Girl standing on "N" in "Noted" */}
-          <div className="landing-char landing-char-girl">
+          <div className="landing-char landing-char-girl landing-hero-load landing-hero-load--girl">
             <Image
               src="/landingpageassets/girlstandinglangingpage.png"
               alt=""
@@ -63,7 +81,7 @@ export default function LandingPage() {
         </div>
 
         {/* Background image anchored to bottom */}
-        <div className="landing-background">
+        <div className="landing-background landing-hero-load landing-hero-load--bg">
           <Image
             src="/landingpageassets/landingbackground.png"
             alt=""
@@ -77,7 +95,7 @@ export default function LandingPage() {
 
       {/* Section 2 */}
       <section className="landing-s2">
-        <div className="landing-s2-left">
+        <div className="landing-s2-left" data-animate>
           <p className="landing-s2-headline">
             <span className="landing-s2-roboto">
               {"Designed to\nHelp You\nDo, Think, & Create\n"}
@@ -86,7 +104,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div className="landing-s2-right">
+        <div className="landing-s2-right" data-animate style={{ transitionDelay: "120ms" }}>
           <p className="landing-s2-sub">
             {
               "Our note taking app drives\nmeaningful cross-institution\ncollaboration in STEM research\nwhile staying sexy."
@@ -98,7 +116,7 @@ export default function LandingPage() {
       {/* Section 3: Modular grid */}
       <section className="landing-s3">
         <div className="landing-s3-grid">
-          <div className="s3-narrow-tall">
+          <div className="s3-narrow-tall" data-animate>
             <p className="s3-narrow-tall-text">
               {"Dive into\nintellectually\nstimulating\nwith "}
               <span className="s3-doto">diverse</span>
@@ -114,7 +132,7 @@ export default function LandingPage() {
               />
             </div>
           </div>
-          <div className="s3-narrow-sq">
+          <div className="s3-narrow-sq" data-animate style={{ transitionDelay: "80ms" }}>
             <p className="s3-narrow-sq-text">Infinite Organization</p>
             <div className="s3-narrow-sq-img">
               <Image
@@ -126,7 +144,7 @@ export default function LandingPage() {
               />
             </div>
           </div>
-          <div className="s3-wide-short">
+          <div className="s3-wide-short" data-animate style={{ transitionDelay: "160ms" }}>
             <p className="s3-wide-short-text">
               {"Cross\nUniversity\nCollaboration"}
             </p>
@@ -155,7 +173,7 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-          <div className="s3-wide-tall">
+          <div className="s3-wide-tall" data-animate style={{ transitionDelay: "240ms" }}>
             <p className="s3-wide-tall-header">たまごっち Friends</p>
             <p className="s3-wide-tall-sub">
               Tamagotchis accompany you on your note taking journey
@@ -190,7 +208,7 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <div className="s3-right-tall">
+          <div className="s3-right-tall" data-animate style={{ transitionDelay: "320ms" }}>
             <p className="s3-right-tall-header">Ctrl + Shift +</p>
             <p className="s3-right-tall-sub">
               {"Don't miss a beat with a fully\nshortcuts based interface,\nno trackpad interaction\nrequired"}
@@ -210,11 +228,11 @@ export default function LandingPage() {
 
       {/* Section 4: Math */}
       <section className="landing-s4">
-        <h2 className="landing-s4-title">
+        <h2 className="landing-s4-title" data-animate>
           <span className="landing-s4-roboto">With /math[ ] LaTeX is </span>
           <span className="landing-s4-doto">Trivial</span>
         </h2>
-        <div className="landing-s4-banner">
+        <div className="landing-s4-banner" data-animate style={{ transitionDelay: "100ms" }}>
           <div className="landing-s4-pill">
             <span className="landing-s4-pill-text">/math[]</span>
           </div>
@@ -223,12 +241,12 @@ export default function LandingPage() {
 
       {/* Section 5: Stack */}
       <section className="landing-s5">
-        <h2 className="landing-s5-title">
+        <h2 className="landing-s5-title" data-animate>
           <span className="landing-s5-doto">Lightning </span>
           <span className="landing-s5-roboto">fast stack to power it all</span>
         </h2>
         <div className="landing-s5-grid">
-          <div className="landing-s5-card landing-s5-card--dark">
+          <div className="landing-s5-card landing-s5-card--dark" data-animate style={{ transitionDelay: "100ms" }}>
             <p className="landing-s5-card-title">TipTap Formatting</p>
             <div className="landing-s5-card-img">
               <Image
@@ -240,7 +258,7 @@ export default function LandingPage() {
               />
             </div>
           </div>
-          <div className="landing-s5-card">
+          <div className="landing-s5-card" data-animate style={{ transitionDelay: "200ms" }}>
             <p className="landing-s5-card-title">Gemini Integration</p>
             <div className="landing-s5-card-img">
               <Image
@@ -252,7 +270,7 @@ export default function LandingPage() {
               />
             </div>
           </div>
-          <div className="landing-s5-card">
+          <div className="landing-s5-card" data-animate style={{ transitionDelay: "300ms" }}>
             <p className="landing-s5-card-title">NextJS Framework</p>
             <div className="landing-s5-card-img">
               <Image
@@ -269,8 +287,8 @@ export default function LandingPage() {
 
       {/* Section 6: Access */}
       <section className="landing-s6">
-        <h2 className="landing-s6-title">Access</h2>
-        <div className="landing-s6-body">
+        <h2 className="landing-s6-title" data-animate>Access</h2>
+        <div className="landing-s6-body" data-animate style={{ transitionDelay: "120ms" }}>
           <div className="landing-s6-image">
             <Image
               src="/landingpageassets/coffeelanding.png"

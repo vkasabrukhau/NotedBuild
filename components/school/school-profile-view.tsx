@@ -7,6 +7,10 @@ import { formatAuthoredDate, getPreviewText } from "@/lib/text-utils";
 import type { ExploreNoteCard, ExploreCommentRecord } from "@/lib/explore";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import PixelatedSchoolLogo from "@/components/profile/pixelated-school-logo";
+import NoteCardStack from "@/components/notes/note-card-stack";
+import PostViewerModal from "@/components/notes/post-viewer-modal";
+import { NOTE_VISIBILITY_LABELS } from "@/lib/note-visibility";
+import { findNextGridItemIndex, focusGridItem } from "@/lib/grid-navigation";
 
 type SchoolData = {
   id: string;
@@ -125,87 +129,20 @@ export default function SchoolProfileView({
     setFocusedItemIndex(0);
   }, []);
 
-  const findNextItemIndex = useCallback(
-    (currentIndex: number, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown") => {
-      const refs =
-        activeTab === "students" ? studentButtonRefs.current : noteButtonRefs.current;
-      const currentItem = refs[currentIndex];
-
-      if (!currentItem) {
-        return null;
-      }
-
-      const currentRect = currentItem.getBoundingClientRect();
-      const currentCenterX = currentRect.left + currentRect.width / 2;
-      const currentCenterY = currentRect.top + currentRect.height / 2;
-      const currentHeight = currentRect.height;
-      const currentWidth = currentRect.width;
-
-      let nextIndex: number | null = null;
-      let bestPrimaryDistance = Number.POSITIVE_INFINITY;
-      let bestSecondaryDistance = Number.POSITIVE_INFINITY;
-
-      refs.forEach((candidateItem, index) => {
-        if (!candidateItem || index === currentIndex) {
-          return;
-        }
-
-        const candidateRect = candidateItem.getBoundingClientRect();
-        const candidateCenterX = candidateRect.left + candidateRect.width / 2;
-        const candidateCenterY = candidateRect.top + candidateRect.height / 2;
-        const deltaX = candidateCenterX - currentCenterX;
-        const deltaY = candidateCenterY - currentCenterY;
-
-        let primaryDistance = Number.POSITIVE_INFINITY;
-        let secondaryDistance = Number.POSITIVE_INFINITY;
-
-        if (key === "ArrowLeft" && deltaX < -8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (key === "ArrowRight" && deltaX > 8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (key === "ArrowUp" && deltaY < -8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (key === "ArrowDown" && deltaY > 8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (!Number.isFinite(primaryDistance)) {
-          return;
-        }
-
-        const isHorizontalMove = key === "ArrowLeft" || key === "ArrowRight";
-        const alignmentLimit = isHorizontalMove
-          ? Math.max(72, currentHeight * 0.7)
-          : Math.max(96, currentWidth * 0.8);
-        const penalizedPrimary =
-          secondaryDistance > alignmentLimit
-            ? primaryDistance + alignmentLimit * 4
-            : primaryDistance;
-
-        if (
-          penalizedPrimary < bestPrimaryDistance ||
-          (penalizedPrimary === bestPrimaryDistance &&
-            secondaryDistance < bestSecondaryDistance)
-        ) {
-          nextIndex = index;
-          bestPrimaryDistance = penalizedPrimary;
-          bestSecondaryDistance = secondaryDistance;
-        }
-      });
-
-      return nextIndex;
-    },
+  const getActiveItemRefs = useCallback(
+    () =>
+      activeTab === "students"
+        ? studentButtonRefs.current
+        : noteButtonRefs.current,
     [activeTab],
+  );
+
+  const findNextItemIndex = useCallback(
+    (
+      currentIndex: number,
+      key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+    ) => findNextGridItemIndex(getActiveItemRefs(), currentIndex, key),
+    [getActiveItemRefs],
   );
 
   useEffect(() => {
@@ -213,20 +150,8 @@ export default function SchoolProfileView({
       return;
     }
 
-    const refs =
-      activeTab === "students" ? studentButtonRefs.current : noteButtonRefs.current;
-    const activeItem = refs[focusedItemIndex];
-    if (!activeItem) {
-      return;
-    }
-
-    activeItem.focus({ preventScroll: true });
-    activeItem.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-      behavior: "smooth",
-    });
-  }, [activeTab, focusLevel, focusedItemIndex]);
+    focusGridItem(getActiveItemRefs(), focusedItemIndex);
+  }, [focusLevel, focusedItemIndex, getActiveItemRefs]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -480,31 +405,53 @@ export default function SchoolProfileView({
                         : ""
                     }`}
                   >
-                    <div className="flex h-full flex-col">
-                      <div className="flex items-center gap-2.5">
-                        <UserAvatar fullName={note.owner.fullName} profilePhotoUrl={note.owner.profilePhotoUrl} size={32} />
-                        <p className="truncate text-[14px] font-semibold text-black">{note.owner.fullName}</p>
-                      </div>
-                      <p className="mt-2 text-[12px] text-black/45">
-                        {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-                      </p>
-                      <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
-                        {note.name}
-                      </div>
-                      <p className="mt-4 text-[17px] leading-[1.6] text-black/72">
-                        {getPreviewText(note.content, layout.previewLength) || "No preview available yet."}
-                      </p>
-                      <div className="mt-auto pt-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[14px] font-medium text-black/65">
-                            ♡ {note.likeCount}
-                          </span>
-                          <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[14px] font-medium text-black/65">
-                            {note.commentCount} comments
+                    <NoteCardStack
+                      topBar={
+                        <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+                          <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+                            {NOTE_VISIBILITY_LABELS[note.visibility]}
                           </span>
                         </div>
-                      </div>
-                    </div>
+                      }
+                      header={
+                        <div className="flex items-center gap-2.5">
+                          <UserAvatar
+                            fullName={note.owner.fullName}
+                            profilePhotoUrl={note.owner.profilePhotoUrl}
+                            size={32}
+                          />
+                          <p className="truncate text-[14px] font-semibold text-black">
+                            {note.owner.fullName}
+                          </p>
+                        </div>
+                      }
+                      title={
+                        <div className={`font-bold leading-[1.02] ${layout.titleClass}`}>
+                          {note.name}
+                        </div>
+                      }
+                      preview={
+                        <p className="text-[17px] leading-[1.6] text-black/72">
+                          {getPreviewText(note.content, layout.previewLength) ||
+                            "No preview available yet."}
+                        </p>
+                      }
+                      footer={
+                        <div>
+                          <p className="text-[12px] text-black/45">
+                            {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[14px] font-medium text-black/65">
+                              ♡ {note.likeCount}
+                            </span>
+                            <span className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[14px] font-medium text-black/65">
+                              {note.commentCount} comments
+                            </span>
+                          </div>
+                        </div>
+                      }
+                    />
                   </button>
                 );
               })}
@@ -514,56 +461,60 @@ export default function SchoolProfileView({
       ) : null}
 
       {/* Note detail modal */}
-      {openedPost ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 px-6 py-8">
-          <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
-            <div className="flex items-start justify-between gap-4">
-              <div />
+      <PostViewerModal
+        note={openedPost}
+        topMeta={
+          <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+            {openedPost ? NOTE_VISIBILITY_LABELS[openedPost.visibility] : null}
+          </span>
+        }
+        actions={
+          <button
+            type="button"
+            className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+            onClick={() => setOpenedPostId(null)}
+          >
+            Close
+          </button>
+        }
+        owner={
+          openedPost ? (
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
-                onClick={() => setOpenedPostId(null)}
+                onClick={() => {
+                  setOpenedPostId(null);
+                  router.push(`/${openedPost.owner.email}`);
+                }}
               >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-6 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => { setOpenedPostId(null); router.push(`/${openedPost.owner.email}`); }}
-              >
-                <UserAvatar fullName={openedPost.owner.fullName} profilePhotoUrl={openedPost.owner.profilePhotoUrl} size={40} />
+                <UserAvatar
+                  fullName={openedPost.owner.fullName}
+                  profilePhotoUrl={openedPost.owner.profilePhotoUrl}
+                  size={40}
+                />
               </button>
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
                   className="truncate text-[15px] font-semibold text-black hover:underline"
-                  onClick={() => { setOpenedPostId(null); router.push(`/${openedPost.owner.email}`); }}
+                  onClick={() => {
+                    setOpenedPostId(null);
+                    router.push(`/${openedPost.owner.email}`);
+                  }}
                 >
                   {openedPost.owner.fullName}
                 </button>
               </div>
             </div>
-            <p className="mt-2 text-[13px] text-black/45">
-              {formatAuthoredDate(openedPost.publishedAt ?? openedPost.createdAt)}
-            </p>
-
-            <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
-              {openedPost.name}
-            </h2>
-
-            <div
-              className="prose prose-lg mt-8 max-w-none text-black"
-              dangerouslySetInnerHTML={{ __html: openedPost.content }}
-            />
-
+          ) : null
+        }
+        footer={
+          <>
             {actionError ? (
-              <p className="mt-4 text-[14px] text-red-600">{actionError}</p>
+              <p className="mb-4 text-[14px] text-red-600">{actionError}</p>
             ) : null}
-
-            <div className="mt-10 border-t border-black/10 pt-8">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {openedPost ? (
                 <button
                   type="button"
                   className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
@@ -575,25 +526,27 @@ export default function SchoolProfileView({
                 >
                   {openedPost.likedByViewer ? "Liked" : "Like"} · {openedPost.likeCount}
                 </button>
-                <span className="text-[15px] text-black/55">
-                  Comments · {commentsData?.comments?.length ?? openedPost.commentCount}
-                </span>
-              </div>
+              ) : null}
+              <span className="text-[15px] text-black/55">
+                Comments · {commentsData?.comments?.length ?? openedPost?.commentCount ?? 0}
+              </span>
+            </div>
 
-              <div className="mt-8 space-y-4">
-                {(commentsData?.comments ?? []).map((comment) => (
-                  <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
-                    <div className="text-[14px] font-semibold text-black">{comment.author.fullName}</div>
-                    <div className="mt-1 text-[13px] text-black/40">{formatAuthoredDate(comment.createdAt)}</div>
-                    <p className="mt-2 text-[15px] leading-[1.5] text-black/72">{comment.body}</p>
-                  </div>
-                ))}
-                {commentsLoading ? <p className="text-[15px] text-black/45">Loading comments...</p> : null}
-                {!commentsLoading && (commentsData?.comments?.length ?? 0) === 0 ? (
-                  <p className="text-[15px] text-black/45">No comments yet.</p>
-                ) : null}
-              </div>
+            <div className="mt-8 space-y-4">
+              {(commentsData?.comments ?? []).map((comment) => (
+                <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
+                  <div className="text-[14px] font-semibold text-black">{comment.author.fullName}</div>
+                  <div className="mt-1 text-[13px] text-black/40">{formatAuthoredDate(comment.createdAt)}</div>
+                  <p className="mt-2 text-[15px] leading-[1.5] text-black/72">{comment.body}</p>
+                </div>
+              ))}
+              {commentsLoading ? <p className="text-[15px] text-black/45">Loading comments...</p> : null}
+              {!commentsLoading && (commentsData?.comments?.length ?? 0) === 0 ? (
+                <p className="text-[15px] text-black/45">No comments yet.</p>
+              ) : null}
+            </div>
 
+            {openedPost ? (
               <div className="mt-8 flex flex-col gap-3">
                 <textarea
                   value={commentDraft}
@@ -614,10 +567,10 @@ export default function SchoolProfileView({
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            ) : null}
+          </>
+        }
+      />
 
     </main>
   );

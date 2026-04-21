@@ -7,6 +7,7 @@ import { StarterKit } from "@tiptap/starter-kit";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import ExplorePage from "@/components/explore/explore-page";
+import NoteCardStack from "@/components/notes/note-card-stack";
 import ProfileView from "@/components/profile/profile-view";
 import SchoolShellView from "@/components/school/school-shell-view";
 import type {
@@ -1924,34 +1925,42 @@ function NoteGridCard({
       onClick={onClick}
       onFocus={onFocus}
     >
-      <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em]">
-        <span
-          className={`rounded-full px-3 py-1 ${
-            note.visibility === "PUBLIC"
-              ? "bg-black text-white"
-              : note.visibility === "SCHOOL"
-                ? "bg-black/10 text-black/75"
-                : "bg-black/[0.06] text-black/45"
-          }`}
-        >
-          {NOTE_VISIBILITY_LABELS[note.visibility]}
-        </span>
-      </div>
-      <div className="text-[24px] font-bold leading-tight">{note.name}</div>
-      <div
-        className={`mt-4 text-[18px] leading-[1.45] ${
-          isSelected ? "text-white/82" : "text-black/70"
-        }`}
-      >
-        {getPreviewText(note.content)}
-      </div>
-      <div
-        className={`mt-5 text-[16px] font-medium leading-none ${
-          isSelected ? "text-white/70" : "text-black/55"
-        }`}
-      >
-        {formatAuthoredDate(note.createdAt)}
-      </div>
+      <NoteCardStack
+        topBar={
+          <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em]">
+            <span
+              className={`rounded-full px-3 py-1 ${
+                note.visibility === "PUBLIC"
+                  ? "bg-black text-white"
+                  : note.visibility === "SCHOOL"
+                    ? "bg-black/10 text-black/75"
+                    : "bg-black/[0.06] text-black/45"
+              }`}
+            >
+              {NOTE_VISIBILITY_LABELS[note.visibility]}
+            </span>
+          </div>
+        }
+        title={<div className="text-[24px] font-bold leading-tight">{note.name}</div>}
+        preview={
+          <div
+            className={`text-[18px] leading-[1.45] ${
+              isSelected ? "text-white/82" : "text-black/70"
+            }`}
+          >
+            {getPreviewText(note.content)}
+          </div>
+        }
+        footer={
+          <div
+            className={`text-[16px] font-medium leading-none ${
+              isSelected ? "text-white/70" : "text-black/55"
+            }`}
+          >
+            {formatAuthoredDate(note.createdAt)}
+          </div>
+        }
+      />
     </button>
   );
 }
@@ -3552,23 +3561,28 @@ function FolderComponent({
                     toggleSelectedNote(note.id);
                   }}
                 >
-                  <div className="text-[24px] font-bold leading-tight">
-                    {note.name}
-                  </div>
-                  <div
-                    className={`mt-4 text-[18px] leading-[1.45] ${
-                      isSelected ? "text-white/82" : "text-black/70"
-                    }`}
-                  >
-                    {getPreviewText(note.content)}
-                  </div>
-                  <div
-                    className={`mt-5 text-[16px] font-medium leading-none ${
-                      isSelected ? "text-white/70" : "text-black/55"
-                    }`}
-                  >
-                    {formatAuthoredDate(note.createdAt)}
-                  </div>
+                  <NoteCardStack
+                    topBarMinHeightClassName="min-h-0"
+                    title={<div className="text-[24px] font-bold leading-tight">{note.name}</div>}
+                    preview={
+                      <div
+                        className={`text-[18px] leading-[1.45] ${
+                          isSelected ? "text-white/82" : "text-black/70"
+                        }`}
+                      >
+                        {getPreviewText(note.content)}
+                      </div>
+                    }
+                    footer={
+                      <div
+                        className={`text-[16px] font-medium leading-none ${
+                          isSelected ? "text-white/70" : "text-black/55"
+                        }`}
+                      >
+                        {formatAuthoredDate(note.createdAt)}
+                      </div>
+                    }
+                  />
                 </button>
               );
             })}

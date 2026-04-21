@@ -8,6 +8,8 @@ import { formatAuthoredDate, getPreviewText } from "@/lib/text-utils";
 import type { ProfileViewData, ProfileViewerData } from "@/lib/profile-data";
 import type { ExploreCommentRecord } from "@/lib/explore";
 import { NOTE_VISIBILITY_LABELS } from "@/lib/note-visibility";
+import NoteCardStack from "@/components/notes/note-card-stack";
+import PostViewerModal from "@/components/notes/post-viewer-modal";
 
 type FriendProfileModalProps = {
   email: string | null;
@@ -121,6 +123,25 @@ export default function FriendProfileModal({
   onOpenProfile,
   onOpenSchool,
 }: FriendProfileModalProps) {
+  if (!email) return null;
+
+  return (
+    <FriendProfileModalContent
+      key={email}
+      email={email}
+      onClose={onClose}
+      onOpenProfile={onOpenProfile}
+      onOpenSchool={onOpenSchool}
+    />
+  );
+}
+
+function FriendProfileModalContent({
+  email,
+  onClose,
+  onOpenProfile,
+  onOpenSchool,
+}: FriendProfileModalProps) {
   const [activeTab, setActiveTab] = useState<ModalTab>("posts");
   const [openedPostId, setOpenedPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -144,13 +165,6 @@ export default function FriendProfileModal({
 
   const profile = data?.profile ?? null;
   const openedPost = profile?.notes.find((n) => n.id === openedPostId) ?? null;
-
-  useEffect(() => {
-    setActiveTab("posts");
-    setOpenedPostId(null);
-    setCommentDraft("");
-  }, [email]);
-
   // Close on Escape
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -171,8 +185,6 @@ export default function FriendProfileModal({
     window.addEventListener("keydown", handleKey, true);
     return () => window.removeEventListener("keydown", handleKey, true);
   }, [onClose, openedPostId]);
-
-  if (!email) return null;
 
   async function handleSubmitComment(noteId: string) {
     const trimmed = commentDraft.trim();
@@ -303,22 +315,33 @@ export default function FriendProfileModal({
                         onClick={() => setOpenedPostId(note.id)}
                         className="folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black"
                       >
-                        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black/45">
-                          <span className="rounded-full border border-black/10 bg-black/8 px-2.5 py-0.5">
-                            {NOTE_VISIBILITY_LABELS[note.visibility]}
-                          </span>
-                        </div>
-                        <h3 className="mt-3 text-[20px] font-bold leading-tight">
-                          {note.name}
-                        </h3>
-                        <p className="mt-2 text-[14px] leading-[1.5] text-black/65">
-                          {getPreviewText(note.content, 60) || "No preview available yet."}
-                        </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-black/45">
-                          <span>♡ {note.likeCount}</span>
-                          <span>· {note.commentCount} comments</span>
-                          <span>· {formatAuthoredDate(note.publishedAt ?? note.createdAt)}</span>
-                        </div>
+                        <NoteCardStack
+                          topBar={
+                            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black/45">
+                              <span className="rounded-full border border-black/10 bg-black/8 px-2.5 py-0.5">
+                                {NOTE_VISIBILITY_LABELS[note.visibility]}
+                              </span>
+                            </div>
+                          }
+                          title={
+                            <h3 className="text-[20px] font-bold leading-tight">
+                              {note.name}
+                            </h3>
+                          }
+                          preview={
+                            <p className="text-[14px] leading-[1.5] text-black/65">
+                              {getPreviewText(note.content, 60) ||
+                                "No preview available yet."}
+                            </p>
+                          }
+                          footer={
+                            <div className="flex flex-wrap items-center gap-2 text-[12px] text-black/45">
+                              <span>♡ {note.likeCount}</span>
+                              <span>· {note.commentCount} comments</span>
+                              <span>· {formatAuthoredDate(note.publishedAt ?? note.createdAt)}</span>
+                            </div>
+                          }
+                        />
                       </button>
                     ))
                   )}
@@ -368,77 +391,74 @@ export default function FriendProfileModal({
       </div>
 
       {/* Full post overlay (on top of slide-over) */}
-      {openedPost && profile ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-6 py-8">
-          <div className="max-h-full w-full max-w-3xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.14)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <Avatar
-                  fullName={profile.fullName}
-                  profilePhotoUrl={profile.profilePhotoUrl}
-                  size={36}
-                />
-                <div>
-                  <p className="text-[14px] font-semibold text-black">
-                    {profile.fullName}
-                  </p>
-                  <p className="text-[12px] text-black/45">
-                    {formatAuthoredDate(openedPost.publishedAt ?? openedPost.createdAt)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/${encodeURIComponent(profile.email)}/notes/${encodeURIComponent(openedPost.name)}`}
-                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-[13px] font-medium text-black/70 transition hover:border-black/20"
-                >
-                  Open full
-                </Link>
-                <button
-                  type="button"
-                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
-                  onClick={() => setOpenedPostId(null)}
-                >
-                  Back
-                </button>
+      <PostViewerModal
+        note={openedPost}
+        overlayClassName="z-[60] bg-black/30"
+        maxWidthClassName="max-w-3xl"
+        titleClassName="text-[32px] font-bold leading-[1.05] text-black"
+        actions={
+          openedPost && profile ? (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/${encodeURIComponent(profile.email)}/notes/${encodeURIComponent(openedPost.name)}`}
+                className="rounded-full border border-black/10 bg-white px-4 py-2 text-[13px] font-medium text-black/70 transition hover:border-black/20"
+              >
+                Open full
+              </Link>
+              <button
+                type="button"
+                className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+                onClick={() => setOpenedPostId(null)}
+              >
+                Back
+              </button>
+            </div>
+          ) : null
+        }
+        owner={
+          openedPost && profile ? (
+            <div className="flex items-center gap-2.5">
+              <Avatar
+                fullName={profile.fullName}
+                profilePhotoUrl={profile.profilePhotoUrl}
+                size={36}
+              />
+              <div>
+                <p className="text-[14px] font-semibold text-black">
+                  {profile.fullName}
+                </p>
               </div>
             </div>
-
-            <h2 className="mt-6 text-[32px] font-bold leading-[1.05] text-black">
-              {openedPost.name}
-            </h2>
-
-            <div
-              className="prose prose-lg mt-6 max-w-none text-black"
-              dangerouslySetInnerHTML={{ __html: openedPost.content }}
-            />
-
-            <div className="mt-8 border-t border-black/10 pt-6">
-              <div className="space-y-4">
-                {(commentsData?.comments ?? []).map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
-                  >
-                    <div className="text-[14px] font-semibold text-black">
-                      {comment.author.fullName}
-                    </div>
-                    <div className="mt-0.5 text-[12px] text-black/40">
-                      {formatAuthoredDate(comment.createdAt)}
-                    </div>
-                    <p className="mt-2 text-[14px] leading-[1.5] text-black/72">
-                      {comment.body}
-                    </p>
+          ) : null
+        }
+        footer={
+          <>
+            <div className="space-y-4">
+              {(commentsData?.comments ?? []).map((comment) => (
+                <div
+                  key={comment.id}
+                  className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
+                >
+                  <div className="text-[14px] font-semibold text-black">
+                    {comment.author.fullName}
                   </div>
-                ))}
-                {commentsLoading ? (
-                  <p className="text-[14px] text-black/45">Loading comments...</p>
-                ) : null}
-                {!commentsLoading && (commentsData?.comments?.length ?? 0) === 0 ? (
-                  <p className="text-[14px] text-black/45">No comments yet.</p>
-                ) : null}
-              </div>
+                  <div className="mt-0.5 text-[12px] text-black/40">
+                    {formatAuthoredDate(comment.createdAt)}
+                  </div>
+                  <p className="mt-2 text-[14px] leading-[1.5] text-black/72">
+                    {comment.body}
+                  </p>
+                </div>
+              ))}
+              {commentsLoading ? (
+                <p className="text-[14px] text-black/45">Loading comments...</p>
+              ) : null}
+              {!commentsLoading && (commentsData?.comments?.length ?? 0) === 0 ? (
+                <p className="text-[14px] text-black/45">No comments yet.</p>
+              ) : null}
+            </div>
 
+            {openedPost ? (
               <div className="mt-6 flex flex-col gap-3">
                 <textarea
                   value={commentDraft}
@@ -461,10 +481,10 @@ export default function FriendProfileModal({
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            ) : null}
+          </>
+        }
+      />
     </>
   );
 }

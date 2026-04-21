@@ -10,10 +10,13 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
+import NoteCardStack from "@/components/notes/note-card-stack";
+import PostViewerModal from "@/components/notes/post-viewer-modal";
 import {
   type ExploreCommentRecord,
   type ExploreNoteCard,
 } from "@/lib/explore";
+import { findNextGridItemIndex, focusGridItem } from "@/lib/grid-navigation";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import { formatAuthoredDate, getPreviewText } from "@/lib/text-utils";
 import type { ProfileFriendshipState } from "@/lib/profile-data";
@@ -401,18 +404,7 @@ export default function ExplorePage({
       return;
     }
 
-    const activeCard = cardButtonRefs.current[activeCardIndex];
-
-    if (!activeCard) {
-      return;
-    }
-
-    activeCard.focus({ preventScroll: true });
-    activeCard.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-      behavior: "smooth",
-    });
+    focusGridItem(cardButtonRefs.current, activeCardIndex);
   }, [
     activeCardIndex,
     displayNotes.length,
@@ -629,9 +621,6 @@ export default function ExplorePage({
       const refs = isSchoolsView ? schoolCardRefs : cardButtonRefs;
       const currentIndex = isSchoolsView ? activeSchoolIndexRef.current : activeCardIndex;
       const setIndex = isSchoolsView ? setActiveSchoolIndex : setActiveCardIndex;
-      const itemCount = isSchoolsView
-        ? schoolCardRefs.current.filter(Boolean).length
-        : displayNotes.length;
 
       if (event.key === "Enter") {
         event.preventDefault();
@@ -646,85 +635,12 @@ export default function ExplorePage({
         return;
       }
 
-      const currentCard = refs.current[currentIndex];
-
-      if (!currentCard) {
-        return;
-      }
-
-      const currentRect = currentCard.getBoundingClientRect();
-      const currentCenterX = currentRect.left + currentRect.width / 2;
-      const currentCenterY = currentRect.top + currentRect.height / 2;
-      const currentHeight = currentRect.height;
-      const currentWidth = currentRect.width;
-
-      let nextIndex = currentIndex;
-      let bestPrimaryDistance = Number.POSITIVE_INFINITY;
-      let bestSecondaryDistance = Number.POSITIVE_INFINITY;
-
-      for (let index = 0; index < itemCount; index += 1) {
-        if (index === currentIndex) {
-          continue;
-        }
-
-        const candidateCard = refs.current[index];
-
-        if (!candidateCard) {
-          continue;
-        }
-
-        const candidateRect = candidateCard.getBoundingClientRect();
-        const candidateCenterX = candidateRect.left + candidateRect.width / 2;
-        const candidateCenterY = candidateRect.top + candidateRect.height / 2;
-        const deltaX = candidateCenterX - currentCenterX;
-        const deltaY = candidateCenterY - currentCenterY;
-
-        let primaryDistance = Number.POSITIVE_INFINITY;
-        let secondaryDistance = Number.POSITIVE_INFINITY;
-
-        if (event.key === "ArrowLeft" && deltaX < -8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (event.key === "ArrowRight" && deltaX > 8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (event.key === "ArrowUp" && deltaY < -8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (event.key === "ArrowDown" && deltaY > 8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (!Number.isFinite(primaryDistance)) {
-          continue;
-        }
-
-        const isHorizontalMove =
-          event.key === "ArrowLeft" || event.key === "ArrowRight";
-        const alignmentLimit = isHorizontalMove
-          ? Math.max(72, currentHeight * 0.7)
-          : Math.max(96, currentWidth * 0.8);
-        const penalizedPrimary = secondaryDistance > alignmentLimit
-          ? primaryDistance + alignmentLimit * 4
-          : primaryDistance;
-
-        if (
-          penalizedPrimary < bestPrimaryDistance ||
-          (penalizedPrimary === bestPrimaryDistance &&
-            secondaryDistance < bestSecondaryDistance)
-        ) {
-          nextIndex = index;
-          bestPrimaryDistance = penalizedPrimary;
-          bestSecondaryDistance = secondaryDistance;
-        }
-      }
+      const nextIndex =
+        findNextGridItemIndex(
+          refs.current,
+          currentIndex,
+          event.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+        ) ?? currentIndex;
 
       if (nextIndex !== currentIndex) {
         event.preventDefault();
@@ -1364,150 +1280,159 @@ export default function ExplorePage({
                         : "shadow-[0_1px_0_rgba(20,18,17,0.02)]"
                     }`}
                   >
-                    <div className="flex h-full flex-col">
-                      <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
-                        <span
-                          className={`rounded-full border px-3 py-1 ${getSourceChipClassName(note.sourceType)}`}
-                        >
-                          {note.sourceLabel}
-                        </span>
-                      </div>
-
-                      <div className="mt-5 flex items-center gap-2.5">
-                        <Link href={`/${note.owner.email}`} className="shrink-0">
-                          <ExploreUserAvatar
-                            fullName={note.owner.fullName}
-                            profilePhotoUrl={note.owner.profilePhotoUrl}
-                            size={32}
-                          />
-                        </Link>
-                        <div className="min-w-0 flex-1">
-                          <Link
-                            href={`/${note.owner.email}`}
-                            className="block truncate text-[14px] font-semibold text-black hover:underline"
+                    <NoteCardStack
+                      className="h-full"
+                      topBar={
+                        <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+                          <span
+                            className={`rounded-full border px-3 py-1 ${getSourceChipClassName(note.sourceType)}`}
                           >
-                            {note.owner.fullName}
-                          </Link>
-                          <div className="mt-1">
-                            <ExploreSchoolTag
-                              compact
-                              schoolLogoUrl={note.owner.schoolLogoUrl}
-                              schoolName={note.owner.schoolName}
-                              schoolId={note.owner.schoolId}
-                              onClick={() => {
-                                if (note.owner.schoolId) {
-                                  openSchool(note.owner.schoolId);
-                                }
-                              }}
+                            {note.sourceLabel}
+                          </span>
+                        </div>
+                      }
+                      header={
+                        <div className="flex items-center gap-2.5">
+                          <Link href={`/${note.owner.email}`} className="shrink-0">
+                            <ExploreUserAvatar
+                              fullName={note.owner.fullName}
+                              profilePhotoUrl={note.owner.profilePhotoUrl}
+                              size={32}
                             />
+                          </Link>
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/${note.owner.email}`}
+                              className="block truncate text-[14px] font-semibold text-black hover:underline"
+                            >
+                              {note.owner.fullName}
+                            </Link>
+                            <div className="mt-1">
+                              <ExploreSchoolTag
+                                compact
+                                schoolLogoUrl={note.owner.schoolLogoUrl}
+                                schoolName={note.owner.schoolName}
+                                schoolId={note.owner.schoolId}
+                                onClick={() => {
+                                  if (note.owner.schoolId) {
+                                    openSchool(note.owner.schoolId);
+                                  }
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      }
+                      title={
+                        <button
+                          type="button"
+                          ref={(element) => {
+                            cardButtonRefs.current[index] = element;
+                          }}
+                          className="flex flex-col rounded-[20px] text-left outline-none"
+                          onClick={() => setOpenedPostId(note.id)}
+                          onFocus={() => setActiveCardIndex(index)}
+                        >
+                          <p className="text-[12px] text-black/45">
+                            {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                          </p>
+                          <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
+                            {note.name}
+                          </div>
+                          <p className="mt-4 text-[18px] leading-[1.6] text-black/72">
+                            {getPreviewText(
+                              note.content,
+                              isExpanded ? 160 : layout.previewLength,
+                            ) || "No preview available yet."}
+                          </p>
+                        </button>
+                      }
+                      preview={null}
+                      footer={
+                        <div>
+                          <p className="text-[12px] text-black/45">
+                            {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
+                                note.likedByViewer
+                                  ? "border-black bg-black text-white"
+                                  : "border-black/10 bg-white text-black/70"
+                              }`}
+                              onClick={() => void handleToggleLike(note.id)}
+                            >
+                              {note.likedByViewer ? "Liked" : "Like"} · {note.likeCount}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
+                              onClick={() =>
+                                setExpandedNoteId((current) =>
+                                  current === note.id ? null : note.id,
+                                )
+                              }
+                            >
+                              Comments · {note.commentCount}
+                            </button>
+                          </div>
 
-                      <button
-                        type="button"
-                        ref={(element) => {
-                          cardButtonRefs.current[index] = element;
-                        }}
-                        className="flex flex-1 flex-col rounded-[20px] text-left outline-none"
-                        onClick={() => setOpenedPostId(note.id)}
-                        onFocus={() => setActiveCardIndex(index)}
-                      >
-                        <p className="mt-2 text-[12px] text-black/45">
-                          {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-                        </p>
-
-                        <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
-                          {note.name}
-                        </div>
-                        <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
-                          {getPreviewText(
-                            note.content,
-                            isExpanded ? 160 : layout.previewLength,
-                          ) || "No preview available yet."}
-                        </p>
-                      </button>
-
-                      <div className="mt-auto pt-6">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
-                              note.likedByViewer
-                                ? "border-black bg-black text-white"
-                                : "border-black/10 bg-white text-black/70"
-                            }`}
-                            onClick={() => void handleToggleLike(note.id)}
-                          >
-                            {note.likedByViewer ? "Liked" : "Like"} · {note.likeCount}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
-                            onClick={() =>
-                              setExpandedNoteId((current) =>
-                                current === note.id ? null : note.id,
-                              )
-                            }
-                          >
-                            Comments · {note.commentCount}
-                          </button>
-                        </div>
-
-                        {isExpanded ? (
-                          <div className="mt-6 rounded-[24px] border border-black/10 bg-white p-5">
-                            <div className="space-y-4">
-                              {visibleComments.map((comment) => (
-                                <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
-                                  <div className="text-[14px] font-semibold text-black">
-                                    {comment.author.fullName}
+                          {isExpanded ? (
+                            <div className="mt-6 rounded-[24px] border border-black/10 bg-white p-5">
+                              <div className="space-y-4">
+                                {visibleComments.map((comment) => (
+                                  <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
+                                    <div className="text-[14px] font-semibold text-black">
+                                      {comment.author.fullName}
+                                    </div>
+                                    <div className="mt-1 text-[13px] text-black/40">
+                                      {formatAuthoredDate(comment.createdAt)}
+                                    </div>
+                                    <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
+                                      {comment.body}
+                                    </p>
                                   </div>
-                                  <div className="mt-1 text-[13px] text-black/40">
-                                    {formatAuthoredDate(comment.createdAt)}
-                                  </div>
-                                  <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
-                                    {comment.body}
+                                ))}
+                                {!isCommentsLoading && visibleComments.length === 0 ? (
+                                  <p className="text-[15px] text-black/45">
+                                    No comments yet.
                                   </p>
-                                </div>
-                              ))}
-                              {!isCommentsLoading && visibleComments.length === 0 ? (
-                                <p className="text-[15px] text-black/45">
-                                  No comments yet.
-                                </p>
-                              ) : null}
-                              {isCommentsLoading ? (
-                                <p className="text-[15px] text-black/45">
-                                  Loading comments...
-                                </p>
-                              ) : null}
-                            </div>
+                                ) : null}
+                                {isCommentsLoading ? (
+                                  <p className="text-[15px] text-black/45">
+                                    Loading comments...
+                                  </p>
+                                ) : null}
+                              </div>
 
-                            <div className="mt-5 flex flex-col gap-3">
-                              <textarea
-                                value={commentDraft}
-                                onChange={(event) => setCommentDraft(event.target.value)}
-                                rows={3}
-                                maxLength={600}
-                                className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
-                                placeholder="Add a comment..."
-                              />
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-[13px] text-black/35">
-                                  {commentDraft.trim().length}/600
-                                </span>
-                                <button
-                                  type="button"
-                                  className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
-                                  onClick={() => void handleSubmitComment(note.id)}
-                                >
-                                  Post comment
-                                </button>
+                              <div className="mt-5 flex flex-col gap-3">
+                                <textarea
+                                  value={commentDraft}
+                                  onChange={(event) => setCommentDraft(event.target.value)}
+                                  rows={3}
+                                  maxLength={600}
+                                  className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
+                                  placeholder="Add a comment..."
+                                />
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="text-[13px] text-black/35">
+                                    {commentDraft.trim().length}/600
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                                    onClick={() => void handleSubmitComment(note.id)}
+                                  >
+                                    Post comment
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+                          ) : null}
+                        </div>
+                      }
+                    />
                   </article>
                 );
               })}
@@ -1516,27 +1441,29 @@ export default function ExplorePage({
         ) : null}
       </div>
 
-      {openedPost ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 px-6 py-8">
-          <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
-                <span
-                  className={`rounded-full border px-3 py-1 ${getSourceChipClassName(openedPost.sourceType)}`}
-                >
-                  {openedPost.sourceLabel}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
-                onClick={() => setOpenedPostId(null)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-6 flex items-center gap-3">
+      <PostViewerModal
+        note={openedPost}
+        topMeta={
+          openedPost ? (
+            <span
+              className={`rounded-full border px-3 py-1 ${getSourceChipClassName(openedPost.sourceType)}`}
+            >
+              {openedPost.sourceLabel}
+            </span>
+          ) : null
+        }
+        actions={
+          <button
+            type="button"
+            className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+            onClick={() => setOpenedPostId(null)}
+          >
+            Close
+          </button>
+        }
+        owner={
+          openedPost ? (
+            <div className="flex items-center gap-3">
               <Link href={`/${openedPost.owner.email}`} onClick={() => setOpenedPostId(null)}>
                 <ExploreUserAvatar
                   fullName={openedPost.owner.fullName}
@@ -1568,23 +1495,12 @@ export default function ExplorePage({
                 </div>
               </div>
             </div>
-            <p className="mt-2 text-[13px] text-black/45">
-              {formatAuthoredDate(
-                openedPost.publishedAt ?? openedPost.createdAt,
-              )}
-            </p>
-
-            <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
-              {openedPost.name}
-            </h2>
-
-            <div
-              className="prose prose-lg mt-8 max-w-none text-black"
-              dangerouslySetInnerHTML={{ __html: openedPost.content }}
-            />
-
-            <div className="mt-10 border-t border-black/10 pt-8">
-              <div className="flex flex-wrap items-center gap-3">
+          ) : null
+        }
+        footer={
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              {openedPost ? (
                 <button
                   type="button"
                   className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
@@ -1597,38 +1513,39 @@ export default function ExplorePage({
                   {openedPost.likedByViewer ? "Liked" : "Like"} ·{" "}
                   {openedPost.likeCount}
                 </button>
-                <span className="text-[15px] text-black/55">
-                  Comments ·{" "}
-                  {commentsData?.comments?.length ?? openedPost.commentCount}
-                </span>
-              </div>
+              ) : null}
+              <span className="text-[15px] text-black/55">
+                Comments · {commentsData?.comments?.length ?? openedPost?.commentCount ?? 0}
+              </span>
+            </div>
 
-              <div className="mt-8 space-y-4">
-                {(commentsData?.comments ?? []).map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
-                  >
-                    <div className="text-[14px] font-semibold text-black">
-                      {comment.author.fullName}
-                    </div>
-                    <div className="mt-1 text-[13px] text-black/40">
-                      {formatAuthoredDate(comment.createdAt)}
-                    </div>
-                    <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
-                      {comment.body}
-                    </p>
+            <div className="mt-8 space-y-4">
+              {(commentsData?.comments ?? []).map((comment) => (
+                <div
+                  key={comment.id}
+                  className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
+                >
+                  <div className="text-[14px] font-semibold text-black">
+                    {comment.author.fullName}
                   </div>
-                ))}
-                {commentsLoading ? (
-                  <p className="text-[15px] text-black/45">Loading comments...</p>
-                ) : null}
-                {!commentsLoading &&
-                (commentsData?.comments?.length ?? 0) === 0 ? (
-                  <p className="text-[15px] text-black/45">No comments yet.</p>
-                ) : null}
-              </div>
+                  <div className="mt-1 text-[13px] text-black/40">
+                    {formatAuthoredDate(comment.createdAt)}
+                  </div>
+                  <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
+                    {comment.body}
+                  </p>
+                </div>
+              ))}
+              {commentsLoading ? (
+                <p className="text-[15px] text-black/45">Loading comments...</p>
+              ) : null}
+              {!commentsLoading &&
+              (commentsData?.comments?.length ?? 0) === 0 ? (
+                <p className="text-[15px] text-black/45">No comments yet.</p>
+              ) : null}
+            </div>
 
+            {openedPost ? (
               <div className="mt-8 flex flex-col gap-3">
                 <textarea
                   value={commentDraft}
@@ -1651,10 +1568,10 @@ export default function ExplorePage({
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            ) : null}
+          </>
+        }
+      />
 
     </main>
   );

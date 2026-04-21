@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { mutate as swrMutate } from "swr";
 import { swrFetcher } from "@/lib/swr-fetcher";
 import ProfileEditor from "@/components/profile/profile-editor";
+import NoteCardStack from "@/components/notes/note-card-stack";
+import PostViewerModal from "@/components/notes/post-viewer-modal";
 import type { ExploreCommentRecord } from "@/lib/explore";
 import type {
   ProfileFriendshipState,
@@ -13,6 +15,7 @@ import type {
   ProfileViewData,
   ProfileViewerData,
 } from "@/lib/profile-data";
+import { findNextGridItemIndex, focusGridItem } from "@/lib/grid-navigation";
 import { getPreviewText, formatAuthoredDate } from "@/lib/text-utils";
 import { NOTE_VISIBILITY_LABELS } from "@/lib/note-visibility";
 import {
@@ -352,17 +355,20 @@ function ProfileNoteCard({
     : "";
   const cardClassName = `folder-grid-card group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${activeClass}`;
   const sharedChildren = (
-    <>
-      <div>
-        <div className="text-[24px] font-bold leading-tight">{name}</div>
-        <div className="mt-4 text-[18px] leading-[1.45] text-black/70">
+    <NoteCardStack
+      topBarMinHeightClassName="min-h-0"
+      title={<div className="text-[24px] font-bold leading-tight">{name}</div>}
+      preview={
+        <div className="text-[18px] leading-[1.45] text-black/70">
           {getPreviewText(content, 20) || "Empty note"}
         </div>
-      </div>
-      <div className="text-[16px] font-medium leading-none text-black/55">
-        {formatAuthoredDate(createdAt)}
-      </div>
-    </>
+      }
+      footer={
+        <div className="text-[16px] font-medium leading-none text-black/55">
+          {formatAuthoredDate(createdAt)}
+        </div>
+      }
+    />
   );
 
   if (!href) {
@@ -428,63 +434,73 @@ function ProfilePostCard({
           : ""
       } outline-none focus:outline-none focus-visible:outline-none`}
     >
-      <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
-        <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
-          {NOTE_VISIBILITY_LABELS[note.visibility]}
-        </span>
-      </div>
-
-      <div className="mt-5 flex items-center gap-2.5">
-        <UserAvatar
-          fullName={owner.fullName}
-          profilePhotoUrl={owner.profilePhotoUrl}
-          size={32}
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-black">
-            {owner.fullName}
-          </p>
-          <div className="mt-1">
-            <SchoolTag
-              className="align-middle"
-              profile={{
-                ...owner,
-                age: null,
-                bio: null,
-                email: "",
-                friends: [],
-                folderCount: 0,
-                friendCount: 0,
-                id: "",
-                joinedAt: "",
-                noteCount: 0,
-                notes: [],
-                schoolAccentColor: null,
-                schoolLocation: null,
-                schoolPrimaryColor: null,
-              }}
-            />
+      <NoteCardStack
+        topBar={
+          <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+            <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+              {NOTE_VISIBILITY_LABELS[note.visibility]}
+            </span>
           </div>
-        </div>
-      </div>
-
-      <p className="mt-2 text-[12px] text-black/45">
-        {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-      </p>
-
-      <h4 className="mt-5 text-[30px] font-bold leading-[1.05]">{note.name}</h4>
-      <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
-        {getPreviewText(note.content, 120) || "No preview available yet."}
-      </p>
-
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
-          Likes · {note.likeCount}
-        </span>
-        <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
-          Comments · {note.commentCount}
-        </span>
-      </div>
+        }
+        header={
+          <div className="flex items-center gap-2.5">
+            <UserAvatar
+              fullName={owner.fullName}
+              profilePhotoUrl={owner.profilePhotoUrl}
+              size={32}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] font-semibold text-black">
+                {owner.fullName}
+              </p>
+              <div className="mt-1">
+                <SchoolTag
+                  className="align-middle"
+                  profile={{
+                    ...owner,
+                    age: null,
+                    bio: null,
+                    email: "",
+                    friends: [],
+                    folderCount: 0,
+                    friendCount: 0,
+                    id: "",
+                    joinedAt: "",
+                    noteCount: 0,
+                    notes: [],
+                    schoolAccentColor: null,
+                    schoolLocation: null,
+                    schoolPrimaryColor: null,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        }
+        title={
+          <h4 className="text-[30px] font-bold leading-[1.05]">{note.name}</h4>
+        }
+        preview={
+          <p className="text-[18px] leading-[1.6] text-black/72">
+            {getPreviewText(note.content, 120) || "No preview available yet."}
+          </p>
+        }
+        footer={
+          <div>
+            <p className="text-[12px] text-black/45">
+              {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
+                Likes · {note.likeCount}
+              </span>
+              <span className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70">
+                Comments · {note.commentCount}
+              </span>
+            </div>
+          </div>
+        }
+      />
     </button>
   );
 }
@@ -696,96 +712,24 @@ export default function ProfileView({
     [],
   );
 
+  const getActiveItemRefs = useCallback(
+    () =>
+      activeSection === "notes"
+        ? noteItemRefs.current
+        : activeSection === "posts"
+          ? postItemRefs.current
+          : activeSection === "folders"
+            ? folderItemRefs.current
+            : friendItemRefs.current,
+    [activeSection],
+  );
+
   const findNextItemIndex = useCallback(
     (
       currentIndex: number,
       key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
-    ) => {
-      const refs =
-        activeSection === "notes"
-          ? noteItemRefs.current
-          : activeSection === "posts"
-            ? postItemRefs.current
-            : activeSection === "folders"
-              ? folderItemRefs.current
-              : friendItemRefs.current;
-      const currentItem = refs[currentIndex];
-
-      if (!currentItem) {
-        return null;
-      }
-
-      const currentRect = currentItem.getBoundingClientRect();
-      const currentCenterX = currentRect.left + currentRect.width / 2;
-      const currentCenterY = currentRect.top + currentRect.height / 2;
-      const currentHeight = currentRect.height;
-      const currentWidth = currentRect.width;
-
-      let nextIndex: number | null = null;
-      let bestPrimaryDistance = Number.POSITIVE_INFINITY;
-      let bestSecondaryDistance = Number.POSITIVE_INFINITY;
-
-      refs.forEach((candidateItem, index) => {
-        if (!candidateItem || index === currentIndex) {
-          return;
-        }
-
-        const candidateRect = candidateItem.getBoundingClientRect();
-        const candidateCenterX = candidateRect.left + candidateRect.width / 2;
-        const candidateCenterY = candidateRect.top + candidateRect.height / 2;
-        const deltaX = candidateCenterX - currentCenterX;
-        const deltaY = candidateCenterY - currentCenterY;
-
-        let primaryDistance = Number.POSITIVE_INFINITY;
-        let secondaryDistance = Number.POSITIVE_INFINITY;
-
-        if (key === "ArrowLeft" && deltaX < -8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (key === "ArrowRight" && deltaX > 8) {
-          primaryDistance = Math.abs(deltaX);
-          secondaryDistance = Math.abs(deltaY);
-        }
-
-        if (key === "ArrowUp" && deltaY < -8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (key === "ArrowDown" && deltaY > 8) {
-          primaryDistance = Math.abs(deltaY);
-          secondaryDistance = Math.abs(deltaX);
-        }
-
-        if (!Number.isFinite(primaryDistance)) {
-          return;
-        }
-
-        const isHorizontalMove = key === "ArrowLeft" || key === "ArrowRight";
-        const alignmentLimit = isHorizontalMove
-          ? Math.max(72, currentHeight * 0.7)
-          : Math.max(96, currentWidth * 0.8);
-        const penalizedPrimary =
-          secondaryDistance > alignmentLimit
-            ? primaryDistance + alignmentLimit * 4
-            : primaryDistance;
-
-        if (
-          penalizedPrimary < bestPrimaryDistance ||
-          (penalizedPrimary === bestPrimaryDistance &&
-            secondaryDistance < bestSecondaryDistance)
-        ) {
-          nextIndex = index;
-          bestPrimaryDistance = penalizedPrimary;
-          bestSecondaryDistance = secondaryDistance;
-        }
-      });
-
-      return nextIndex;
-    },
-    [activeSection],
+    ) => findNextGridItemIndex(getActiveItemRefs(), currentIndex, key),
+    [getActiveItemRefs],
   );
 
   useEffect(() => {
@@ -793,27 +737,8 @@ export default function ProfileView({
       return;
     }
 
-    const refs =
-      activeSection === "notes"
-        ? noteItemRefs.current
-        : activeSection === "posts"
-          ? postItemRefs.current
-          : activeSection === "folders"
-            ? folderItemRefs.current
-            : friendItemRefs.current;
-    const activeItem = refs[focusedItemIndex];
-
-    if (!activeItem) {
-      return;
-    }
-
-    activeItem.focus({ preventScroll: true });
-    activeItem.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-      behavior: "smooth",
-    });
-  }, [activeSection, focusLevel, focusedItemIndex, viewer.isOwnProfile]);
+    focusGridItem(getActiveItemRefs(), focusedItemIndex);
+  }, [focusLevel, focusedItemIndex, getActiveItemRefs, viewer.isOwnProfile]);
 
   useEffect(() => {
     setFriendshipState(viewer.friendshipState);
@@ -2219,77 +2144,64 @@ export default function ProfileView({
         </div>
       </section>
 
-      {openedPost ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/20 px-6 py-8">
-          <div className="max-h-full w-full max-w-5xl overflow-y-auto rounded-[28px] border border-black/10 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
-                <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
-                  {NOTE_VISIBILITY_LABELS[openedPost.visibility]}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {viewer.isOwnProfile ? (
-                  <button
-                    type="button"
-                    className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
-                    onClick={() =>
-                      router.push(
-                        getNoteHref(openedPost.ownerEmail, openedPost.name),
-                      )
-                    }
-                  >
-                    Edit note
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
-                  onClick={() => setOpenedPostId(null)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center gap-3">
-              <UserAvatar
-                fullName={profile.fullName}
-                profilePhotoUrl={profile.profilePhotoUrl}
-                size={40}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-black">
-                  {profile.fullName}
-                </p>
-                <div className="mt-1">
-                  <SchoolTag
-                    className="align-middle"
-                    profile={profile}
-                    onOpenSchool={onOpenSchool}
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="mt-2 text-[13px] text-black/45">
-              {formatAuthoredDate(openedPost.publishedAt ?? openedPost.createdAt)}
-            </p>
-
-            <h2 className="mt-6 max-w-4xl text-[38px] font-bold leading-[1.02] text-black">
-              {openedPost.name}
-            </h2>
-
-            <div
-              className="prose prose-lg mt-8 max-w-none text-black"
-              dangerouslySetInnerHTML={{ __html: openedPost.content }}
+      <PostViewerModal
+        note={openedPost}
+        topMeta={
+          <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
+            {openedPost ? NOTE_VISIBILITY_LABELS[openedPost.visibility] : null}
+          </span>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            {viewer.isOwnProfile && openedPost ? (
+              <button
+                type="button"
+                className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                onClick={() =>
+                  router.push(getNoteHref(openedPost.ownerEmail, openedPost.name))
+                }
+              >
+                Edit note
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
+              onClick={() => setOpenedPostId(null)}
+            >
+              Close
+            </button>
+          </div>
+        }
+        owner={
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              fullName={profile.fullName}
+              profilePhotoUrl={profile.profilePhotoUrl}
+              size={40}
             />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold text-black">
+                {profile.fullName}
+              </p>
+              <div className="mt-1">
+                <SchoolTag
+                  className="align-middle"
+                  profile={profile}
+                  onOpenSchool={onOpenSchool}
+                />
+              </div>
+            </div>
+          </div>
+        }
+        footer={
+          <>
+            {postActionError ? (
+              <p className="mb-4 text-sm text-[#a11d1d]">{postActionError}</p>
+            ) : null}
 
-            <div className="mt-10 border-t border-black/10 pt-8">
-              {postActionError ? (
-                <p className="mb-4 text-sm text-[#a11d1d]">{postActionError}</p>
-              ) : null}
-
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {openedPost ? (
                 <button
                   type="button"
                   className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
@@ -2297,48 +2209,50 @@ export default function ProfileView({
                 >
                   Like · {openedPost.likeCount}
                 </button>
-                <span className="text-[15px] text-black/55">
-                  Comments · {postCommentsData?.comments?.length ?? openedPost.commentCount}
-                </span>
-              </div>
+              ) : null}
+              <span className="text-[15px] text-black/55">
+                Comments · {postCommentsData?.comments?.length ?? openedPost?.commentCount ?? 0}
+              </span>
+            </div>
 
-              <div className="mt-8 space-y-4">
-                {(postCommentsData?.comments ?? []).map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-[14px] font-semibold text-black">
-                          {comment.author.fullName}
-                        </div>
-                        <div className="mt-1 text-[13px] text-black/40">
-                          {formatAuthoredDate(comment.createdAt)}
-                        </div>
+            <div className="mt-8 space-y-4">
+              {(postCommentsData?.comments ?? []).map((comment) => (
+                <div
+                  key={comment.id}
+                  className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[14px] font-semibold text-black">
+                        {comment.author.fullName}
                       </div>
-                      <button
-                        type="button"
-                        className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-black/60"
-                        onClick={() => handleReplyToComment(comment.author.fullName)}
-                      >
-                        Reply
-                      </button>
+                      <div className="mt-1 text-[13px] text-black/40">
+                        {formatAuthoredDate(comment.createdAt)}
+                      </div>
                     </div>
-                    <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
-                      {comment.body}
-                    </p>
+                    <button
+                      type="button"
+                      className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-black/60"
+                      onClick={() => handleReplyToComment(comment.author.fullName)}
+                    >
+                      Reply
+                    </button>
                   </div>
-                ))}
-                {isLoadingPostComments ? (
-                  <p className="text-[15px] text-black/45">Loading comments...</p>
-                ) : null}
-                {!isLoadingPostComments &&
-                (postCommentsData?.comments?.length ?? 0) === 0 ? (
-                  <p className="text-[15px] text-black/45">No comments yet.</p>
-                ) : null}
-              </div>
+                  <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
+                    {comment.body}
+                  </p>
+                </div>
+              ))}
+              {isLoadingPostComments ? (
+                <p className="text-[15px] text-black/45">Loading comments...</p>
+              ) : null}
+              {!isLoadingPostComments &&
+              (postCommentsData?.comments?.length ?? 0) === 0 ? (
+                <p className="text-[15px] text-black/45">No comments yet.</p>
+              ) : null}
+            </div>
 
+            {openedPost ? (
               <div className="mt-8 flex flex-col gap-3">
                 <textarea
                   ref={postCommentTextareaRef}
@@ -2362,10 +2276,10 @@ export default function ProfileView({
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            ) : null}
+          </>
+        }
+      />
 
       <ProfileEditor
         onClose={() => setIsEditorOpen(false)}

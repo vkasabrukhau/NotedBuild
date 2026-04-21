@@ -25,6 +25,7 @@ type ProfileViewProps = {
   profile: ProfileViewData;
   schools?: ProfileSchoolOption[];
   viewer: ProfileViewerData;
+  onOpenSchool?: (schoolId: string) => void;
 };
 
 type FriendshipPerson = {
@@ -87,10 +88,6 @@ function getInitials(fullName: string) {
   }
 
   return tokens.map((token) => token[0]?.toUpperCase() ?? "").join("");
-}
-
-function getProfileHref(email: string) {
-  return `/${encodeURIComponent(email)}`;
 }
 
 function getFolderHref(ownerEmail: string, folderName: string) {
@@ -156,13 +153,15 @@ function filterAcceptedNotifications(notifications: FriendshipNotification[]) {
 function SchoolTag({
   className = "",
   profile,
+  onOpenSchool,
 }: {
   className?: string;
   profile: ProfileViewData;
+  onOpenSchool?: (schoolId: string) => void;
 }) {
   if (!profile.schoolName) return null;
 
-  return (
+  const inner = (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 shadow-sm ${className}`}
     >
@@ -186,6 +185,23 @@ function SchoolTag({
       </span>
     </span>
   );
+
+  if (profile.schoolId && onOpenSchool) {
+    return (
+      <button
+        type="button"
+        className="transition hover:opacity-75"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenSchool(profile.schoolId!);
+        }}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return inner;
 }
 
 function UserAvatar({
@@ -398,7 +414,7 @@ function ProfilePostCard({
   onOpen: () => void;
   owner: Pick<
     ProfileViewData,
-    "fullName" | "profilePhotoUrl" | "schoolLogoUrl" | "schoolName"
+    "fullName" | "profilePhotoUrl" | "schoolId" | "schoolLogoUrl" | "schoolName"
   >;
   isFocused?: boolean;
 }) {
@@ -434,6 +450,7 @@ function ProfilePostCard({
                 age: null,
                 bio: null,
                 email: "",
+                friends: [],
                 folderCount: 0,
                 friendCount: 0,
                 id: "",
@@ -441,7 +458,6 @@ function ProfilePostCard({
                 noteCount: 0,
                 notes: [],
                 schoolAccentColor: null,
-                schoolId: null,
                 schoolLocation: null,
                 schoolPrimaryColor: null,
               }}
@@ -469,6 +485,24 @@ function ProfilePostCard({
       </div>
     </button>
   );
+}
+
+function getProfilePostLayoutClass(index: number) {
+  const pattern = index % 6;
+
+  if (pattern === 0) {
+    return "lg:col-span-7";
+  }
+
+  if (pattern === 1) {
+    return "lg:col-span-5";
+  }
+
+  if (pattern === 2 || pattern === 3 || pattern === 4) {
+    return "lg:col-span-4";
+  }
+
+  return "lg:col-span-6";
 }
 
 async function sendFriendRequest(targetUserId: string) {
@@ -546,6 +580,7 @@ export default function ProfileView({
   profile,
   schools = [],
   viewer,
+  onOpenSchool,
 }: ProfileViewProps) {
   const router = useRouter();
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -586,6 +621,10 @@ export default function ProfileView({
   const [pendingNotificationActionKey, setPendingNotificationActionKey] =
     useState<string | null>(null);
   const postCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const noteItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const postItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const folderItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const friendItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // ── Typing animation ─────────────────────────────────────────────────────
   const [displayedTitle, setDisplayedTitle] = useState("");
@@ -627,8 +666,10 @@ export default function ProfileView({
   const profilePosts = profileNotes.filter(
     (note) => note.visibility !== "PRIVATE" && note.publishedAt !== null,
   );
+  const visibleProfilePosts = viewer.isOwnProfile ? profilePosts : profile.notes;
+  const visibleFriends = viewer.isOwnProfile ? friends : profile.friends;
   const openedPost =
-    profilePosts.find((note) => note.id === openedPostId) ?? null;
+    visibleProfilePosts.find((note) => note.id === openedPostId) ?? null;
   const {
     data: postCommentsData,
     isLoading: isLoadingPostComments,
@@ -652,6 +693,125 @@ export default function ProfileView({
     },
     [],
   );
+
+  const findNextItemIndex = useCallback(
+    (
+      currentIndex: number,
+      key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+    ) => {
+      const refs =
+        activeSection === "notes"
+          ? noteItemRefs.current
+          : activeSection === "posts"
+            ? postItemRefs.current
+            : activeSection === "folders"
+              ? folderItemRefs.current
+              : friendItemRefs.current;
+      const currentItem = refs[currentIndex];
+
+      if (!currentItem) {
+        return null;
+      }
+
+      const currentRect = currentItem.getBoundingClientRect();
+      const currentCenterX = currentRect.left + currentRect.width / 2;
+      const currentCenterY = currentRect.top + currentRect.height / 2;
+      const currentHeight = currentRect.height;
+      const currentWidth = currentRect.width;
+
+      let nextIndex: number | null = null;
+      let bestPrimaryDistance = Number.POSITIVE_INFINITY;
+      let bestSecondaryDistance = Number.POSITIVE_INFINITY;
+
+      refs.forEach((candidateItem, index) => {
+        if (!candidateItem || index === currentIndex) {
+          return;
+        }
+
+        const candidateRect = candidateItem.getBoundingClientRect();
+        const candidateCenterX = candidateRect.left + candidateRect.width / 2;
+        const candidateCenterY = candidateRect.top + candidateRect.height / 2;
+        const deltaX = candidateCenterX - currentCenterX;
+        const deltaY = candidateCenterY - currentCenterY;
+
+        let primaryDistance = Number.POSITIVE_INFINITY;
+        let secondaryDistance = Number.POSITIVE_INFINITY;
+
+        if (key === "ArrowLeft" && deltaX < -8) {
+          primaryDistance = Math.abs(deltaX);
+          secondaryDistance = Math.abs(deltaY);
+        }
+
+        if (key === "ArrowRight" && deltaX > 8) {
+          primaryDistance = Math.abs(deltaX);
+          secondaryDistance = Math.abs(deltaY);
+        }
+
+        if (key === "ArrowUp" && deltaY < -8) {
+          primaryDistance = Math.abs(deltaY);
+          secondaryDistance = Math.abs(deltaX);
+        }
+
+        if (key === "ArrowDown" && deltaY > 8) {
+          primaryDistance = Math.abs(deltaY);
+          secondaryDistance = Math.abs(deltaX);
+        }
+
+        if (!Number.isFinite(primaryDistance)) {
+          return;
+        }
+
+        const isHorizontalMove = key === "ArrowLeft" || key === "ArrowRight";
+        const alignmentLimit = isHorizontalMove
+          ? Math.max(72, currentHeight * 0.7)
+          : Math.max(96, currentWidth * 0.8);
+        const penalizedPrimary =
+          secondaryDistance > alignmentLimit
+            ? primaryDistance + alignmentLimit * 4
+            : primaryDistance;
+
+        if (
+          penalizedPrimary < bestPrimaryDistance ||
+          (penalizedPrimary === bestPrimaryDistance &&
+            secondaryDistance < bestSecondaryDistance)
+        ) {
+          nextIndex = index;
+          bestPrimaryDistance = penalizedPrimary;
+          bestSecondaryDistance = secondaryDistance;
+        }
+      });
+
+      return nextIndex;
+    },
+    [activeSection],
+  );
+
+  useEffect(() => {
+    if (!viewer.isOwnProfile || focusLevel !== "items") {
+      return;
+    }
+
+    const refs =
+      activeSection === "notes"
+        ? noteItemRefs.current
+        : activeSection === "posts"
+          ? postItemRefs.current
+          : activeSection === "folders"
+            ? folderItemRefs.current
+            : friendItemRefs.current;
+    const activeItem = refs[focusedItemIndex];
+
+    if (!activeItem) {
+      return;
+    }
+
+    activeItem.focus({ preventScroll: true });
+    activeItem.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "smooth",
+    });
+  }, [activeSection, focusLevel, focusedItemIndex, viewer.isOwnProfile]);
 
   useEffect(() => {
     setFriendshipState(viewer.friendshipState);
@@ -763,17 +923,24 @@ export default function ProfileView({
           setFocusedItemIndex(0);
         }
       } else {
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          setFocusedItemIndex((i) => (i + 1) % Math.max(1, itemCount));
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          setFocusedItemIndex(
-            (i) => (i + Math.max(1, itemCount) - 1) % Math.max(1, itemCount),
-          );
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setFocusLevel("tabs");
+        if (
+          e.key === "ArrowRight" ||
+          e.key === "ArrowLeft" ||
+          e.key === "ArrowUp" ||
+          e.key === "ArrowDown"
+        ) {
+          const nextIndex = findNextItemIndex(focusedItemIndex, e.key);
+
+          if (nextIndex !== null) {
+            e.preventDefault();
+            setFocusedItemIndex(nextIndex);
+            return;
+          }
+
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setFocusLevel("tabs");
+          }
         } else if (e.key === "Enter" && itemCount > 0) {
           e.preventDefault();
           if (activeSection === "notes") {
@@ -788,7 +955,7 @@ export default function ProfileView({
               router.push(getFolderHref(folder.ownerEmail, folder.name));
           } else if (activeSection === "friends") {
             const friend = friends[focusedItemIndex];
-            if (friend) router.push(getProfileHref(friend.email));
+            if (friend) router.push(`/${friend.email}`);
           }
         }
       }
@@ -808,6 +975,7 @@ export default function ProfileView({
     friends,
     router,
     changeSection,
+    findNextItemIndex,
     openedPostId,
   ]);
 
@@ -818,7 +986,7 @@ export default function ProfileView({
       }
 
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       setOpenedPostId(null);
     };
 
@@ -1172,11 +1340,6 @@ export default function ProfileView({
     });
   }
 
-  const canSeeNotes = viewer.isOwnProfile || friendshipState === "accepted";
-  const notesSectionTitle = viewer.isOwnProfile
-    ? "Notes"
-    : `${profile.fullName.split(" ")[0]}'s Notes`;
-
   return (
     <div className="h-screen overflow-hidden w-full bg-white px-6 py-8">
       <div className="flex items-start justify-between gap-4">
@@ -1251,12 +1414,13 @@ export default function ProfileView({
                                 </div>
 
                                 <div className="mt-3 flex flex-wrap gap-2">
-                                  <Link
-                                    href={getProfileHref(result.email)}
+                                  <button
+                                    type="button"
+                                    onClick={() => router.push(`/${result.email}`)}
                                     className="rounded-full border border-black/12 px-3 py-2 text-xs font-semibold text-black/75 transition hover:border-black/20 hover:text-black"
                                   >
                                     View profile
-                                  </Link>
+                                  </button>
 
                                   {result.friendshipState === "accepted" ? (
                                     <span className="rounded-full bg-black px-3 py-2 text-xs font-semibold text-white">
@@ -1412,14 +1576,13 @@ export default function ProfileView({
                                           >
                                             Reject
                                           </button>
-                                          <Link
-                                            href={getProfileHref(
-                                              notification.user.email,
-                                            )}
+                                          <button
+                                            type="button"
+                                            onClick={() => router.push(`/${notification.user.email}`)}
                                             className="rounded-full border border-black/12 px-3 py-2 text-xs font-semibold text-black/70 transition hover:border-black/20 hover:text-black"
                                           >
                                             View profile
-                                          </Link>
+                                          </button>
                                         </div>
                                       </div>
                                     </div>
@@ -1462,14 +1625,13 @@ export default function ProfileView({
                                         )}
                                       </p>
                                       <div className="mt-3 flex flex-wrap gap-2">
-                                        <Link
-                                          href={getProfileHref(
-                                            notification.user.email,
-                                          )}
+                                        <button
+                                          type="button"
+                                          onClick={() => router.push(`/${notification.user.email}`)}
                                           className="rounded-full bg-black px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
                                         >
                                           Open profile
-                                        </Link>
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -1540,7 +1702,7 @@ export default function ProfileView({
                 </h2>
                 {profile.schoolName && (
                   <div className="mt-2">
-                    <SchoolTag profile={profile} />
+                  <SchoolTag profile={profile} onOpenSchool={onOpenSchool} />
                   </div>
                 )}
                 {profile.bio && (
@@ -1795,18 +1957,26 @@ export default function ProfileView({
                     ) : profileNotes.length > 0 ? (
                       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                         {profileNotes.map((note, idx) => (
-                          <ProfileNoteCard
+                          <div
                             key={note.id}
-                            content={note.content}
-                            createdAt={note.createdAt}
-                            href={getNoteHref(note.ownerEmail, note.name)}
-                            name={note.name}
-                            isFocused={
-                              focusLevel === "items" &&
-                              activeSection === "notes" &&
-                              focusedItemIndex === idx
-                            }
-                          />
+                            ref={(element) => {
+                              noteItemRefs.current[idx] = element;
+                            }}
+                            className="outline-none"
+                            tabIndex={-1}
+                          >
+                            <ProfileNoteCard
+                              content={note.content}
+                              createdAt={note.createdAt}
+                              href={getNoteHref(note.ownerEmail, note.name)}
+                              name={note.name}
+                              isFocused={
+                                focusLevel === "items" &&
+                                activeSection === "notes" &&
+                                focusedItemIndex === idx
+                              }
+                            />
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -1832,13 +2002,11 @@ export default function ProfileView({
                         {profilePosts.map((note, idx) => (
                           <div
                             key={note.id}
-                            className={
-                              focusLevel === "items" &&
-                              activeSection === "posts" &&
-                              focusedItemIndex === idx
-                                ? "lg:col-span-7"
-                                : "lg:col-span-5"
-                            }
+                            ref={(element) => {
+                              postItemRefs.current[idx] = element;
+                            }}
+                            className={`${getProfilePostLayoutClass(idx)} outline-none`}
+                            tabIndex={-1}
                           >
                             <ProfilePostCard
                               note={note}
@@ -1893,10 +2061,14 @@ export default function ProfileView({
                             ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
                             : "";
                           return (
-                            <Link
+                            <button
                               key={friend.id}
-                              href={getProfileHref(friend.email)}
-                              className={`folder-grid-card ${friendActiveClass} rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-black`}
+                              ref={(element) => {
+                                friendItemRefs.current[idx] = element;
+                              }}
+                              type="button"
+                              onClick={() => router.push(`/${friend.email}`)}
+                              className={`folder-grid-card ${friendActiveClass} rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black`}
                             >
                               <div className="flex items-center gap-4">
                                 <UserAvatar
@@ -1913,7 +2085,7 @@ export default function ProfileView({
                                   </div>
                                 </div>
                               </div>
-                            </Link>
+                            </button>
                           );
                         })}
                       </div>
@@ -1944,15 +2116,23 @@ export default function ProfileView({
                     ) : folders.length > 0 ? (
                       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
                         {folders.map((folder, idx) => (
-                          <ProfileFolderCard
+                          <div
                             key={folder.id}
-                            folder={folder}
-                            isFocused={
-                              focusLevel === "items" &&
-                              activeSection === "folders" &&
-                              focusedItemIndex === idx
-                            }
-                          />
+                            ref={(element) => {
+                              folderItemRefs.current[idx] = element;
+                            }}
+                            className="outline-none"
+                            tabIndex={-1}
+                          >
+                            <ProfileFolderCard
+                              folder={folder}
+                              isFocused={
+                                focusLevel === "items" &&
+                                activeSection === "folders" &&
+                                focusedItemIndex === idx
+                              }
+                            />
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -1966,36 +2146,71 @@ export default function ProfileView({
                 ) : null}
               </div>
             </div>
-          ) : canSeeNotes ? (
+          ) : (
             <div>
               <h3 className="text-[30px] font-bold leading-none tracking-[-0.04em] text-black">
-                {notesSectionTitle}
+                Posts
               </h3>
 
-              {profileNotes.length > 0 ? (
-                <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-                  {profileNotes.map((note) => (
-                    <ProfileNoteCard
-                      key={note.id}
-                      content={note.content}
-                      createdAt={note.createdAt}
-                      href={null}
-                      name={note.name}
-                    />
+              {visibleProfilePosts.length > 0 ? (
+                <div className="mt-8 grid gap-5 lg:grid-cols-12">
+                  {visibleProfilePosts.map((note, idx) => (
+                    <div key={note.id} className={getProfilePostLayoutClass(idx)}>
+                      <ProfilePostCard
+                        note={note}
+                        onOpen={() => setOpenedPostId(note.id)}
+                        owner={profile}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : (
                 <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
                   <div className="text-[22px] font-medium text-black/52">
-                    No notes yet.
+                    No posts yet.
                   </div>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
-              <div className="text-[22px] font-medium text-black/52">
-                Become friends to view recent notes.
+
+              <div className="mt-14">
+                <h3 className="text-[30px] font-bold leading-none tracking-[-0.04em] text-black">
+                  Friends
+                </h3>
+
+                {visibleFriends.length > 0 ? (
+                  <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {visibleFriends.map((friend) => (
+                      <button
+                        key={friend.id}
+                        type="button"
+                        onClick={() => router.push(`/${friend.email}`)}
+                        className="folder-grid-card rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black"
+                      >
+                        <div className="flex items-center gap-4">
+                          <UserAvatar
+                            fullName={friend.fullName}
+                            profilePhotoUrl={friend.profilePhotoUrl}
+                            size={56}
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-lg font-semibold text-black">
+                              {friend.fullName}
+                            </div>
+                            <div className="truncate text-sm text-black/55">
+                              {friend.email}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-8 rounded-[28px] border border-black/10 bg-[var(--app-card-alt)] px-6 py-8">
+                    <div className="text-[22px] font-medium text-black/52">
+                      No accepted friends yet.
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2012,15 +2227,19 @@ export default function ProfileView({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
-                  onClick={() =>
-                    router.push(getNoteHref(openedPost.ownerEmail, openedPost.name))
-                  }
-                >
-                  Edit note
-                </button>
+                {viewer.isOwnProfile ? (
+                  <button
+                    type="button"
+                    className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                    onClick={() =>
+                      router.push(
+                        getNoteHref(openedPost.ownerEmail, openedPost.name),
+                      )
+                    }
+                  >
+                    Edit note
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="rounded-full border border-black/10 bg-white px-4 py-2 text-[14px] font-medium text-black/70"
@@ -2042,7 +2261,11 @@ export default function ProfileView({
                   {profile.fullName}
                 </p>
                 <div className="mt-1">
-                  <SchoolTag className="align-middle" profile={profile} />
+                  <SchoolTag
+                    className="align-middle"
+                    profile={profile}
+                    onOpenSchool={onOpenSchool}
+                  />
                 </div>
               </div>
             </div>
@@ -2152,6 +2375,7 @@ export default function ProfileView({
         profile={profile}
         schools={schools}
       />
+
     </div>
   );
 }

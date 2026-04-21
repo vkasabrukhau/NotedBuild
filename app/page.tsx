@@ -278,6 +278,7 @@ export default async function Home() {
     age: dbStatus.matchedUser.age,
     bio: dbStatus.matchedUser.bio,
     email,
+    friends: [],
     friendCount: dbStatus.matchedUser.friendCount,
     folderCount: dbStatus.matchedUser.folderCount,
     fullName,

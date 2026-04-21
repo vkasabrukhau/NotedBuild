@@ -1,8 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound, redirect } from "next/navigation";
-import ProfileView from "@/components/profile/profile-view";
+import RootHomeShell from "@/components/root-home-shell";
 import {
   getAcceptedFriendCount,
+  getProfileFriends,
   getProfileNotes,
   getProfileViewerData,
   getSchoolOptions,
@@ -47,20 +48,25 @@ export default async function PublicProfilePage({
     notFound();
   }
 
-  const [friendCount, viewerData, schools] = await Promise.all([
+  const [friendCount, viewerData, schools, profileFriends] = await Promise.all([
     getAcceptedFriendCount(targetUser.id),
     getProfileViewerData(viewer?.id ?? null, targetUser.id),
     viewer?.id === targetUser.id ? getSchoolOptions() : Promise.resolve([]),
+    getProfileFriends(targetUser.id),
   ]);
 
-  const notes =
-    viewerData.isOwnProfile || viewerData.friendshipState === "accepted"
-      ? await getProfileNotes(targetUser.id, targetUser.email)
-      : [];
+  const notes = await getProfileNotes(
+    targetUser.id,
+    targetUser.email,
+    6,
+    viewerData.isOwnProfile ? undefined : { onlyPublished: true },
+  );
 
   return (
-    <ProfileView
-      profile={toProfileViewData(targetUser, friendCount, notes)}
+    <RootHomeShell
+      initialView="profile"
+      initialNoteUsageCount={targetUser._count.notes}
+      profile={toProfileViewData(targetUser, friendCount, notes, profileFriends)}
       schools={schools}
       viewer={viewerData}
     />

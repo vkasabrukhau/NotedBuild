@@ -89,6 +89,7 @@ export default async function NotePage({
     age: note.owner.age,
     bio: null,
     email: note.owner.email,
+    friends: [],
     friendCount,
     folderCount,
     fullName: note.owner.fullName,

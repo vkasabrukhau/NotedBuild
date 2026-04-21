@@ -8,6 +8,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import ExplorePage from "@/components/explore/explore-page";
 import ProfileView from "@/components/profile/profile-view";
+import SchoolShellView from "@/components/school/school-shell-view";
 import type {
   ProfileSchoolOption,
   ProfileViewData,
@@ -335,7 +336,8 @@ type RootHomeShellProps = {
     | "note"
     | "folder"
     | "profile"
-    | "explore";
+    | "explore"
+    | "school";
   initialNote?: InitialNote | null;
   initialFolder?: InitialFolder | null;
   initialNoteUsageCount?: number;
@@ -3592,12 +3594,16 @@ export default function RootHomeShell({
 }: RootHomeShellProps) {
   const router = useRouter();
   const [view, setView] = useState<
-    "home" | "all-notes" | "note" | "folder" | "profile" | "explore"
+    "home" | "all-notes" | "note" | "folder" | "profile" | "explore" | "school"
   >(initialView);
   const [activeNote, setActiveNote] = useState<InitialNote | null>(initialNote);
   const [activeFolder, setActiveFolder] = useState<InitialFolder | null>(
     initialFolder,
   );
+  const [activeSchoolId, setActiveSchoolId] = useState<string | null>(null);
+  const [schoolReturnView, setSchoolReturnView] = useState<
+    "home" | "profile" | "explore"
+  >("home");
   const [noteSessionKey, setNoteSessionKey] = useState(0);
   const [folderSessionKey, setFolderSessionKey] = useState(0);
   const [noteReturnView, setNoteReturnView] = useState<"home" | "all-notes">(
@@ -3636,13 +3642,13 @@ export default function RootHomeShell({
   );
 
   const [closingView, setClosingView] = useState<
-    "all-notes" | "folder" | "profile" | "explore" | null
+    "all-notes" | "folder" | "profile" | "explore" | "school" | null
   >(null);
   const closeViewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const closeView = useCallback(
     (
-      name: "all-notes" | "folder" | "profile" | "explore",
+      name: "all-notes" | "folder" | "profile" | "explore" | "school",
       andThen?: () => void,
     ) => {
       if (closeViewTimerRef.current) clearTimeout(closeViewTimerRef.current);
@@ -3755,6 +3761,21 @@ export default function RootHomeShell({
     // other menu items: no action yet
   }, []);
 
+  const handleOpenSchool = useCallback(
+    (schoolId: string) => {
+      setActiveSchoolId(schoolId);
+      setSchoolReturnView((currentReturnView) => {
+        if (view === "school") {
+          return currentReturnView;
+        }
+
+        return view === "profile" || view === "explore" ? view : "home";
+      });
+      setView("school");
+    },
+    [view],
+  );
+
   useEffect(() => {
     return () => {
       if (noteTransitionTimerRef.current) {
@@ -3813,6 +3834,16 @@ export default function RootHomeShell({
               router.push("/");
             }
           });
+        } else if (view === "school") {
+          closeView("school", () => {
+            setView(schoolReturnView);
+            if (
+              schoolReturnView === "home" &&
+              window.location.pathname !== "/"
+            ) {
+              router.push("/");
+            }
+          });
         }
         return;
       }
@@ -3854,6 +3885,7 @@ export default function RootHomeShell({
     isFontOpen,
     isTamagotchiOpen,
     view,
+    schoolReturnView,
     closingOverlay,
     closingView,
     closeOverlay,
@@ -3979,7 +4011,12 @@ export default function RootHomeShell({
       ) : null}
       {view === "profile" || closingView === "profile" ? (
         <div className={closingView === "profile" ? "view-exit" : "view-enter"}>
-          <ProfileView profile={profile} schools={schools} viewer={viewer} />
+          <ProfileView
+            profile={profile}
+            schools={schools}
+            viewer={viewer}
+            onOpenSchool={handleOpenSchool}
+          />
         </div>
       ) : null}
       {view === "explore" || closingView === "explore" ? (
@@ -3992,7 +4029,13 @@ export default function RootHomeShell({
               isTamagotchiOpen ||
               closingOverlay !== null
             }
+            onOpenSchool={handleOpenSchool}
           />
+        </div>
+      ) : null}
+      {view === "school" || closingView === "school" ? (
+        <div className={closingView === "school" ? "view-exit" : "view-enter"}>
+          <SchoolShellView schoolId={activeSchoolId} />
         </div>
       ) : null}
       {isMenuOpen || closingOverlay === "menu" ? (

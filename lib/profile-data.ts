@@ -12,6 +12,7 @@ export type ProfileViewData = {
   age: number | null;
   bio: string | null;
   email: string;
+  friends: ProfileFriendSummary[];
   friendCount: number;
   folderCount: number;
   fullName: string;
@@ -37,6 +38,13 @@ export type ProfileNoteSummary = {
   ownerEmail: string;
   publishedAt: string | null;
   visibility: NoteVisibilityId;
+};
+
+export type ProfileFriendSummary = {
+  email: string;
+  fullName: string;
+  id: string;
+  profilePhotoUrl: string | null;
 };
 
 export type ProfileViewerData = {
@@ -96,12 +104,14 @@ export function toProfileViewData(
   user: ProfileUserRecord,
   friendCount: number,
   notes: ProfileNoteSummary[] = [],
+  friends: ProfileFriendSummary[] = [],
 ): ProfileViewData {
   return {
     id: user.id,
     age: user.age,
     bio: user.bio,
     email: user.email,
+    friends,
     friendCount,
     folderCount: user.foldersOwnedCount,
     fullName: user.fullName,
@@ -122,11 +132,24 @@ export async function getProfileNotes(
   userId: string,
   ownerEmail: string,
   limit = 6,
+  options?: {
+    onlyPublished?: boolean;
+  },
 ): Promise<ProfileNoteSummary[]> {
   const notes = await prisma.note.findMany({
     where: {
       deletedAt: null,
       ownerId: userId,
+      ...(options?.onlyPublished
+        ? {
+            publishedAt: {
+              not: null,
+            },
+            visibility: {
+              not: "PRIVATE",
+            },
+          }
+        : {}),
     },
     orderBy: {
       updatedAt: "desc",
@@ -155,6 +178,46 @@ export async function getProfileNotes(
     publishedAt: note.publishedAt?.toISOString() ?? null,
     visibility: note.visibility,
   }));
+}
+
+export async function getProfileFriends(
+  userId: string,
+): Promise<ProfileFriendSummary[]> {
+  const friendships = await prisma.friendship.findMany({
+    where: {
+      status: "ACCEPTED",
+      OR: [{ requesterId: userId }, { addresseeId: userId }],
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    select: {
+      addressee: {
+        select: {
+          email: true,
+          fullName: true,
+          id: true,
+          profilePhotoUrl: true,
+        },
+      },
+      addresseeId: true,
+      requester: {
+        select: {
+          email: true,
+          fullName: true,
+          id: true,
+          profilePhotoUrl: true,
+        },
+      },
+      requesterId: true,
+    },
+  });
+
+  return friendships.map((friendship) =>
+    friendship.requesterId === userId
+      ? friendship.addressee
+      : friendship.requester,
+  );
 }
 
 export async function getSchoolOptions(): Promise<ProfileSchoolOption[]> {

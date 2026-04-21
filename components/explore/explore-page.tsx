@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import {
   type ExploreCommentRecord,
@@ -9,8 +17,21 @@ import {
 import { swrFetcher } from "@/lib/swr-fetcher";
 import { formatAuthoredDate, getPreviewText } from "@/lib/text-utils";
 import type { ProfileFriendshipState } from "@/lib/profile-data";
+import Link from "next/link";
 
 const EMPTY_NOTES: ExploreNoteCard[] = [];
+
+type SchoolSummary = {
+  id: string;
+  name: string;
+  location: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  logoUrl: string | null;
+  studentCount: number;
+};
+
+type ActiveView = "feed" | "schools" | "friends" | "inbox";
 
 function getInitials(value: string) {
   return value
@@ -78,16 +99,20 @@ function ExploreSchoolTag({
   compact = false,
   schoolLogoUrl,
   schoolName,
+  schoolId,
+  onClick,
 }: {
   compact?: boolean;
   schoolLogoUrl: string | null;
   schoolName: string | null;
+  schoolId?: string | null;
+  onClick?: () => void;
 }) {
   if (!schoolName) {
     return null;
   }
 
-  return (
+  const inner = (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white shadow-sm ${
         compact ? "px-2 py-0.5" : "px-2.5 py-1"
@@ -117,7 +142,74 @@ function ExploreSchoolTag({
       </span>
     </span>
   );
+
+  if (schoolId && onClick) {
+    return (
+      <button type="button" onClick={onClick} className="transition hover:opacity-75">
+        {inner}
+      </button>
+    );
+  }
+
+  return inner;
 }
+
+const SchoolCard = forwardRef<
+  HTMLButtonElement,
+  { school: SchoolSummary; onClick: () => void; isActive?: boolean }
+>(function SchoolCard({ school, onClick, isActive = false }, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      data-school-id={school.id}
+      className={`folder-grid-card w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black${isActive ? " folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          className="relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-[16px] border border-black/10 bg-white"
+          style={
+            school.primaryColor
+              ? { backgroundColor: `${school.primaryColor}18` }
+              : undefined
+          }
+        >
+          {school.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={school.logoUrl}
+              alt={school.name}
+              width={56}
+              height={56}
+              className="h-full w-full object-contain p-1"
+              style={{ imageRendering: "pixelated" }}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <span className="text-[18px] font-bold text-black/30">
+                {getInitials(school.name)}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[17px] font-bold text-black">
+            {school.name}
+          </div>
+          {school.location ? (
+            <div className="truncate text-[13px] text-black/55">
+              {school.location}
+            </div>
+          ) : null}
+          <div className="mt-1 text-[12px] font-medium text-black/40">
+            {school.studentCount} {school.studentCount === 1 ? "student" : "students"}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+});
 
 function getExploreCardLayout(index: number) {
   const pattern = index % 6;
@@ -197,12 +289,29 @@ type FriendshipNotification = {
 
 export default function ExplorePage({
   isShellOverlayOpen = false,
+  onOpenSchool,
 }: {
   isShellOverlayOpen?: boolean;
+  onOpenSchool?: (schoolId: string) => void;
 }) {
+  const router = useRouter();
   const cardButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const friendSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>("feed");
+  const activeViewRef = useRef<ActiveView>("feed");
+  activeViewRef.current = activeView;
+  const [tabFocusLevel, setTabFocusLevel] = useState<"tabs" | "items">("tabs");
+  const tabFocusLevelRef = useRef<"tabs" | "items">("tabs");
+  tabFocusLevelRef.current = tabFocusLevel;
+  const [tabKeyboardIndex, setTabKeyboardIndex] = useState(0);
+  const schoolCardRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [activeSchoolIndex, setActiveSchoolIndex] = useState(0);
+  const activeSchoolIndexRef = useRef(0);
+  activeSchoolIndexRef.current = activeSchoolIndex;
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const [hasArrowSelection, setHasArrowSelection] = useState(false);
+  const [hasInitializedArrowSelection, setHasInitializedArrowSelection] =
+    useState(false);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [openedPostId, setOpenedPostId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -219,6 +328,7 @@ export default function ExplorePage({
   );
   const [isFriendSearching, setIsFriendSearching] = useState(false);
   const [pendingFriendId, setPendingFriendId] = useState<string | null>(null);
+
   const {
     data,
     error,
@@ -229,6 +339,10 @@ export default function ExplorePage({
     acceptedRequests: FriendshipNotification[];
     incomingRequests: FriendshipNotification[];
   }>("/api/friendships?view=notifications", swrFetcher);
+  const { data: schoolsData, isLoading: schoolsLoading } = useSWR<{
+    schools: SchoolSummary[];
+  }>(activeView === "schools" ? "/api/schools" : null, swrFetcher);
+
   const notes = useMemo(() => data?.notes ?? EMPTY_NOTES, [data]);
   const {
     data: commentsData,
@@ -251,11 +365,31 @@ export default function ExplorePage({
   const unreadFriendshipCount =
     incomingRequests.length + acceptedRequests.length;
 
+  const openSchool = useCallback(
+    (schoolId: string) => {
+      onOpenSchool?.(schoolId);
+    },
+    [onOpenSchool],
+  );
+
   useEffect(() => {
     setActiveCardIndex((currentIndex) =>
       Math.max(0, Math.min(displayNotes.length - 1, currentIndex)),
     );
   }, [displayNotes.length]);
+
+  useEffect(() => {
+    if (
+      hasInitializedArrowSelection ||
+      isShellOverlayOpen ||
+      displayNotes.length === 0
+    ) {
+      return;
+    }
+
+    setHasArrowSelection(true);
+    setHasInitializedArrowSelection(true);
+  }, [displayNotes.length, hasInitializedArrowSelection, isShellOverlayOpen]);
 
   useEffect(() => {
     if (
@@ -358,6 +492,19 @@ export default function ExplorePage({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const isFindShortcut =
+        event.key.toLowerCase() === "f" &&
+        ((event.ctrlKey && !event.metaKey) ||
+          (event.metaKey && !event.ctrlKey));
+
+      if (isFindShortcut) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        friendSearchInputRef.current?.focus();
+        friendSearchInputRef.current?.select();
+        return;
+      }
+
       if (event.key !== "Escape") {
         return;
       }
@@ -368,29 +515,30 @@ export default function ExplorePage({
 
       if (openedPostId) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         setOpenedPostId(null);
         return;
       }
 
       if (isNotificationsOpen) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         setIsNotificationsOpen(false);
         return;
       }
 
       if (expandedNoteId) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         setExpandedNoteId(null);
         return;
       }
 
-      if (hasArrowSelection) {
+      if (tabFocusLevel === "items") {
         event.preventDefault();
-        event.stopPropagation();
-        setHasArrowSelection(false);
+        event.stopImmediatePropagation();
+        setTabFocusLevel("tabs");
+        return;
       }
     };
 
@@ -398,11 +546,49 @@ export default function ExplorePage({
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [
     expandedNoteId,
-    hasArrowSelection,
-    isNotificationsOpen,
     isShellOverlayOpen,
+    isNotificationsOpen,
     openedPostId,
+    tabFocusLevel,
   ]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowLeft", "ArrowRight", "ArrowDown", "Enter"].includes(event.key)) return;
+      if (isShellOverlayOpen || openedPostId || isNotificationsOpen) return;
+      if (tabFocusLevel !== "tabs") return;
+
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable)) return;
+
+      const views: ActiveView[] = ["feed", "schools"];
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setTabKeyboardIndex((i) => (i + views.length - 1) % views.length);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setTabKeyboardIndex((i) => (i + 1) % views.length);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        setActiveView(views[tabKeyboardIndex]);
+        setTabFocusLevel("items");
+        setHasArrowSelection(false);
+        setActiveCardIndex(0);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setTabFocusLevel("items");
+        setHasArrowSelection(false);
+        setActiveCardIndex(0);
+        setActiveSchoolIndex(0);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [tabFocusLevel, tabKeyboardIndex, isShellOverlayOpen, openedPostId, isNotificationsOpen]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -418,7 +604,9 @@ export default function ExplorePage({
         isShellOverlayOpen ||
         openedPostId ||
         isNotificationsOpen ||
-        displayNotes.length === 0 ||
+        tabFocusLevelRef.current === "tabs" ||
+        (activeViewRef.current === "feed" && displayNotes.length === 0) ||
+        (activeViewRef.current === "schools" && schoolCardRefs.current.filter(Boolean).length === 0) ||
         event.metaKey ||
         event.ctrlKey ||
         event.altKey
@@ -437,18 +625,28 @@ export default function ExplorePage({
         return;
       }
 
+      const isSchoolsView = activeViewRef.current === "schools";
+      const refs = isSchoolsView ? schoolCardRefs : cardButtonRefs;
+      const currentIndex = isSchoolsView ? activeSchoolIndexRef.current : activeCardIndex;
+      const setIndex = isSchoolsView ? setActiveSchoolIndex : setActiveCardIndex;
+      const itemCount = isSchoolsView
+        ? schoolCardRefs.current.filter(Boolean).length
+        : displayNotes.length;
+
       if (event.key === "Enter") {
         event.preventDefault();
-        const activeNote = displayNotes[activeCardIndex];
-
-        if (activeNote) {
-          setOpenedPostId(activeNote.id);
+        if (isSchoolsView) {
+          const el = schoolCardRefs.current[activeSchoolIndexRef.current];
+          const schoolId = el?.dataset.schoolId;
+          if (schoolId) openSchool(schoolId);
+        } else {
+          const activeNote = displayNotes[activeCardIndex];
+          if (activeNote) setOpenedPostId(activeNote.id);
         }
-
         return;
       }
 
-      const currentCard = cardButtonRefs.current[activeCardIndex];
+      const currentCard = refs.current[currentIndex];
 
       if (!currentCard) {
         return;
@@ -460,16 +658,16 @@ export default function ExplorePage({
       const currentHeight = currentRect.height;
       const currentWidth = currentRect.width;
 
-      let nextIndex = activeCardIndex;
+      let nextIndex = currentIndex;
       let bestPrimaryDistance = Number.POSITIVE_INFINITY;
       let bestSecondaryDistance = Number.POSITIVE_INFINITY;
 
-      for (let index = 0; index < displayNotes.length; index += 1) {
-        if (index === activeCardIndex) {
+      for (let index = 0; index < itemCount; index += 1) {
+        if (index === currentIndex) {
           continue;
         }
 
-        const candidateCard = cardButtonRefs.current[index];
+        const candidateCard = refs.current[index];
 
         if (!candidateCard) {
           continue;
@@ -528,16 +726,23 @@ export default function ExplorePage({
         }
       }
 
-      if (nextIndex !== activeCardIndex) {
+      if (nextIndex !== currentIndex) {
         event.preventDefault();
         setHasArrowSelection(true);
-        setActiveCardIndex(nextIndex);
+        setIndex(nextIndex);
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setTabFocusLevel("tabs");
+        setHasArrowSelection(false);
         return;
       }
 
       if (
         event.key !== "Enter" &&
-        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+        ["ArrowLeft", "ArrowRight", "ArrowDown"].includes(event.key)
       ) {
         event.preventDefault();
         setHasArrowSelection(true);
@@ -551,7 +756,9 @@ export default function ExplorePage({
     displayNotes,
     isNotificationsOpen,
     isShellOverlayOpen,
+    openSchool,
     openedPostId,
+    router,
   ]);
 
   async function reloadSearchResults() {
@@ -857,6 +1064,7 @@ export default function ExplorePage({
             </div>
             <input
               id="friend-search"
+              ref={friendSearchInputRef}
               type="text"
               value={friendQuery}
               onChange={(event) => setFriendQuery(event.target.value)}
@@ -886,14 +1094,17 @@ export default function ExplorePage({
                           key={result.id}
                           className="flex items-start justify-between gap-3 rounded-[22px] border border-black/10 bg-white p-3"
                         >
-                          <div className="min-w-0">
-                            <div className="truncate text-[15px] font-semibold text-black">
+                          <Link
+                            href={`/${result.email}`}
+                            className="min-w-0 text-left"
+                          >
+                            <div className="truncate text-[15px] font-semibold text-black hover:underline">
                               {result.fullName}
                             </div>
                             <div className="truncate text-[13px] text-black/45">
                               {result.email}
                             </div>
-                          </div>
+                          </Link>
                           <button
                             type="button"
                             className={`shrink-0 rounded-full border px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.12em] ${
@@ -1020,6 +1231,35 @@ export default function ExplorePage({
           </div>
         </div>
 
+        {/* View tabs */}
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:max-w-sm">
+          {(["feed", "schools"] as ActiveView[]).map((view, idx) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => { setActiveView(view); setTabKeyboardIndex(idx); setTabFocusLevel("tabs"); }}
+              className={`folder-grid-card border px-6 py-6 text-left ${
+                activeView === view
+                  ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+                  : tabFocusLevel === "tabs" && tabKeyboardIndex === idx
+                    ? "folder-grid-card--active border-black/20 bg-white/60 text-black ring-2 ring-black ring-offset-2"
+                    : "border-transparent text-black hover:border-black/10 hover:bg-white hover:shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
+              }`}
+            >
+              <div className={`text-[11px] font-medium uppercase tracking-[0.24em] ${
+                activeView === view || (tabFocusLevel === "tabs" && tabKeyboardIndex === idx)
+                  ? "text-black/55"
+                  : "text-black/95"
+              }`}>
+                {view === "feed" ? "Feed" : "Schools"}
+              </div>
+              <div className="mt-4 text-[34px] font-bold leading-none tracking-[-0.05em]">
+                {view === "feed" ? notes.length : 6322}
+              </div>
+            </button>
+          ))}
+        </div>
+
         {error ? (
           <div className="mt-10 rounded-[28px] border border-red-200 bg-red-50 p-6 text-[17px] text-red-700">
             Failed to load explore notes.
@@ -1031,190 +1271,249 @@ export default function ExplorePage({
           </div>
         ) : null}
 
-        {isLoading ? (
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={`explore-skeleton-${index}`}
-                className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6"
-              >
-                <div className="h-4 w-28 bg-black/10" />
-                <div className="mt-5 h-8 w-3/4 bg-black/10" />
-                <div className="mt-4 space-y-3">
-                  <div className="h-4 bg-black/10" />
-                  <div className="h-4 bg-black/10" />
-                  <div className="h-4 w-4/5 bg-black/10" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {!isLoading && notes.length === 0 ? (
-          <div className="mt-10 rounded-[28px] border border-black/10 bg-[var(--app-card)] p-8">
-            <h2 className="text-[26px] font-bold leading-tight">
-              No posts yet
-            </h2>
-            <p className="mt-3 text-[17px] leading-[1.5] text-black/55">
-              Explore will show public and school posts here once people start sharing.
-            </p>
-          </div>
-        ) : null}
-
-        <div className="mt-10 grid gap-5 lg:grid-cols-12">
-          {displayNotes.map((note, index) => {
-            const isExpanded = expandedNoteId === note.id;
-            const visibleComments =
-              activeCommentsNoteId === note.id ? commentsData?.comments ?? [] : [];
-            const isCommentsLoading =
-              activeCommentsNoteId === note.id ? commentsLoading : false;
-            const layout = getExploreCardLayout(index);
-
-            return (
-              <article
-                key={note.id}
-                className={`overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 transition-[transform,box-shadow] duration-200 ${layout.articleClass} ${
-                  hasArrowSelection && activeCardIndex === index
-                    ? "-translate-y-1 shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
-                    : "shadow-[0_1px_0_rgba(20,18,17,0.02)]"
-                }`}
-              >
-                <div className="flex h-full flex-col">
-                  <button
-                    type="button"
-                    ref={(element) => {
-                      cardButtonRefs.current[index] = element;
-                    }}
-                    className="flex flex-1 flex-col rounded-[20px] text-left outline-none"
-                    onClick={() => setOpenedPostId(note.id)}
-                    onFocus={() => setActiveCardIndex(index)}
+        {/* Schools view */}
+        {activeView === "schools" ? (
+          <div className="mt-8">
+            {schoolsLoading ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={`school-skeleton-${i}`}
+                    className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5"
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
-                      <span
-                        className={`rounded-full border px-3 py-1 ${getSourceChipClassName(note.sourceType)}`}
-                      >
-                        {note.sourceLabel}
-                      </span>
-                    </div>
-
-                    <div className="mt-5 flex items-center gap-2.5">
-                      <ExploreUserAvatar
-                        fullName={note.owner.fullName}
-                        profilePhotoUrl={note.owner.profilePhotoUrl}
-                        size={32}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-semibold text-black">
-                          {note.owner.fullName}
-                        </p>
-                        <div className="mt-1">
-                          <ExploreSchoolTag
-                            compact
-                            schoolLogoUrl={note.owner.schoolLogoUrl}
-                            schoolName={note.owner.schoolName}
-                          />
-                        </div>
+                    <div className="flex items-center gap-4">
+                      <div className="h-[56px] w-[56px] rounded-[16px] bg-black/8" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-32 rounded bg-black/8" />
+                        <div className="h-3 w-20 rounded bg-black/8" />
                       </div>
                     </div>
-                    <p className="mt-2 text-[12px] text-black/45">
-                      {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
-                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (schoolsData?.schools ?? []).length === 0 ? (
+              <div className="rounded-[28px] border border-black/10 bg-[var(--app-card)] px-6 py-8">
+                <p className="text-[20px] font-medium text-black/50">
+                  No schools yet.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {(schoolsData?.schools ?? []).map((school, idx) => (
+                  <SchoolCard
+                    key={school.id}
+                    ref={(el) => { schoolCardRefs.current[idx] = el; }}
+                    school={school}
+                    isActive={tabFocusLevel === "items" && activeSchoolIndex === idx}
+                    onClick={() => openSchool(school.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
 
-                    <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
-                      {note.name}
+        {/* Feed view */}
+        {activeView === "feed" ? (
+          <>
+            {isLoading ? (
+              <div className="mt-10 grid gap-5 lg:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={`explore-skeleton-${index}`}
+                    className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6"
+                  >
+                    <div className="h-4 w-28 bg-black/10" />
+                    <div className="mt-5 h-8 w-3/4 bg-black/10" />
+                    <div className="mt-4 space-y-3">
+                      <div className="h-4 bg-black/10" />
+                      <div className="h-4 bg-black/10" />
+                      <div className="h-4 w-4/5 bg-black/10" />
                     </div>
-                    <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
-                      {getPreviewText(
-                        note.content,
-                        isExpanded ? 160 : layout.previewLength,
-                      ) || "No preview available yet."}
-                    </p>
-                  </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
-                  <div className="mt-auto pt-6">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
-                          note.likedByViewer
-                            ? "border-black bg-black text-white"
-                            : "border-black/10 bg-white text-black/70"
-                        }`}
-                        onClick={() => void handleToggleLike(note.id)}
-                      >
-                        {note.likedByViewer ? "Liked" : "Like"} · {note.likeCount}
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
-                        onClick={() =>
-                          setExpandedNoteId((current) =>
-                            current === note.id ? null : note.id,
-                          )
-                        }
-                      >
-                        Comments · {note.commentCount}
-                      </button>
-                    </div>
+            {!isLoading && notes.length === 0 ? (
+              <div className="mt-10 rounded-[28px] border border-black/10 bg-[var(--app-card)] p-8">
+                <h2 className="text-[26px] font-bold leading-tight">
+                  No posts yet
+                </h2>
+                <p className="mt-3 text-[17px] leading-[1.5] text-black/55">
+                  Explore will show public and school posts here once people start sharing.
+                </p>
+              </div>
+            ) : null}
 
-                    {isExpanded ? (
-                      <div className="mt-6 rounded-[24px] border border-black/10 bg-white p-5">
-                        <div className="space-y-4">
-                          {visibleComments.map((comment) => (
-                            <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
-                              <div className="text-[14px] font-semibold text-black">
-                                {comment.author.fullName}
-                              </div>
-                              <div className="mt-1 text-[13px] text-black/40">
-                                {formatAuthoredDate(comment.createdAt)}
-                              </div>
-                              <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
-                                {comment.body}
-                              </p>
-                            </div>
-                          ))}
-                          {!isCommentsLoading && visibleComments.length === 0 ? (
-                            <p className="text-[15px] text-black/45">
-                              No comments yet.
-                            </p>
-                          ) : null}
-                          {isCommentsLoading ? (
-                            <p className="text-[15px] text-black/45">
-                              Loading comments...
-                            </p>
-                          ) : null}
-                        </div>
+            <div className="mt-10 grid gap-5 lg:grid-cols-12">
+              {displayNotes.map((note, index) => {
+                const isExpanded = expandedNoteId === note.id;
+                const visibleComments =
+                  activeCommentsNoteId === note.id ? commentsData?.comments ?? [] : [];
+                const isCommentsLoading =
+                  activeCommentsNoteId === note.id ? commentsLoading : false;
+                const layout = getExploreCardLayout(index);
 
-                        <div className="mt-5 flex flex-col gap-3">
-                          <textarea
-                            value={commentDraft}
-                            onChange={(event) => setCommentDraft(event.target.value)}
-                            rows={3}
-                            maxLength={600}
-                            className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
-                            placeholder="Add a comment..."
+                return (
+                  <article
+                    key={note.id}
+                    className={`folder-grid-card overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 transition-[transform,box-shadow] duration-200 ${layout.articleClass} ${
+                      hasArrowSelection && activeCardIndex === index
+                        ? "-translate-y-1 shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+                        : "shadow-[0_1px_0_rgba(20,18,17,0.02)]"
+                    }`}
+                  >
+                    <div className="flex h-full flex-col">
+                      <div className="flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
+                        <span
+                          className={`rounded-full border px-3 py-1 ${getSourceChipClassName(note.sourceType)}`}
+                        >
+                          {note.sourceLabel}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 flex items-center gap-2.5">
+                        <Link href={`/${note.owner.email}`} className="shrink-0">
+                          <ExploreUserAvatar
+                            fullName={note.owner.fullName}
+                            profilePhotoUrl={note.owner.profilePhotoUrl}
+                            size={32}
                           />
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-[13px] text-black/35">
-                              {commentDraft.trim().length}/600
-                            </span>
-                            <button
-                              type="button"
-                              className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
-                              onClick={() => void handleSubmitComment(note.id)}
-                            >
-                              Post comment
-                            </button>
+                        </Link>
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            href={`/${note.owner.email}`}
+                            className="block truncate text-[14px] font-semibold text-black hover:underline"
+                          >
+                            {note.owner.fullName}
+                          </Link>
+                          <div className="mt-1">
+                            <ExploreSchoolTag
+                              compact
+                              schoolLogoUrl={note.owner.schoolLogoUrl}
+                              schoolName={note.owner.schoolName}
+                              schoolId={note.owner.schoolId}
+                              onClick={() => {
+                                if (note.owner.schoolId) {
+                                  openSchool(note.owner.schoolId);
+                                }
+                              }}
+                            />
                           </div>
                         </div>
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+
+                      <button
+                        type="button"
+                        ref={(element) => {
+                          cardButtonRefs.current[index] = element;
+                        }}
+                        className="flex flex-1 flex-col rounded-[20px] text-left outline-none"
+                        onClick={() => setOpenedPostId(note.id)}
+                        onFocus={() => setActiveCardIndex(index)}
+                      >
+                        <p className="mt-2 text-[12px] text-black/45">
+                          {formatAuthoredDate(note.publishedAt ?? note.createdAt)}
+                        </p>
+
+                        <div className={`mt-5 font-bold leading-[1.02] ${layout.titleClass}`}>
+                          {note.name}
+                        </div>
+                        <p className="mt-5 text-[18px] leading-[1.6] text-black/72">
+                          {getPreviewText(
+                            note.content,
+                            isExpanded ? 160 : layout.previewLength,
+                          ) || "No preview available yet."}
+                        </p>
+                      </button>
+
+                      <div className="mt-auto pt-6">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            className={`rounded-full border px-4 py-2 text-[15px] font-medium transition-transform duration-150 hover:-translate-y-0.5 ${
+                              note.likedByViewer
+                                ? "border-black bg-black text-white"
+                                : "border-black/10 bg-white text-black/70"
+                            }`}
+                            onClick={() => void handleToggleLike(note.id)}
+                          >
+                            {note.likedByViewer ? "Liked" : "Like"} · {note.likeCount}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-black/10 bg-white px-4 py-2 text-[15px] font-medium text-black/70 transition-transform duration-150 hover:-translate-y-0.5"
+                            onClick={() =>
+                              setExpandedNoteId((current) =>
+                                current === note.id ? null : note.id,
+                              )
+                            }
+                          >
+                            Comments · {note.commentCount}
+                          </button>
+                        </div>
+
+                        {isExpanded ? (
+                          <div className="mt-6 rounded-[24px] border border-black/10 bg-white p-5">
+                            <div className="space-y-4">
+                              {visibleComments.map((comment) => (
+                                <div key={comment.id} className="border-b border-black/6 pb-4 last:border-b-0 last:pb-0">
+                                  <div className="text-[14px] font-semibold text-black">
+                                    {comment.author.fullName}
+                                  </div>
+                                  <div className="mt-1 text-[13px] text-black/40">
+                                    {formatAuthoredDate(comment.createdAt)}
+                                  </div>
+                                  <p className="mt-2 text-[15px] leading-[1.5] text-black/72">
+                                    {comment.body}
+                                  </p>
+                                </div>
+                              ))}
+                              {!isCommentsLoading && visibleComments.length === 0 ? (
+                                <p className="text-[15px] text-black/45">
+                                  No comments yet.
+                                </p>
+                              ) : null}
+                              {isCommentsLoading ? (
+                                <p className="text-[15px] text-black/45">
+                                  Loading comments...
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-5 flex flex-col gap-3">
+                              <textarea
+                                value={commentDraft}
+                                onChange={(event) => setCommentDraft(event.target.value)}
+                                rows={3}
+                                maxLength={600}
+                                className="w-full rounded-[20px] border border-black/10 bg-[var(--app-card)] px-4 py-3 text-[15px] text-black outline-none"
+                                placeholder="Add a comment..."
+                              />
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[13px] text-black/35">
+                                  {commentDraft.trim().length}/600
+                                </span>
+                                <button
+                                  type="button"
+                                  className="rounded-full border border-black bg-black px-4 py-2 text-[14px] font-medium text-white"
+                                  onClick={() => void handleSubmitComment(note.id)}
+                                >
+                                  Post comment
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
       </div>
 
       {openedPost ? (
@@ -1238,20 +1537,33 @@ export default function ExplorePage({
             </div>
 
             <div className="mt-6 flex items-center gap-3">
-              <ExploreUserAvatar
-                fullName={openedPost.owner.fullName}
-                profilePhotoUrl={openedPost.owner.profilePhotoUrl}
-                size={40}
-              />
+              <Link href={`/${openedPost.owner.email}`} onClick={() => setOpenedPostId(null)}>
+                <ExploreUserAvatar
+                  fullName={openedPost.owner.fullName}
+                  profilePhotoUrl={openedPost.owner.profilePhotoUrl}
+                  size={40}
+                />
+              </Link>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-black">
+                <Link
+                  href={`/${openedPost.owner.email}`}
+                  className="truncate text-[15px] font-semibold text-black hover:underline"
+                  onClick={() => setOpenedPostId(null)}
+                >
                   {openedPost.owner.fullName}
-                </p>
+                </Link>
                 <div className="mt-1">
                   <ExploreSchoolTag
                     compact
                     schoolLogoUrl={openedPost.owner.schoolLogoUrl}
                     schoolName={openedPost.owner.schoolName}
+                    schoolId={openedPost.owner.schoolId}
+                    onClick={() => {
+                      if (openedPost.owner.schoolId) {
+                        setOpenedPostId(null);
+                        openSchool(openedPost.owner.schoolId);
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -1343,6 +1655,7 @@ export default function ExplorePage({
           </div>
         </div>
       ) : null}
+
     </main>
   );
 }

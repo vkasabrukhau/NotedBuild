@@ -32,6 +32,7 @@ export type ExploreNoteCard = {
     email: string;
     fullName: string;
     profilePhotoUrl: string | null;
+    schoolId: string | null;
     schoolName: string | null;
     schoolLogoUrl: string | null;
   };
@@ -249,6 +250,7 @@ export async function getRecommendedExploreFeed(
           email: note.owner.email,
           fullName: note.owner.fullName,
           profilePhotoUrl: note.owner.profilePhotoUrl,
+          schoolId: note.owner.schoolId,
           schoolName: note.owner.school?.name ?? null,
           schoolLogoUrl: getMatchedSchoolLogoUrl(note.owner.school?.name ?? null),
         },

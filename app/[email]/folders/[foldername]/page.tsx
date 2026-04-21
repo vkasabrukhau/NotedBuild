@@ -100,6 +100,7 @@ export default async function FolderPage({
     age: folder.owner.age,
     bio: null,
     email: folder.owner.email,
+    friends: [],
     friendCount,
     folderCount,
     fullName: folder.owner.fullName,

@@ -394,7 +394,7 @@ export default function SchoolProfileView({
             key={tab}
             type="button"
             onClick={() => changeTab(tab, idx)}
-            className={`folder-grid-card border px-6 py-6 text-left ${
+            className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
               activeTab === tab
                 ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                 : focusLevel === "tabs" && keyboardFocusIndex === idx
@@ -435,7 +435,7 @@ export default function SchoolProfileView({
                     studentButtonRefs.current[idx] = element;
                   }}
                   onClick={() => router.push(`/${student.email}`)}
-                  className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black transition hover:border-black/20 ${
+                  className={`folder-grid-card w-full rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none focus:outline-none focus-visible:outline-none transition hover:border-black/20 ${
                     focusLevel === "items" && focusedItemIndex === idx
                       ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
                       : ""
@@ -474,7 +474,7 @@ export default function SchoolProfileView({
                       noteButtonRefs.current[index] = element;
                     }}
                     onClick={() => setOpenedPostId(note.id)}
-                    className={`folder-grid-card overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left ${layout.articleClass} ${
+                    className={`folder-grid-card overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left outline-none focus:outline-none focus-visible:outline-none ${layout.articleClass} ${
                       focusLevel === "items" && focusedItemIndex === index
                         ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
                         : ""

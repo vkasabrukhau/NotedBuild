@@ -164,7 +164,7 @@ const SchoolCard = forwardRef<
       type="button"
       onClick={onClick}
       data-school-id={school.id}
-      className={`folder-grid-card w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black${isActive ? " folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
+      className={`folder-grid-card w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none${isActive ? " folder-grid-card--active ring-2 ring-black ring-offset-2" : ""}`}
     >
       <div className="flex items-center gap-4">
         <div
@@ -1238,7 +1238,7 @@ export default function ExplorePage({
               key={view}
               type="button"
               onClick={() => { setActiveView(view); setTabKeyboardIndex(idx); setTabFocusLevel("tabs"); }}
-              className={`folder-grid-card border px-6 py-6 text-left ${
+              className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
                 activeView === view
                   ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                   : tabFocusLevel === "tabs" && tabKeyboardIndex === idx

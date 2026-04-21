@@ -348,9 +348,9 @@ function ProfileNoteCard({
   isFocused?: boolean;
 }) {
   const activeClass = isFocused
-    ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
+    ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
     : "";
-  const cardClassName = `folder-grid-card group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black ${activeClass}`;
+  const cardClassName = `folder-grid-card group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${activeClass}`;
   const sharedChildren = (
     <>
       <div>
@@ -384,12 +384,12 @@ function ProfileFolderCard({
   isFocused?: boolean;
 }) {
   const activeClass = isFocused
-    ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
+    ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
     : "";
   return (
     <Link
       href={getFolderHref(folder.ownerEmail, folder.name)}
-      className={`folder-grid-card group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black ${activeClass}`}
+      className={`folder-grid-card group flex h-[200px] flex-col justify-between overflow-hidden rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 text-left text-black outline-none focus:outline-none focus-visible:outline-none ${activeClass}`}
     >
       <div>
         <div className="text-[24px] font-bold leading-tight">{folder.name}</div>
@@ -423,8 +423,10 @@ function ProfilePostCard({
       type="button"
       onClick={onOpen}
       className={`w-full rounded-[28px] border border-black/10 bg-[var(--app-card)] p-6 text-left text-black transition ${
-        isFocused ? "ring-2 ring-black ring-offset-2" : ""
-      }`}
+        isFocused
+          ? "-translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
+          : ""
+      } outline-none focus:outline-none focus-visible:outline-none`}
     >
       <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-black/45">
         <span className="rounded-full border border-black/10 bg-black/10 px-3 py-1 text-black/78">
@@ -1778,7 +1780,7 @@ export default function ProfileView({
                 <button
                   type="button"
                   onClick={() => changeSection("notes", 0)}
-                  className={`folder-grid-card border px-6 py-6 text-left ${
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
                     activeSection === "notes"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 0
@@ -1808,7 +1810,7 @@ export default function ProfileView({
                 <button
                   type="button"
                   onClick={() => changeSection("posts", 1)}
-                  className={`folder-grid-card border px-6 py-6 text-left ${
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
                     activeSection === "posts"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 1
@@ -1838,7 +1840,7 @@ export default function ProfileView({
                 <button
                   type="button"
                   onClick={() => changeSection("folders", 2)}
-                  className={`folder-grid-card border px-6 py-6 text-left ${
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
                     activeSection === "folders"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 2
@@ -1868,7 +1870,7 @@ export default function ProfileView({
                 <button
                   type="button"
                   onClick={() => changeSection("friends", 3)}
-                  className={`folder-grid-card border px-6 py-6 text-left ${
+                  className={`folder-grid-card border px-6 py-6 text-left outline-none focus:outline-none focus-visible:outline-none ${
                     activeSection === "friends"
                       ? "folder-grid-card--selected border-black/10 bg-white text-black shadow-[inset_0_0_0_9999px_rgba(120,84,0,0.045)]"
                       : focusLevel === "tabs" && keyboardFocusIndex === 3
@@ -2058,7 +2060,7 @@ export default function ProfileView({
                             activeSection === "friends" &&
                             focusedItemIndex === idx;
                           const friendActiveClass = isItemFocused
-                            ? "folder-grid-card--active ring-2 ring-black ring-offset-2"
+                            ? "folder-grid-card--active -translate-y-1 border-black shadow-[0_18px_36px_rgba(20,18,17,0.12)]"
                             : "";
                           return (
                             <button
@@ -2068,7 +2070,7 @@ export default function ProfileView({
                               }}
                               type="button"
                               onClick={() => router.push(`/${friend.email}`)}
-                              className={`folder-grid-card ${friendActiveClass} rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black`}
+                              className={`folder-grid-card ${friendActiveClass} rounded-[24px] border border-black/10 bg-[var(--app-card-alt)] p-4 text-left text-black outline-none focus:outline-none focus-visible:outline-none`}
                             >
                               <div className="flex items-center gap-4">
                                 <UserAvatar

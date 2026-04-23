@@ -3,13 +3,12 @@ import { NextResponse } from "next/server"
 const DEFAULT_MODEL = "gemini-2.5-flash"
 const MAX_RETRIES = 2
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
-const BASE_SYSTEM_INSTRUCTION =
-  "Convert user-described math into valid KaTeX-compatible LaTeX only. Return only LaTeX, with no markdown, no explanations, no code fences, and no dollar signs."
-const FALLBACK_SYSTEM_INSTRUCTION = [
-  BASE_SYSTEM_INSTRUCTION,
+const SYSTEM_INSTRUCTION = [
+  "Convert user-described math into valid KaTeX-compatible LaTeX only.",
+  "Return only the raw LaTeX expression — no markdown, no code fences, no dollar signs, no explanations.",
   "If the user names a theorem, identity, law, or formula, return the single most canonical compact mathematical statement for it.",
   "Never echo the prompt back as plain text or wrap the concept name in \\text{...}.",
-  "Prefer a single equation that can render inline.",
+  "Prefer a single equation that renders inline.",
 ].join(" ")
 
 type GeminiResponse = {
@@ -111,6 +110,9 @@ async function requestGemini(prompt: string, systemInstruction: string) {
           temperature: 0,
           topK: 1,
           topP: 1,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
         },
       }),
     }
@@ -141,46 +143,31 @@ async function generateLatex(prompt: string) {
   let lastFailure: { status: number; error: string } | null = null
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    const result = await requestGemini(prompt, BASE_SYSTEM_INSTRUCTION)
+    const result = await requestGemini(prompt, SYSTEM_INSTRUCTION)
 
     if (result.ok) {
       if (result.latex && !isPromptEcho(result.latex, prompt)) {
         return { ok: true as const, latex: result.latex }
       }
 
-      const fallback = await requestGemini(prompt, FALLBACK_SYSTEM_INSTRUCTION)
-
-      if (fallback.ok && fallback.latex && !isPromptEcho(fallback.latex, prompt)) {
-        return { ok: true as const, latex: fallback.latex }
-      }
-
-      lastFailure = {
-        status: fallback.status,
-        error:
-          fallback.ok
-            ? "Gemini returned low-quality LaTeX for this prompt."
-            : fallback.error,
-      }
-
-      if (
-        !fallback.ok &&
-        isRetryableProviderFailure(fallback.status, fallback.error) &&
-        attempt < MAX_RETRIES
-      ) {
-        await sleep(250 * (attempt + 1))
-        continue
-      }
-    } else {
-      lastFailure = { status: result.status, error: result.error }
-
-      if (
-        isRetryableProviderFailure(result.status, result.error) &&
-        attempt < MAX_RETRIES
-      ) {
-        await sleep(250 * (attempt + 1))
-        continue
+      return {
+        ok: false as const,
+        status: 422,
+        error: "Could not generate LaTeX for this description.",
       }
     }
+
+    lastFailure = { status: result.status, error: result.error }
+
+    if (
+      isRetryableProviderFailure(result.status, result.error) &&
+      attempt < MAX_RETRIES
+    ) {
+      await sleep(250 * (attempt + 1))
+      continue
+    }
+
+    break
   }
 
   return {

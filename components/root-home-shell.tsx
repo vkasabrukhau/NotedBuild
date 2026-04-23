@@ -2699,9 +2699,8 @@ function NoteComponent({
             return;
           }
 
-          const from =
-            $from.start() + textBeforeCursor.length - match[0].length;
-          const to = $from.start() + textBeforeCursor.length;
+          const to = $from.pos;
+          const from = to - match[0].length;
 
           isConvertingMathRef.current = true;
           try {

@@ -23,6 +23,7 @@ import type { ProfileFriendshipState } from "@/lib/profile-data";
 import Link from "next/link";
 
 const EMPTY_NOTES: ExploreNoteCard[] = [];
+const SCHOOLS_PAGE_SIZE = 48;
 
 type SchoolSummary = {
   id: string;
@@ -293,9 +294,11 @@ type FriendshipNotification = {
 export default function ExplorePage({
   isShellOverlayOpen = false,
   onOpenSchool,
+  userStateCode = null,
 }: {
   isShellOverlayOpen?: boolean;
   onOpenSchool?: (schoolId: string) => void;
+  userStateCode?: string | null;
 }) {
   const router = useRouter();
   const cardButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -309,6 +312,8 @@ export default function ExplorePage({
   const [tabKeyboardIndex, setTabKeyboardIndex] = useState(0);
   const schoolCardRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [activeSchoolIndex, setActiveSchoolIndex] = useState(0);
+  const [visibleSchoolCount, setVisibleSchoolCount] = useState(SCHOOLS_PAGE_SIZE);
+  const schoolsSentinelRef = useRef<HTMLDivElement | null>(null);
   const activeSchoolIndexRef = useRef(0);
   activeSchoolIndexRef.current = activeSchoolIndex;
   const [activeCardIndex, setActiveCardIndex] = useState(0);
@@ -342,9 +347,57 @@ export default function ExplorePage({
     acceptedRequests: FriendshipNotification[];
     incomingRequests: FriendshipNotification[];
   }>("/api/friendships?view=notifications", swrFetcher);
-  const { data: schoolsData, isLoading: schoolsLoading } = useSWR<{
+  // Tier 1 — own state (or all schools when no state code is available)
+  const { data: ownSchoolsData, isLoading: ownSchoolsLoading } = useSWR<{
     schools: SchoolSummary[];
-  }>(activeView === "schools" ? "/api/schools" : null, swrFetcher);
+  }>(
+    activeView === "schools" && userStateCode
+      ? `/api/schools?state=${encodeURIComponent(userStateCode)}&tier=own`
+      : activeView === "schools"
+      ? "/api/schools"
+      : null,
+    swrFetcher,
+  );
+
+  // Tier 2 — adjacent states (starts only after tier 1 resolves)
+  const { data: adjacentSchoolsData, isLoading: adjacentSchoolsLoading } =
+    useSWR<{ schools: SchoolSummary[] }>(
+      ownSchoolsData && userStateCode
+        ? `/api/schools?state=${encodeURIComponent(userStateCode)}&tier=adjacent`
+        : null,
+      swrFetcher,
+    );
+
+  // Tier 3 — everything else (starts only after tier 2 resolves)
+  const { data: restSchoolsData, isLoading: restSchoolsLoading } = useSWR<{
+    schools: SchoolSummary[];
+  }>(
+    adjacentSchoolsData && userStateCode
+      ? `/api/schools?state=${encodeURIComponent(userStateCode)}&tier=rest`
+      : null,
+    swrFetcher,
+  );
+
+  const displaySchools = useMemo(() => {
+    if (!userStateCode) return ownSchoolsData?.schools ?? [];
+    return [
+      ...(ownSchoolsData?.schools ?? []),
+      ...(adjacentSchoolsData?.schools ?? []),
+      ...(restSchoolsData?.schools ?? []),
+    ];
+  }, [userStateCode, ownSchoolsData, adjacentSchoolsData, restSchoolsData]);
+
+  const schoolsLoading = ownSchoolsLoading;
+  const schoolsLoadingMore =
+    userStateCode &&
+    !schoolsLoading &&
+    (adjacentSchoolsLoading || restSchoolsLoading);
+
+  const visibleSchools = useMemo(
+    () => displaySchools.slice(0, visibleSchoolCount),
+    [displaySchools, visibleSchoolCount],
+  );
+  const hasMoreSchools = visibleSchoolCount < displaySchools.length;
 
   const notes = useMemo(() => data?.notes ?? EMPTY_NOTES, [data]);
   const {
@@ -418,6 +471,29 @@ export default function ExplorePage({
       setHasArrowSelection(false);
     }
   }, [isShellOverlayOpen]);
+
+  useEffect(() => {
+    if (activeView === "schools") {
+      setVisibleSchoolCount(SCHOOLS_PAGE_SIZE);
+    }
+  }, [activeView]);
+
+  useEffect(() => {
+    const el = schoolsSentinelRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisibleSchoolCount((c) => c + SCHOOLS_PAGE_SIZE);
+        }
+      },
+      { rootMargin: "400px" },
+    );
+
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMoreSchools, displaySchools.length]);
 
   useEffect(() => {
     const trimmedQuery = friendQuery.trim();
@@ -1170,7 +1246,7 @@ export default function ExplorePage({
                 {view === "feed" ? "Feed" : "Schools"}
               </div>
               <div className="mt-4 text-[34px] font-bold leading-none tracking-[-0.05em]">
-                {view === "feed" ? notes.length : 6322}
+                {view === "feed" ? notes.length : displaySchools.length || 6322}
               </div>
             </button>
           ))}
@@ -1207,24 +1283,61 @@ export default function ExplorePage({
                   </div>
                 ))}
               </div>
-            ) : (schoolsData?.schools ?? []).length === 0 ? (
+            ) : displaySchools.length === 0 ? (
               <div className="rounded-[28px] border border-black/10 bg-[var(--app-card)] px-6 py-8">
                 <p className="text-[20px] font-medium text-black/50">
                   No schools yet.
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {(schoolsData?.schools ?? []).map((school, idx) => (
-                  <SchoolCard
-                    key={school.id}
-                    ref={(el) => { schoolCardRefs.current[idx] = el; }}
-                    school={school}
-                    isActive={tabFocusLevel === "items" && activeSchoolIndex === idx}
-                    onClick={() => openSchool(school.id)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {visibleSchools.map((school, idx) => (
+                    <SchoolCard
+                      key={school.id}
+                      ref={(el) => { schoolCardRefs.current[idx] = el; }}
+                      school={school}
+                      isActive={tabFocusLevel === "items" && activeSchoolIndex === idx}
+                      onClick={() => openSchool(school.id)}
+                    />
+                  ))}
+                </div>
+                {hasMoreSchools ? (
+                  <div ref={schoolsSentinelRef} className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={`school-load-skeleton-${i}`}
+                        className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 opacity-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="h-[56px] w-[56px] rounded-[16px] bg-black/8" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-32 rounded bg-black/8" />
+                            <div className="h-3 w-20 rounded bg-black/8" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : schoolsLoadingMore ? (
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={`school-more-skeleton-${i}`}
+                        className="rounded-[28px] border border-black/10 bg-[var(--app-card)] p-5 opacity-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="h-[56px] w-[56px] rounded-[16px] bg-black/8" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-32 rounded bg-black/8" />
+                            <div className="h-3 w-20 rounded bg-black/8" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         ) : null}

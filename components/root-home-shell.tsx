@@ -4064,6 +4064,13 @@ export default function RootHomeShell({
               closingOverlay !== null
             }
             onOpenSchool={handleOpenSchool}
+            userStateCode={(() => {
+              const loc = profile.schoolLocation;
+              if (!loc) return null;
+              const parts = loc.split(", ");
+              const last = parts[parts.length - 1]?.trim();
+              return last && last.length === 2 ? last.toUpperCase() : null;
+            })()}
           />
         </div>
       ) : null}

@@ -7,6 +7,7 @@ import Mathematics, {
 } from "@tiptap/extension-mathematics"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { TextSelection } from "@tiptap/pm/state"
+import { getDirectLatex, sanitizeLatex } from "@/lib/math-latex"
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/
 
@@ -15,18 +16,6 @@ type CustomMathematicsOptions = {
   blockOptions?: Record<string, unknown>
   inlineOptions?: Record<string, unknown>
   katexOptions?: Record<string, unknown>
-}
-
-function sanitizeLatex(latex: string) {
-  return latex
-    .trim()
-    .replace(/^```(?:latex)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .replace(/^\$\$([\s\S]*)\$\$$/, "$1")
-    .replace(/^\$([\s\S]*)\$$/, "$1")
-    .replace(/^\\\(([\s\S]*)\\\)$/, "$1")
-    .replace(/^\\\[([\s\S]*)\\\]$/, "$1")
-    .trim()
 }
 
 function findPlaceholderRange(
@@ -62,6 +51,11 @@ function findPlaceholderRange(
 }
 
 async function convertMathPromptToLatex(endpoint: string, prompt: string) {
+  const directLatex = getDirectLatex(prompt)
+  if (directLatex) {
+    return directLatex
+  }
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {

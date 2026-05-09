@@ -1,0 +1,26 @@
+config:
+  target: "http://127.0.0.1:3000"
+  phases:
+    - duration: 15
+      arrivalRate: 2
+      name: warmup
+    - duration: 30
+      arrivalRate: 5
+      name: steady
+    - duration: 15
+      arrivalRate: 8
+      name: peak
+  defaults:
+    headers:
+      User-Agent: "Artillery public-pages probe"
+scenarios:
+  - name: "landing-page"
+    weight: 3
+    flow:
+      - get:
+          url: "/"
+  - name: "simple-editor-page"
+    weight: 1
+    flow:
+      - get:
+          url: "/simple"

@@ -1,0 +1,80 @@
+{
+  "timestamp": "2026-04-28T08:40:13.936Z",
+  "totalExpressions": 18,
+  "successfulConversions": 0,
+  "successRate": "0.0",
+  "results": [
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    },
+    {
+      "success": false,
+      "error": "HTTP 500"
+    }
+  ]
+}

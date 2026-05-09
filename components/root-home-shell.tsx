@@ -43,6 +43,7 @@ import {
   NOTE_VISIBILITY_LABELS,
   type NoteVisibilityId,
 } from "@/lib/note-visibility";
+import { getDirectLatex, sanitizeLatex } from "@/lib/math-latex";
 
 const MATH_TRIGGER_REGEX = /\/math\[([^\]]+)\]$/;
 const BODY_PLACEHOLDER = "Start typing your genius here...";
@@ -370,18 +371,6 @@ function createFolderSignature(
   });
 }
 
-function sanitizeLatex(latex: string) {
-  return latex
-    .trim()
-    .replace(/^```(?:latex)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .replace(/^\$\$([\s\S]*)\$\$$/, "$1")
-    .replace(/^\$([\s\S]*)\$$/, "$1")
-    .replace(/^\\\(([\s\S]*)\\\)$/, "$1")
-    .replace(/^\\\[([\s\S]*)\\\]$/, "$1")
-    .trim();
-}
-
 function isMathNode(
   node: ProseMirrorNode | null | undefined,
 ): node is ProseMirrorNode {
@@ -435,6 +424,11 @@ function useGlobalSaveShortcut(onSave: () => void) {
 async function convertMathPromptToLatex(
   prompt: string,
 ): Promise<string | null> {
+  const directLatex = getDirectLatex(prompt);
+  if (directLatex) {
+    return directLatex;
+  }
+
   const response = await fetch("/api/math-latex", {
     method: "POST",
     headers: {
@@ -458,18 +452,7 @@ async function convertMathPromptToLatex(
     return null;
   }
 
-  const cleaned = data.latex
-    .trim()
-    .replace(/^```(?:latex)?/i, "")
-    .replace(/```$/, "")
-    .trim();
-
-  return cleaned
-    .replace(/^\$\$([\s\S]*)\$\$$/, "$1")
-    .replace(/^\$([\s\S]*)\$$/, "$1")
-    .replace(/^\\\(([\s\S]*)\\\)$/, "$1")
-    .replace(/^\\\[([\s\S]*)\\\]$/, "$1")
-    .trim();
+  return sanitizeLatex(data.latex);
 }
 
 const TAMAGOTCHI_DISPLAY: Record<

@@ -1,0 +1,20 @@
+config:
+  target: "http://127.0.0.1:3000"
+  phases:
+    - duration: 15
+      arrivalRate: 2
+      name: warmup
+    - duration: 20
+      arrivalRate: 3
+      name: steady
+    - duration: 10
+      arrivalRate: 5
+      name: peak
+  defaults:
+    headers:
+      User-Agent: "Artillery public-api probe"
+scenarios:
+  - name: "schools-api"
+    flow:
+      - get:
+          url: "/api/schools"

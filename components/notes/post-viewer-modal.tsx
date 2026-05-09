@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { renderNoteContent } from "@/lib/render-note-content";
 import { formatAuthoredDate } from "@/lib/text-utils";
 
 type PostViewerModalNote = {
@@ -33,6 +34,8 @@ export default function PostViewerModal({
     return null;
   }
 
+  const renderedContent = renderNoteContent(note.content);
+
   return (
     <div
       className={`fixed inset-0 flex items-center justify-center px-6 py-8 ${overlayClassName}`}
@@ -57,7 +60,7 @@ export default function PostViewerModal({
 
         <div
           className="prose prose-lg mt-8 max-w-none text-black"
-          dangerouslySetInnerHTML={{ __html: note.content }}
+          dangerouslySetInnerHTML={{ __html: renderedContent }}
         />
 
         {footer ? (
